@@ -1,0 +1,30 @@
+
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [ main ]  # Adjust the branch name as needed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy to DigitalOcean
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DO_HOST }}  # Your Digital Ocean Droplet IP
+          username: ${{ secrets.DO_USER }} # Your droplet's username
+          key: ${{ secrets.SSH_PRIVATE_KEY }}  
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          port: 22 
+          script: |
+            cd /home/forge/smsdev.live  # Path to your app on the droplet
+            git pull origin main
+            composer install --optimize-autoloader --no-dev 
+            php artisan migrate --force
+            php artisan optimize:clear
+
+
+        
