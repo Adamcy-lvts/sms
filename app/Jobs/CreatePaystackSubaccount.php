@@ -27,7 +27,7 @@ class CreatePaystackSubaccount implements ShouldQueue
 
     public function handle()
     {
-        dd($this->subaccountData);
+        // dd($this->subaccountData);
         try {
 
             $subaccount = PaystackHelper::createSubAccount($this->subaccountData);
