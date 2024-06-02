@@ -1,7 +1,12 @@
 {
   "resources/css/app.css": {
-    "file": "assets/app-BriXInia.css",
+    "file": "assets/app-CJtAD-xy.css",
     "src": "resources/css/app.css",
+    "isEntry": true
+  },
+  "resources/css/filament/agent/theme.css": {
+    "file": "assets/theme-VMpJs-pb.css",
+    "src": "resources/css/filament/agent/theme.css",
     "isEntry": true
   },
   "resources/css/filament/sms/theme.css": {
