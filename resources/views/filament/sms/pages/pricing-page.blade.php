@@ -43,7 +43,7 @@
                             <input type="hidden" name="amount" value="{{ $plan->price * 100 }}"> {{-- required in kobo --}}
                             <input type="hidden" name="currency" value="NGN">
                             <input type="hidden" name="metadata"
-                                value="{{ json_encode($array = ['schoo_name' => $school->name]) }}">
+                                value="{{ json_encode($array = ['schooName' => $school->name,'schooSlug' => $school->slug, 'paymentType' => 'subscription', 'planId' => $plan->id]) }}">
                             {{-- For other necessary things you want to add to your payload. it is optional though --}}
                             <input type="hidden" name="reference" value="{{ Paystack::genTranxRef() }}">
                             <button

@@ -19,7 +19,7 @@ return new class extends Migration
             $table->foreignId('payment_type_id')->constrained('payment_types')->onDelete('cascade');
             $table->decimal('amount', 10, 2);
             $table->string('status');
-            $table->foreignId('payment_method_id')->constrained()->onDelete('cascade');
+            $table->foreignId('payment_method_id')->constrained('payment_methods')->onDelete('cascade');
             $table->string('reference')->unique();
             $table->text('description')->nullable();
             $table->foreignIdFor(User::class, 'created_by')->nullable()->constrained('users')->onDelete('set null');
