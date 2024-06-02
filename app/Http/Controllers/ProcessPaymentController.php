@@ -14,7 +14,7 @@ class ProcessPaymentController extends Controller
      */
     public function redirectToGateway()
     {
-      
+      dd(request()->all());
         try {
             return paystack()->getAuthorizationUrl()->redirectNow();
         } catch (\Exception $e) {

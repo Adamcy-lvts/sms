@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Filament\Panel;
+use App\Models\Agent;
 use Illuminate\Support\Collection;
 use Filament\Models\Contracts\HasName;
 use Illuminate\Database\Eloquent\Model;
@@ -62,6 +63,11 @@ class User extends Authenticatable implements HasName, FilamentUser, HasTenants
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function agent()
+    {
+        return $this->hasOne(Agent::class);
     }
 
     public function getFilamentName(): string
