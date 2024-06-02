@@ -2,6 +2,7 @@
 
 namespace App\Filament\Sms\Pages\Auth;
 
+use App\Models\Agent;
 use App\Models\School;
 use Filament\Forms\Set;
 use Filament\Forms\Form;
@@ -30,6 +31,7 @@ class Register extends AuthRegister
     protected static string $view = 'filament.sms.pages.auth.register';
 
     public ?array $data = [];
+    public $referralCode;
 
     protected string $userModel;
 
@@ -40,6 +42,8 @@ class Register extends AuthRegister
         }
 
         $this->callHook('beforeFill');
+
+        $this->referralCode = request()->query('ref');
 
         $this->form->fill();
 
@@ -65,6 +69,8 @@ class Register extends AuthRegister
 
             return null;
         }
+
+    
 
         $user = $this->wrapInDatabaseTransaction(function () {
             $this->callHook('beforeValidate');
@@ -96,6 +102,15 @@ class Register extends AuthRegister
             $user = $this->handleRegistration($userData);
 
             $school->members()->attach($user);
+
+            // If a referral code is present, link the user to the agent
+            if ($this->referralCode) {
+                $agent = Agent::where('referral_code', $this->referralCode)->first();
+                if ($agent) {
+                    // Attach the agent to the user using the pivot table
+                    $school->update(['agent_id' => $agent->id]);
+                }
+            }
 
             $this->form->model($user)->saveRelationships();
             $this->callHook('afterRegister');

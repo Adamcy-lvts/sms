@@ -22,21 +22,22 @@ class CreatePaystackSubaccount implements ShouldQueue
     {
         $this->agent = $agent;
         $this->subaccountData = $subaccountData;
-   
     }
 
     public function handle()
     {
-        // dd($this->subaccountData);
+      
+      
         try {
-
             $subaccount = PaystackHelper::createSubAccount($this->subaccountData);
-            // Paystack::createSubAccount($this->subaccountData);
-            
+
             $this->agent->update(['subaccount_code' => $subaccount['data']['subaccount_code']]);
+
+        } catch (\TypeError $te) {
+            Log::error("Caught type error: " . $te->getMessage());
         } catch (\Exception $e) {
-            Log::error('Failed to create Paystack subaccount: ' . $e->getMessage());
-            // Optional: Retry logic or notify admin via email or other channels
+            Log::error("Caught general exception: " . $e->getMessage());
         }
     }
+
 }

@@ -23,7 +23,26 @@ class SchoolResource extends Resource
     {
         return $form
             ->schema([
-                //
+                Forms\Components\TextInput::make('name')
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\TextInput::make('slug')
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\TextInput::make('email')
+                    ->email()
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\Textarea::make('address')
+                    ->required()
+                    ->columnSpanFull(),
+                Forms\Components\TextInput::make('phone')
+                    ->tel()
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\TextInput::make('logo')
+                    ->maxLength(255),
+                Forms\Components\TextInput::make('settings'),
             ]);
     }
 
@@ -31,7 +50,17 @@ class SchoolResource extends Resource
     {
         return $table
             ->columns([
-                //
+                Tables\Columns\TextColumn::make('name')->label('School Name')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('slug')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('email')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('phone')
+                    ->searchable(),
+             
+                Tables\Columns\TextColumn::make('created_at')->label('Registered On')
+                    ->dateTime()
             ])
             ->filters([
                 //

@@ -7,9 +7,9 @@
             </div>
             <div class="flex items-center">
                 <!-- Display the referral link as a clickable anchor element -->
-                <a id="referralLink" href="{{ url('/user/register?ref=' . auth()->user()->agent->referral_code) }}"
+                <a id="referralLink" href="{{ url('/sms/register?ref=' . auth()->user()->agent->referral_code) }}"
                     class="text-sm text-blue-400 hover:underline flex-1">
-                    {{ url('/user/register?ref=' . auth()->user()->agent->referral_code) }}
+                    {{ url('/sms/register?ref=' . auth()->user()->agent->referral_code) }}
                 </a>
                 <!-- Copy button -->
                 <svg onclick="copyToClipboard()" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"
