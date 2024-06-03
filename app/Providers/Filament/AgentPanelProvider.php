@@ -29,7 +29,7 @@ class AgentPanelProvider extends PanelProvider
             ->id('agent')
             ->path('agent')
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => '#ea580c',
             ])
             ->login()
             ->viteTheme('resources/css/filament/agent/theme.css')
