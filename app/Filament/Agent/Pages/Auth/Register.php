@@ -75,7 +75,7 @@ class Register extends AuthRegister
         ]);
 
         $bank = Bank::where('code',$data['bank'])->first();
-
+        Log::info($bank);
         $agent = Agent::create([
             'user_id' => $user->id,
             'business_name' => $data['business_name'],
