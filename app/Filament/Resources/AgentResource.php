@@ -2,16 +2,20 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\AgentResource\Pages;
-use App\Filament\Resources\AgentResource\RelationManagers;
-use App\Models\Agent;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables;
+use App\Models\Agent;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use App\Helpers\PaystackHelper;
+use Filament\Resources\Resource;
+use Filament\Tables\Actions\Action;
+use Illuminate\Support\Facades\Log;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Resources\AgentResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Resources\AgentResource\RelationManagers;
 
 class AgentResource extends Resource
 {
@@ -79,13 +83,65 @@ class AgentResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')->label('Joined On')
                     ->dateTime()
-          
+
             ])
             ->filters([
                 //
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Action::make('createSubaccount')
+                    ->label('Create Subaccount')
+                    ->action(function ($record) {
+                        try {
+                            // dd($record->business_name);
+                            // Prepare subaccount data
+                            $subaccountData = [
+                                'business_name' => $record->business_name,
+                                'settlement_bank' => $record->bank->code, // Ensure the bank has a 'code' field
+                                'account_number' => $record->account_number,
+                                'percentage_charge' => $record->percentage, // Ensure this field exists on your model
+                                'primary_contact_email' => $record->user->email,
+                            ];
+                            // dd($subaccountData);
+                            // Attempt to create a subaccount on Paystack
+                            $subaccount = PaystackHelper::createSubAccount($subaccountData);
+                            // Paystack::createSubAccount($subaccountData);
+
+                            // Check if the creation was successful
+                            if (isset($subaccount['status']) && $subaccount['status']) {
+                                // Update the agent's subaccount code
+                                $record->update(['subaccount_code' => $subaccount['data']['subaccount_code']]);
+
+                                // Notify the user of success
+                                Notification::make()
+                                    ->title('Subaccount Created')
+                                    ->body('The subaccount has been successfully created.')
+                                    ->success()
+                                    ->send();
+                            } else {
+                                // Notify the user of failure
+                                Notification::make()
+                                    ->title('Subaccount Creation Failed')
+                                    ->body('Failed to create the subaccount. Please try again.')
+                                    ->danger()
+                                    ->send();
+                            }
+                        } catch (\Exception $e) {
+                            // Log the error and notify the user
+                            Log::error('Failed to create Paystack subaccount: ' . $e->getMessage());
+
+                            Notification::make()
+                                ->title('Subaccount Creation Failed')
+                                ->body('An error occurred while creating the subaccount. Please contact support.')
+                                ->danger()
+                                ->send();
+                        }
+                    })
+                    ->visible(fn ($record) => empty($record->subaccount_code))
+                    ->icon('heroicon-o-plus')
+                    ->color('success'),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
