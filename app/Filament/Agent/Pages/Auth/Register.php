@@ -74,7 +74,7 @@ class Register extends AuthRegister
             'password' => Hash::make($data['password']),
         ]);
 
-        $bank = Bank::find($data['bank']);
+        $bank = Bank::where('code',$data['bank'])->first();
 
         $agent = Agent::create([
             'user_id' => $user->id,
