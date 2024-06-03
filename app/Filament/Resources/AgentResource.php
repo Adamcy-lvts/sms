@@ -103,6 +103,8 @@ class AgentResource extends Resource
                                 'percentage_charge' => $record->percentage, // Ensure this field exists on your model
                                 'primary_contact_email' => $record->user->email,
                             ];
+
+                            Log::info($subaccountData);
                             // dd($subaccountData);
                             // Attempt to create a subaccount on Paystack
                             $subaccount = PaystackHelper::createSubAccount($subaccountData);
