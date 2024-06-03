@@ -8,6 +8,7 @@ use App\Models\Agent;
 use App\Models\Course;
 use Filament\Pages\Page;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Filament\Forms\Components\Select;
 use App\Jobs\CreatePaystackSubaccount;
@@ -91,6 +92,8 @@ class Register extends AuthRegister
             'percentage_charge' => 80,
             'primary_contact_email' => $data['email'],
         ];
+
+        Log::info( $subaccountData);
 
         // Dispatch the job to create the subaccount
         dispatch(new CreatePaystackSubaccount($agent, $subaccountData));
