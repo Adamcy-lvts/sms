@@ -107,7 +107,8 @@ class AgentResource extends Resource
                             // Attempt to create a subaccount on Paystack
                             $subaccount = PaystackHelper::createSubAccount($subaccountData);
                             // Paystack::createSubAccount($subaccountData);
-
+                            // Log the response from Paystack
+                            Log::info('Paystack subaccount creation response:', $subaccount);
                             // Check if the creation was successful
                             if (isset($subaccount['status']) && $subaccount['status']) {
                                 // Update the agent's subaccount code
@@ -129,7 +130,8 @@ class AgentResource extends Resource
                             }
                         } catch (\Exception $e) {
                             // Log the error and notify the user
-                            Lg::error('Failed to create Paystack subaccount: ' . $e->getMessage());
+                            dd('Failed to create Paystack subaccount: ' . $e->getMessage());
+                            Log::error('Failed to create Paystack subaccount: ' . $e->getMessage());
 
                             Notification::make()
                                 ->title('Subaccount Creation Failed')
