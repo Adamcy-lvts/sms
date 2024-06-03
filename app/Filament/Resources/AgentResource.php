@@ -129,7 +129,7 @@ class AgentResource extends Resource
                             }
                         } catch (\Exception $e) {
                             // Log the error and notify the user
-                            Log::error('Failed to create Paystack subaccount: ' . $e->getMessage());
+                            Lg::error('Failed to create Paystack subaccount: ' . $e->getMessage());
 
                             Notification::make()
                                 ->title('Subaccount Creation Failed')
