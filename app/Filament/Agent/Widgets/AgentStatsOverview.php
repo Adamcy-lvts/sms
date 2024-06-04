@@ -9,7 +9,7 @@ use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 class AgentStatsOverview extends BaseWidget
 {
     protected static ?int $sort = 2;
-    
+
     protected function getStats(): array
     {
         $agent = Auth::user()->agent;
@@ -30,7 +30,7 @@ class AgentStatsOverview extends BaseWidget
         $totalCommission = $agent->agentPayments()->sum('amount');
 
         return [
-            Stat::make('Total Referred Users', $totalReferredUsers)
+            Stat::make('Total Referred Schools', $totalReferredUsers)
                 ->description('Number of schools referred by you')
                 ->descriptionIcon('heroicon-o-users')
                 ->color('primary'),
