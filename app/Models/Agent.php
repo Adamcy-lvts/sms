@@ -6,6 +6,7 @@ use App\Models\Bank;
 use App\Models\User;
 use App\Models\School;
 use Illuminate\Support\Str;
+use App\Models\AgentPayment;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -39,5 +40,11 @@ class Agent extends Model
     {
         return $this->belongsTo(Bank::class);
     }
+
+    public function agentPayments()
+    {
+        return $this->hasMany(AgentPayment::class);
+    }
+
 
 }

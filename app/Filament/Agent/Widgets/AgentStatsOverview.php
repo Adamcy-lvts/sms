@@ -12,24 +12,25 @@ class AgentStatsOverview extends BaseWidget
     {
         $agent = Auth::user()->agent;
 
-        // Total referred users
-        $totalReferredUsers = $agent->referredUsers()->count();
+        // Total referred schools
+        $totalReferredUsers = $agent->schools()->count();
 
-        // Total subscriptions (excluding the free plan)
-        $totalSubscriptions = $agent->schools()->withCount(['subscriptions' => function ($query) {
-            $query->where('plan_id', '!=', 1);
-        }])->get()->sum('subscriptions_count');
+        // Total subscriptions
+        // Directly using sum on the query to avoid loading models into memory
+        $totalSubscriptions = $agent->schools()->withCount('subscriptions')->sum('subscriptions_count');
+
 
         // Total commission earned from referral payments
-        $totalCommission = $agent->referralPayments()->sum('amount');
+        // This assumes the `amount` in AgentPayment is the commission amount to be summed up
+        $totalCommission = $agent->agentPayments()->sum('amount');
 
         return [
             Stat::make('Total Referred Users', $totalReferredUsers)
-                ->description('Number of users referred by you')
+                ->description('Number of schools referred by you')
                 ->descriptionIcon('heroicon-o-users')
                 ->color('primary'),
             Stat::make('Total Subscriptions', $totalSubscriptions)
-                ->description('Number of subscriptions excluding the free plan')
+                ->description('Total number of active subscriptions')
                 ->descriptionIcon('heroicon-o-rectangle-stack')
                 ->color('success'),
             Stat::make('Total Commission Earned', number_format($totalCommission, 2) . ' NGN')
