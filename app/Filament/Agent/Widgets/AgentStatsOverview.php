@@ -17,7 +17,10 @@ class AgentStatsOverview extends BaseWidget
 
         // Total subscriptions
         // Directly using sum on the query to avoid loading models into memory
-        $totalSubscriptions = $agent->schools()->withCount('subscriptions')->sum('subscriptions_count');
+        // Total number of subscriptions made by all schools referred by the agent
+        $totalSubscriptions = $agent->schools()->with('subscriptions')->get()->sum(function ($school) {
+            return $school->subscriptions->count();
+        });
 
 
         // Total commission earned from referral payments
