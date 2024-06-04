@@ -42,9 +42,7 @@
                             <input type="hidden" name="amount" value="{{ $plan->price }}"> {{-- required in kobo --}}
                             <input type="hidden" name="currency" value="NGN">
                             {{-- For other necessary things you want to add to your payload. it is optional though --}}
-                            <input type="hidden" name="metadata"
-                                value="{{ json_encode($array = ['planId' => $plan->id]) }}">
-                            <input type="hidden" name="reference" value="{{ Paystack::genTranxRef() }}">
+                            <input type="hidden" name="planId" value="{{ $plan->id }}">
                             <button
                                 class="flex w-full items-center justify-center bg-emerald-500 text-white p-2 rounded my-8 hover:bg-emerald-600 transition duration-300 ease-in-out dark:hover:bg-emerald-800 dark:hover:bg-opacity-25">
                                 {{ $plan->cto }}
