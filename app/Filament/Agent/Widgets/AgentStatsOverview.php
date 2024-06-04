@@ -16,7 +16,7 @@ class AgentStatsOverview extends BaseWidget
         $totalReferredUsers = $agent->referredUsers()->count();
 
         // Total subscriptions (excluding the free plan)
-        $totalSubscriptions = $agent->referredUsers()->withCount(['subscriptions' => function ($query) {
+        $totalSubscriptions = $agent->schools()->withCount(['subscriptions' => function ($query) {
             $query->where('plan_id', '!=', 1);
         }])->get()->sum('subscriptions_count');
 
