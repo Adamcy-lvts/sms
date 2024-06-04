@@ -8,6 +8,8 @@ use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 
 class AgentStatsOverview extends BaseWidget
 {
+    protected static ?int $sort = 2;
+    
     protected function getStats(): array
     {
         $agent = Auth::user()->agent;
