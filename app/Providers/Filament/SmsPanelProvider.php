@@ -42,14 +42,12 @@ class SmsPanelProvider extends PanelProvider
             ->tenantBillingRouteSlug('billing')
             ->tenantMenuItems([
                 'billing' => MenuItem::make()->label('Manage subscription'),
-                // 'filament.sms.pages.pricing-page' => MenuItem::make()->label('Pricing Page'),
-
-                MenuItem::make()
-                    ->label('Pricing')
-                    ->url(function (): string {
-                       return PricingPage::getUrl();
-                    })
-                    ->icon('heroicon-o-currency-dollar'),
+                // MenuItem::make()
+                //     ->label('Pricing')
+                //     ->url(function (): string {
+                //        return PricingPage::getUrl();
+                //     })
+                //     ->icon('heroicon-o-currency-dollar'),
             ])
             // ->tenantMenu(false)
             ->colors([
