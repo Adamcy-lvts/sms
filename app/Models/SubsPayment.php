@@ -8,4 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 class SubsPayment extends Model
 {
     use HasFactory;
+
+    protected $fillable = [
+        'school_id', 'agent_id', 'amount', 'net_amount', 'split_amount_agent',
+        'split_code', 'status', 'payment_method_id', 'reference', 'payment_date'
+    ];
 }

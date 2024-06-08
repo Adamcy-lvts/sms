@@ -20,9 +20,8 @@ return new class extends Migration
             $table->decimal('split_amount_agent', 10, 2)->nullable();
             $table->string('split_code')->nullable();
             $table->string('status'); // Status of the payment (e.g., pending, completed, failed)
-            $table->foreignId('payment_method_id')->constrained('payment_methods')->onDelete('cascade'); // Method used for the payment (e.g., credit card, bank transfer)
+            $table->foreignId('payment_method_id')->nullable()->constrained('payment_methods')->onDelete('cascade'); // Method used for the payment (e.g., credit card, bank transfer)
             $table->string('reference')->unique(); // A unique identifier provided by the payment gateway
-            $table->dateTime('date'); // The date and time the payment was processed
             $table->dateTime('payment_date')->nullable();
             $table->timestamps();
         });
