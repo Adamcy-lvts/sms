@@ -221,7 +221,7 @@ class ProcessPaymentController extends Controller
         $splitCode = $paymentDetails['data']['split']['split_code'] ?? null;
 
         if ($agent && isset($paymentDetails['data']['split'])) {
-            $agentAmount = ($paymentDetails['data']['split']['subaccounts'][0]['amount'] ?? 0) / 100;
+            $agentAmount = ($paymentDetails['data']['split']['shares']['subaccounts'][0]['amount'] ?? 0) / 100;
             $netAmount -= $agentAmount;
         }
 
