@@ -13,15 +13,17 @@ return new class extends Migration
     {
         Schema::create('subs_payments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->on('schools')->onDelete('cascade'); // ID of the school paying the subscription
+            $table->foreignId('school_id')->constrained('schools')->onDelete('cascade'); // ID of the school paying the subscription
+            $table->foreignId('agent_id')->constrained('agents')->onDelete('cascade');
             $table->decimal('amount', 10, 2); // The amount of the payment
+            $table->decimal('net_amount', 10, 2)->nullable();
+            $table->decimal('split_amount_agent', 10, 2)->nullable();
+            $table->string('split_code')->nullable();
             $table->string('status'); // Status of the payment (e.g., pending, completed, failed)
             $table->foreignId('payment_method_id')->constrained('payment_methods')->onDelete('cascade'); // Method used for the payment (e.g., credit card, bank transfer)
-            $table->date('start_date'); // Start date of the subscription period
-            $table->date('end_date')->nullable(); // End date of the subscription period, if applicable
             $table->string('reference')->unique(); // A unique identifier provided by the payment gateway
             $table->dateTime('date'); // The date and time the payment was processed
-            $table->date('next_billing_date')->nullable(); // Date for the next billing cycle
+            $table->dateTime('payment_date')->nullable();
             $table->timestamps();
         });
     }

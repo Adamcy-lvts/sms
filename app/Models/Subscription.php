@@ -57,11 +57,6 @@ class Subscription extends Model
         ]);
     }
 
-    public function updateSubscription($data)
-    {
-        // Update subscription details
-        $this->update($data);
-    }
 
     public function cancelSubscription()
     {

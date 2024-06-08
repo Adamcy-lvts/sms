@@ -18,7 +18,7 @@ return new class extends Migration
             $table->decimal('amount', 10, 2);
             $table->string('split_code')->nullable();
             $table->string('status')->default('completed');
-            $table->dateTime('payment_date');
+            $table->dateTime('payment_date')->nullable();
             $table->timestamps();
         });
     }
