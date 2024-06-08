@@ -4,7 +4,6 @@
         <style>
             .fi-simple-main {
                 max-width: 60% !important;
-                background-color: blueviolet;
                 !@apply bg-gray-50 dark:bg-gray-950;
                 /* Adjust width to 90% of the viewport by default */
             }
