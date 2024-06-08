@@ -229,7 +229,6 @@ class ProcessPaymentController extends Controller
             'school_id' => $school->id,
             'agent_id' => $agent->id ?? null,
             'plan_id' => $plan->id,
-            'agent_id' => $agent->id,
             'amount' => $totalAmount,
             'net_amount' => $netAmount,
             'split_amount_agent' => $agentAmount,
