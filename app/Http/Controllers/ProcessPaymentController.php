@@ -58,7 +58,7 @@ class ProcessPaymentController extends Controller
                         "share" => $agent->percentage // Assuming the percentage is stored in the agent's model
                     ]
                 ],
-                "bearer_type" => "all", // Main account bears the transaction charges
+                "bearer_type" => "acount", // Main account bears the transaction charges
                 "main_account_share" => 100 - $agent->percentage // Calculate the main account's share
             ];
         }
