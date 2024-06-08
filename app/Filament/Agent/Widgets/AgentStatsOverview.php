@@ -38,7 +38,7 @@ class AgentStatsOverview extends BaseWidget
                 ->description('Total number of active subscriptions')
                 ->descriptionIcon('heroicon-o-rectangle-stack')
                 ->color('success'),
-            Stat::make('Total Commission Earned', number_format($totalCommission, 2) . ' NGN')
+            Stat::make('Total Commission Earned', formatNaira($totalCommission, 2))
                 ->description('Total commission earned from referrals')
                 ->descriptionIcon('heroicon-o-currency-dollar')
                 ->color('info'),

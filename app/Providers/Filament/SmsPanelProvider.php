@@ -17,6 +17,7 @@ use App\Filament\Sms\Pages\Tenancy\Billing;
 use App\Filament\Sms\Pages\Auth\EditProfile;
 use App\Filament\Sms\Billing\BillingProvider;
 use Illuminate\Session\Middleware\StartSession;
+use App\Filament\Sms\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use App\Filament\Sms\Pages\Tenancy\EditSchoolProfile;
 use Illuminate\Routing\Middleware\SubstituteBindings;
@@ -62,7 +63,7 @@ class SmsPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Sms/Widgets'), for: 'App\\Filament\\Sms\\Widgets')
             ->widgets([
                 Widgets\AccountWidget::class,
-                Widgets\FilamentInfoWidget::class,
+                FilamentInfoWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,
