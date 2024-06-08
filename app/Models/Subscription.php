@@ -73,6 +73,11 @@ class Subscription extends Model
         return $this->status === 'active' && (!$this->ends_at || $this->ends_at > now());
     }
 
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active'); // Modify this condition based on how you determine active subscriptions
+    }
+
     public function renewSubscription()
     {
         // Renew the subscription if it's recurring

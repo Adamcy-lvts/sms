@@ -26,12 +26,10 @@ class School extends Model
         return $this->belongsToMany(User::class, 'school_user');
     }
 
-    // In the School model
-    public function hasActiveSubscription()
+    public function hasActiveSubscription($planId)
     {
-        return $this->subscriptions()->where('status', 'active')->first();
+        return $this->subscriptions()->active()->where('plan_id', $planId)->exists();
     }
-
 
     public function subscriptions()
     {
