@@ -202,11 +202,11 @@ class ProcessPaymentController extends Controller
     protected function handleSubscriptionPayment($paymentDetails)
     {
         $metadata = $paymentDetails['data']['metadata'];
-        $schoolId = $metadata['schoolId'];
+        $schoolSlug = $metadata['schoolSlug'];
         $planId = $metadata['planId'];
         $agent = Agent::find($metadata['agent_id'] ?? null);
 
-        $school = School::find($schoolId);
+        $school = School::where('slug',$schoolSlug)->first();
         $plan = Plan::find($planId);
 
         if (!$school || !$plan) {

@@ -74,7 +74,7 @@ class SubscriptionService
                 'status' => 'active',
                 'starts_at' => now(),
                 'ends_at' => now()->addDays($plan->duration),
-                'is_recurring' => $plan->is_recurring, // Assuming you have this attribute in Plan
+                
               
                 // Initialize other fields as necessary
             ]);
