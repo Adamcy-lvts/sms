@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('subs_payments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('school_id')->constrained('schools')->onDelete('cascade'); // ID of the school paying the subscription
-            $table->foreignId('agent_id')->constrained('agents')->onDelete('cascade');
+            $table->foreignId('agent_id')->nullable()->constrained('agents')->onDelete('cascade');
             $table->decimal('amount', 10, 2); // The amount of the payment
             $table->decimal('net_amount', 10, 2)->nullable();
             $table->decimal('split_amount_agent', 10, 2)->nullable();

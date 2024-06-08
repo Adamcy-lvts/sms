@@ -227,7 +227,7 @@ class ProcessPaymentController extends Controller
 
         SubsPayment::create([
             'school_id' => $school->id,
-            'agent_id' => $agent->id,
+            'agent_id' => $agent->id ?? null,
             'plan_id' => $plan->id,
             'agent_id' => $agent->id,
             'amount' => $totalAmount,
