@@ -17,7 +17,7 @@
                 <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Subscription Plan:</span>
                 <!-- Replace with dynamic content -->
                 <span
-                    class="text-md font-semibold text-gray-800 dark:text-white">{{ optional($latestSubscription->plan)->title ?? 'N/A' }}</span>
+                    class="text-md font-semibold text-gray-800 dark:text-white">{{ optional($latestSubscription->plan)->name ?? 'N/A' }}</span>
             </div>
             <div class="flex items-center">
 
