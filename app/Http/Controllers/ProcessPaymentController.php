@@ -204,7 +204,7 @@ class ProcessPaymentController extends Controller
         $metadata = $paymentDetails['data']['metadata'];
         $schoolSlug = $metadata['schoolSlug'];
         $planId = $metadata['planId'];
-        $agent = Agent::find($metadata['agent_id'] ?? null);
+        $agent = Agent::find($metadata['agentId'] ?? null);
 
         $school = School::where('slug',$schoolSlug)->first();
         $plan = Plan::find($planId);
