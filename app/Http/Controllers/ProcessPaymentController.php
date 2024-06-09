@@ -48,7 +48,7 @@ class ProcessPaymentController extends Controller
 
         // Determine split payment details if applicable
         $splitData = null;
-        
+
         if ($request->planId) {
             $plan = Plan::find($request->planId);
         }
@@ -85,7 +85,7 @@ class ProcessPaymentController extends Controller
             'plan' => $plan ? $plan->plan_code : null,
             'split' => $splitData ? json_encode($splitData) : null
         ];
-// log::info($data);
+        // log::info($data);
         try {
             $response = Paystack::getAuthorizationUrl($data)->redirectNow();
             return $response;
@@ -174,9 +174,9 @@ class ProcessPaymentController extends Controller
     public function handleGatewayCallback()
     {
         $paymentDetails = Paystack::getPaymentData();
-dd($paymentDetails);
-        // Extract metadata
-        $metadata = $paymentDetails['data']['metadata'];
+
+        // dd($paymentDetails);
+        Log::info($paymentDetails);
 
         $paymentType = $metadata['paymentType'] ?? null;
 
@@ -233,7 +233,7 @@ dd($paymentDetails);
         }
 
         $customerSubscriptions = Paystack::getCustomerSubscriptions(1);
-        dd($customerSubscriptions);
+        // dd($customerSubscriptions);
 
         SubsPayment::create([
             'school_id' => $school->id,
