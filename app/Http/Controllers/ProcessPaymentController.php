@@ -82,10 +82,10 @@ class ProcessPaymentController extends Controller
             'email' => $request->email,
             'reference' => Paystack::genTranxRef(),
             'metadata' => $metadata,
-            // 'plan' => $plan ? $plan->plan_code : null,
+            'plan' => $plan ? $plan->plan_code : null,
             'split' => $splitData ? json_encode($splitData) : null
         ];
-
+log::info($data);
         try {
             $response = Paystack::getAuthorizationUrl($data)->redirectNow();
             return $response;
