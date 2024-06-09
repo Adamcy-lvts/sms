@@ -44,10 +44,15 @@ class ProcessPaymentController extends Controller
         $user = auth()->user();
         $school = $user->schools->first(); // Assume this returns the school associated with the user
 
-        $agent = $school->agent;
-        $plan = $request->planId ? Plan::find($request->planId) : null;
+        $agent = $school->agent; // Assuming there's a direct relationship set up in the School model
 
-        $splitData = [];
+        // Determine split payment details if applicable
+        $splitData = null;
+        
+        if ($request->planId) {
+            $plan = Plan::find($request->planId);
+        }
+
         if ($agent && $agent->subaccount_code) {
             $splitData = [
                 "type" => "percentage",
@@ -55,11 +60,11 @@ class ProcessPaymentController extends Controller
                 "subaccounts" => [
                     [
                         "subaccount" => $agent->subaccount_code,
-                        "share" => $agent->percentage
+                        "share" => $agent->percentage // Assuming the percentage is stored in the agent's model
                     ]
                 ],
-                "bearer_type" => "account",
-                "main_account_share" => 100 - $agent->percentage
+                "bearer_type" => "account", // Main account bears the transaction charges
+                "main_account_share" => 100 - $agent->percentage // Calculate the main account's share
             ];
         }
 
@@ -69,7 +74,7 @@ class ProcessPaymentController extends Controller
             'paymentType' => 'subscription',
             'planId' => $request->planId,
             'userId' => $user->id,
-            'agentId' => optional($agent)->id,
+            'agentId' => optional($agent)->id, // Use optional helper to avoid errors if no agent
         ]);
 
         $data = [
@@ -89,7 +94,6 @@ class ProcessPaymentController extends Controller
             return redirect()->back()->withErrors('Failed to initiate payment. Please try again.');
         }
     }
-
 
 
     /**
@@ -170,7 +174,7 @@ class ProcessPaymentController extends Controller
     public function handleGatewayCallback()
     {
         $paymentDetails = Paystack::getPaymentData();
-        dd($paymentDetails);
+
         // Extract metadata
         $metadata = $paymentDetails['data']['metadata'];
         $paymentType = $metadata['paymentType'] ?? null;
