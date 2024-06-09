@@ -232,7 +232,7 @@ class ProcessPaymentController extends Controller
         }
 
         $customerSubs = Paystack::getCustomerSubscriptions($paymentDetails['data']['customer']['customer_code']);
-dd($customerSubs);
+dd($paymentDetails['data']['customer']['customer_code']);
         SubsPayment::create([
             'school_id' => $school->id,
             'agent_id' => $agent->id ?? null,
