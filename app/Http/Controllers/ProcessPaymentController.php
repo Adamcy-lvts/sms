@@ -178,8 +178,10 @@ class ProcessPaymentController extends Controller
         // Extract metadata
         $metadata = $paymentDetails['data']['metadata'];
 
-        $planSubscriptions = Paystack::getPlanSubscriptions($metadata['planId']);
-        dd($metadata['planId']);
+        $plan = Plan::find($metadata['planId']);
+
+        $planSubscriptions = Paystack::getPlanSubscriptions($plan->plan_code);
+        dd($planSubscriptions);
 
         $paymentType = $metadata['paymentType'] ?? null;
 
