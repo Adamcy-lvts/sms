@@ -85,7 +85,7 @@ class ProcessPaymentController extends Controller
             'plan' => $plan ? $plan->plan_code : null,
             'split' => $splitData ? json_encode($splitData) : null
         ];
-log::info($data);
+// log::info($data);
         try {
             $response = Paystack::getAuthorizationUrl($data)->redirectNow();
             return $response;
@@ -174,7 +174,7 @@ log::info($data);
     public function handleGatewayCallback()
     {
         $paymentDetails = Paystack::getPaymentData();
-
+dd($paymentDetails);
         // Extract metadata
         $metadata = $paymentDetails['data']['metadata'];
         $paymentType = $metadata['paymentType'] ?? null;
