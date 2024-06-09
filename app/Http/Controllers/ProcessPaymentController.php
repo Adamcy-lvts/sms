@@ -179,7 +179,7 @@ class ProcessPaymentController extends Controller
         $metadata = $paymentDetails['data']['metadata'];
 
         $planSubscriptions = Paystack::getPlanSubscriptions($metadata['planId']);
-        dd($planSubscriptions);
+        dd($metadata['planId']);
 
         $paymentType = $metadata['paymentType'] ?? null;
 
