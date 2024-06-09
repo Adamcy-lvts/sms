@@ -14,9 +14,10 @@ return new class extends Migration
         Schema::create('plans', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->decimal('price', 8, 2);
+            $table->decimal('price', 10, 2);
             $table->text('description')->nullable();
             $table->integer('duration')->default(30); // Duration in days
+            $table->string('plan_code');
             $table->json('features')->nullable(); // Stores an array of features
             $table->string('cto')->default('Purchase');
             $table->timestamps();

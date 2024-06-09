@@ -44,10 +44,10 @@ class ProcessPaymentController extends Controller
         $user = auth()->user();
         $school = $user->schools->first(); // Assume this returns the school associated with the user
 
-        $agent = $school->agent; // Assuming there's a direct relationship set up in the School model
+        $agent = $school->agent;
+        $plan = $request->planId ? Plan::find($request->planId) : null;
 
-        // Determine split payment details if applicable
-        $splitData = null;
+        $splitData = [];
         if ($agent && $agent->subaccount_code) {
             $splitData = [
                 "type" => "percentage",
@@ -55,11 +55,11 @@ class ProcessPaymentController extends Controller
                 "subaccounts" => [
                     [
                         "subaccount" => $agent->subaccount_code,
-                        "share" => $agent->percentage // Assuming the percentage is stored in the agent's model
+                        "share" => $agent->percentage
                     ]
                 ],
-                "bearer_type" => "account", // Main account bears the transaction charges
-                "main_account_share" => 100 - $agent->percentage // Calculate the main account's share
+                "bearer_type" => "account",
+                "main_account_share" => 100 - $agent->percentage
             ];
         }
 
@@ -69,7 +69,7 @@ class ProcessPaymentController extends Controller
             'paymentType' => 'subscription',
             'planId' => $request->planId,
             'userId' => $user->id,
-            'agentId' => optional($agent)->id, // Use optional helper to avoid errors if no agent
+            'agentId' => optional($agent)->id,
         ]);
 
         $data = [
@@ -77,6 +77,7 @@ class ProcessPaymentController extends Controller
             'email' => $request->email,
             'reference' => Paystack::genTranxRef(),
             'metadata' => $metadata,
+            'plan' => $plan ? $plan->plan_code : null,
             'split' => $splitData ? json_encode($splitData) : null
         ];
 
@@ -88,6 +89,7 @@ class ProcessPaymentController extends Controller
             return redirect()->back()->withErrors('Failed to initiate payment. Please try again.');
         }
     }
+
 
 
     /**
@@ -168,7 +170,7 @@ class ProcessPaymentController extends Controller
     public function handleGatewayCallback()
     {
         $paymentDetails = Paystack::getPaymentData();
-
+        dd($paymentDetails);
         // Extract metadata
         $metadata = $paymentDetails['data']['metadata'];
         $paymentType = $metadata['paymentType'] ?? null;
@@ -206,7 +208,7 @@ class ProcessPaymentController extends Controller
         $planId = $metadata['planId'];
         $agent = Agent::find($metadata['agentId'] ?? null);
 
-        $school = School::where('slug',$schoolSlug)->first();
+        $school = School::where('slug', $schoolSlug)->first();
         $plan = Plan::find($planId);
 
         if (!$school || !$plan) {
@@ -259,7 +261,6 @@ class ProcessPaymentController extends Controller
                 ->send();
 
             return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]);
-
         } catch (\Exception $e) {
             // Handle the exception
             Notification::make()
