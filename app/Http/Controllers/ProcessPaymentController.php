@@ -173,7 +173,8 @@ class ProcessPaymentController extends Controller
     public function handleGatewayCallback()
     {
         $paymentDetails = Paystack::getPaymentData();
-dd($paymentDetails);
+// dd($paymentDetails);
+// Log::info($paymentDetails);
         // Extract metadata
         $metadata = $paymentDetails['data']['metadata'];
         $paymentType = $metadata['paymentType'] ?? null;
@@ -230,6 +231,8 @@ dd($paymentDetails);
             $netAmount -= $agentAmount;
         }
 
+        $customerSubs = Paystack::getCustomerSubscriptions($paymentDetails['data']['customer']['customer_code']);
+dd($customerSubs);
         SubsPayment::create([
             'school_id' => $school->id,
             'agent_id' => $agent->id ?? null,
