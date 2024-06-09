@@ -3,6 +3,7 @@
 namespace App\Helpers;
 
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 
 class PaystackHelper
 {
@@ -58,5 +59,36 @@ class PaystackHelper
 
         curl_close($ch);
         return json_decode($result, true);
+    }
+
+    public static function getCustomerSubscriptions($customer_id)
+    {
+        $apiKey = config('services.paystack.secret');
+        $baseUrl = 'https://api.paystack.co/subscription?customer=';
+
+        try {
+            $response = Http::withToken($apiKey)
+                ->get($baseUrl . $customer_id);
+
+            if ($response->successful()) {
+                return $response->json();
+            }
+
+            // Log error details if the request failed
+            Log::error('Failed to fetch customer subscriptions', [
+                'customer_id' => $customer_id,
+                'error' => $response->body()
+            ]);
+
+            return null;
+        } catch (\Exception $e) {
+            // Log the exception details
+            Log::error('Exception occurred while fetching customer subscriptions', [
+                'customer_id' => $customer_id,
+                'error' => $e->getMessage()
+            ]);
+
+            return null;
+        }
     }
 }

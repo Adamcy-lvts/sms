@@ -10,6 +10,7 @@ use App\Models\SubsPayment;
 use App\Models\AgentPayment;
 use App\Models\Subscription;
 use Illuminate\Http\Request;
+use App\Helpers\PaystackHelper;
 use Illuminate\Support\Facades\Log;
 use App\Services\SubscriptionService;
 use Filament\Notifications\Notification;
@@ -232,8 +233,9 @@ class ProcessPaymentController extends Controller
         }
 
         $customerCode = $paymentDetails['data']['customer']['customer_code'];
-        $customerSubs = Paystack::getCustomerSubscriptions($customerCode);
-dd($customerSubs);
+        // $customerSubs = Paystack::getCustomerSubscriptions($customerCode);
+        $customerSubscriptions = PaystackHelper::getCustomerSubscriptions($customerCode);
+dd($customerSubscriptions);
         SubsPayment::create([
             'school_id' => $school->id,
             'agent_id' => $agent->id ?? null,
