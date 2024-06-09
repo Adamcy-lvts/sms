@@ -174,9 +174,13 @@ class ProcessPaymentController extends Controller
     public function handleGatewayCallback()
     {
         $paymentDetails = Paystack::getPaymentData();
-dd($paymentDetails);
+
         // Extract metadata
         $metadata = $paymentDetails['data']['metadata'];
+
+        $planSubscriptions = Paystack::getPlanSubscriptions($metadata['planId']);
+        dd($planSubscriptions);
+
         $paymentType = $metadata['paymentType'] ?? null;
 
         if ($paymentDetails['data']['status'] !== 'success') {
