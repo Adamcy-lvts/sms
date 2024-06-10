@@ -118,12 +118,14 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
     protected function handleNonSubscriptionPayment($payload)
     {
+        // $data = json_decode(json_encode($payload->data), false);
+
         Payment::create([
-            'amount' => $payload['data']['amount'] / 100,
+            'amount' => $payload->data->amount / 100,
             'status' => 'paid',
             'payment_date' => now(),
-            'type' => $payload['data']['metadata']['paymentType'] ?? 'general',
-            'reference' => $payload['data']['reference']
+            'type' => $payload->data->metadata->paymentType ?? 'general',
+            'reference' => $payload->data->reference
         ]);
 
         Log::info('Non-subscription payment recorded successfully.');
