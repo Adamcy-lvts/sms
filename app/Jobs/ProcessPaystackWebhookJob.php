@@ -21,15 +21,15 @@ use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
 
 class ProcessPaystackWebhookJob extends ProcessWebhookJob
 {
-    
+
     public function handle()
     {
         Log::info($this->webhookCall);
         $payload = $this->webhookCall->payload;
         $eventType = $payload['event'] ?? null;
 
-        Log::info('Payload received', ['payload' => $payload]);
-        Log::info('Event type determined', ['event' => $eventType]);
+        // Log::info('Payload received', ['payload' => $payload]);
+        // Log::info('Event type determined', ['event' => $eventType]);
 
         switch ($eventType) {
             case 'charge.success':
@@ -47,19 +47,24 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         }
     }
 
+
     protected function isSubscriptionPayment($payload)
     {
         // Check if the payment metadata indicates a subscription payment
-        return isset($payload['data']['metadata']['paymentType']) && 
-               $payload['data']['metadata']['paymentType'] === 'subscription';
+        return isset($payload->data->metadata->paymentType) &&
+            $payload->data->metadata->paymentType === 'subscription';
     }
 
     protected function handleSubscriptionPayment($payload)
     {
-        $metadata = $payload['data']['metadata'];
-        $schoolSlug = $metadata['schoolSlug'];
-        $planCode = $metadata['plan_code']; // Adjust according to Paystack's response structure
-        $agentId = $metadata['agentId'] ?? null;
+        // Directly accessing properties as objects
+        $data = json_decode(json_encode($payload->data), false); 
+
+        // Safely extract metadata and handle potential null values using optional or data_get
+        $metadata = data_get($data, 'metadata');
+        $schoolSlug = data_get($metadata, 'schoolSlug');
+        $planCode = data_get($data->plan, 'plan_code');
+        $agentId = data_get($metadata, 'agentId');
 
         $school = School::where('slug', $schoolSlug)->first();
         $plan = Plan::where('paystack_plan_code', $planCode)->first();
@@ -70,15 +75,16 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             return;
         }
 
-        $totalAmount = $payload['data']['amount'] / 100;
-        $transactionFee = $totalAmount * 0.015;
+        $totalAmount = $data->amount / 100;  // Converting kobo to Naira
+        $transactionFee = $totalAmount * 0.015;  // Calculate the transaction fee
         $netAmount = $totalAmount - $transactionFee;
 
         $agentAmount = 0;
-        $splitCode = $payload['data']['split']['split_code'] ?? null;
+        $splitCode = data_get($data->split, 'split_code');
 
         if ($agent && $splitCode) {
-            $agentAmount = ($payload['data']['split']['shares']['subaccounts'][0]['amount'] ?? 0) / 100;
+            // Assuming subaccounts is an array and might be present
+            $agentAmount = (data_get($data->split->shares->subaccounts[0], 'amount', 0) / 100);
             $netAmount -= $agentAmount;
         }
 
@@ -90,7 +96,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'net_amount' => $netAmount,
             'split_amount_agent' => $agentAmount,
             'split_code' => $splitCode,
-            'reference' => $payload['data']['reference'],
+            'reference' => $data->reference,
             'status' => 'paid',
             'payment_date' => now(),
         ]);
@@ -109,6 +115,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         Log::info('Subscription payment processed successfully', ['school_id' => $school->id]);
     }
 
+
     protected function handleNonSubscriptionPayment($payload)
     {
         Payment::create([
@@ -124,12 +131,16 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
     protected function handleSubscriptionCreation($payload)
     {
-        $data = $payload['data'];
-        $schoolSlug = $data['metadata']['schoolSlug'];  // Assuming schoolSlug is sent in metadata
-        $planCode = $data['plan']['plan_code'];
-        $customerCode = $data['customer']['customer_code'];
-        $subscriptionCode = $data['subscription_code'];
+        // Extracting payload data
+        $data = json_decode(json_encode($payload->data), false);
 
+        // Extract necessary information
+        $customerCode = $data->customer->customer_code ?? null;
+        $planCode = $data->plan->plan_code ?? null;
+        $subscriptionCode = $data->subscription_code ?? null;
+        $schoolSlug = $data->customer->metadata->schoolSlug ?? null;  // Adjust based on actual metadata location
+
+        // Retrieve school and plan based on provided codes
         $school = School::where('slug', $schoolSlug)->first();
         $plan = Plan::where('paystack_plan_code', $planCode)->first();
 
@@ -138,11 +149,13 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             return;
         }
 
+        // Update school with customer code
         $school->update(['customer_code' => $customerCode]);
 
+        // Handle database operations within a transaction
         DB::beginTransaction();
         try {
-            Log::info('Subscription created successfully', ['data' => $payload['data']]);
+            // Check if an active subscription exists
             $subscription = $school->subscriptions()->where('status', 'active')->first();
 
             if ($subscription && $subscription->plan_id != $plan->id) {
@@ -153,25 +166,24 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 ]);
 
                 // Create new subscription
-                $subscription = $this->createSubscription($school, $plan, $data, $subscriptionCode);
+                $subscription = $this->createSubscription($school, $plan, $subscriptionCode);
             } else {
                 // Renewal or new subscription
                 $subscription = $subscription ? $subscription->update([
                     'ends_at' => now()->addDays($plan->duration),
                     'subscription_code' => $subscriptionCode,
-                ]) : $this->createSubscription($school, $plan, $data, $subscriptionCode);
+                ]) : $this->createSubscription($school, $plan, $subscriptionCode);
             }
 
             DB::commit();
-           
+            Log::info('Subscription created or updated successfully.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Subscription processing failed: ' . $e->getMessage());
-           
         }
     }
 
-    private function createSubscription($school, $plan, $data, $subscriptionCode)
+    private function createSubscription($school, $plan, $subscriptionCode)
     {
         return $school->subscriptions()->create([
             'plan_id' => $plan->id,
@@ -180,9 +192,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'starts_at' => now(),
             'ends_at' => now()->addDays($plan->duration),
             'subscription_code' => $subscriptionCode,
-            // 'payment_details' => json_encode($data),
         ]);
     }
 
-    
 }
