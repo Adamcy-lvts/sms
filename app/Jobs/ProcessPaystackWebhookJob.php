@@ -26,11 +26,11 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     /**
      * Create a new job instance.
      */
-    public function __construct($webhookCall)
-    {
-        $this->webhookCall = $webhookCall;
-        Log::info('Webhook job instantiated', ['webhookCall' => $webhookCall]);
-    }
+    // public function __construct($webhookCall)
+    // {
+    //     $this->webhookCall = $webhookCall;
+    //     // Log::info('Webhook job instantiated', ['webhookCall' => $webhookCall]);
+    // }
 
     /**
      * Execute the job.
