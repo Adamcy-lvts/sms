@@ -21,7 +21,7 @@ use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
 
 class ProcessPaystackWebhookJob extends ProcessWebhookJob
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    // use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
      * Create a new job instance.
