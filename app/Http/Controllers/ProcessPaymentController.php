@@ -96,6 +96,33 @@ class ProcessPaymentController extends Controller
     }
 
 
+    public function handleGatewayCallback()
+    {
+        $paymentDetails = Paystack::getPaymentData();
+
+        // Check if the payment was successful
+        if ($paymentDetails['data']['status'] !== 'success') {
+            return redirect()->route('subscriptions')->withErrors('Payment failed. Please try again.');
+        }
+
+        $metadata = $paymentDetails['data']['metadata'];
+        $schoolSlug = $metadata['schoolSlug'];
+        $school = School::where('slug', $schoolSlug)->first();
+
+        if (!$school) {
+            Log::error('School not found.');
+            return redirect()->route('subscriptions')->withErrors('Invalid school.');
+        }
+
+        Notification::make()
+            ->title('Subscription Successful.')
+            ->success()
+            ->send();
+
+        return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]);
+    }
+
+
     /**
      * Obtain Paystack payment information
      * @return void
@@ -171,115 +198,125 @@ class ProcessPaymentController extends Controller
     //         return redirect()->route('subscriptions')->withErrors('Payment failed. Please try again.');
     //     }
     // }
-    public function handleGatewayCallback()
-    {
-        $paymentDetails = Paystack::getPaymentData();
-// dd($paymentDetails);
-// Log::info($paymentDetails);
-        // Extract metadata
-        $metadata = $paymentDetails['data']['metadata'];
-        $paymentType = $metadata['paymentType'] ?? null;
+    // public function handleGatewayCallback()
+    // {
+    //     $paymentDetails = Paystack::getPaymentData();
 
-        if ($paymentDetails['data']['status'] !== 'success') {
-            return redirect()->route('subscriptions')->withErrors('Payment failed. Please try again.');
-        }
+    //     $metadata = $paymentDetails['data']['metadata'];
 
-        // If the payment is not for a subscription, handle it separately
-        if ($paymentType !== 'subscription') {
-            return $this->handleNonSubscriptionPayment($paymentDetails);
-        }
+    //     $schoolSlug = $metadata['schoolSlug'];
 
-        return $this->handleSubscriptionPayment($paymentDetails);
-    }
+    //     $school = School::where('slug', $schoolSlug)->first();
 
-    protected function handleNonSubscriptionPayment($paymentDetails)
-    {
-        // Assuming non-subscription payments are to be logged only
-        Payment::create([
-            'amount' => $paymentDetails['data']['amount'] / 100,
-            'status' => 'paid',
-            'payment_date' => now(),
-            'type' => $paymentDetails['data']['metadata']['paymentType'] ?? 'general',
-            'reference' => $paymentDetails['data']['reference']
-        ]);
+    //     Notification::make()
+    //         ->title('Subscription Successfull.')
+    //         ->success()
+    //         ->send();
 
-        return redirect()->route('dashboard')->with('success', 'Payment recorded successfully.');
-    }
+    //     return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]);
 
-    protected function handleSubscriptionPayment($paymentDetails)
-    {
-        $metadata = $paymentDetails['data']['metadata'];
-        $schoolSlug = $metadata['schoolSlug'];
-        $planId = $metadata['planId'];
-        $agent = Agent::find($metadata['agentId'] ?? null);
+    //     Extract metadata
+    //     $metadata = $paymentDetails['data']['metadata'];
+    //     $paymentType = $metadata['paymentType'] ?? null;
 
-        $school = School::where('slug', $schoolSlug)->first();
-        $plan = Plan::find($planId);
+    //     if ($paymentDetails['data']['status'] !== 'success') {
+    //         return redirect()->route('subscriptions')->withErrors('Payment failed. Please try again.');
+    //     }
 
-        if (!$school || !$plan) {
-            return redirect()->route('subscriptions')->withErrors('Invalid school or plan.');
-        }
+    //     // If the payment is not for a subscription, handle it separately
+    //     if ($paymentType !== 'subscription') {
+    //         return $this->handleNonSubscriptionPayment($paymentDetails);
+    //     }
 
-        $totalAmount = $paymentDetails['data']['amount'] / 100;
-        $transactionFee = $totalAmount * 0.015;
-        $netAmount = $totalAmount - $transactionFee;
+    //     return $this->handleSubscriptionPayment($paymentDetails);
+    // }
 
-        $agentAmount = 0;
-        $splitCode = $paymentDetails['data']['split']['split_code'] ?? null;
+    // protected function handleNonSubscriptionPayment($paymentDetails)
+    // {
+    //     // Assuming non-subscription payments are to be logged only
+    //     Payment::create([
+    //         'amount' => $paymentDetails['data']['amount'] / 100,
+    //         'status' => 'paid',
+    //         'payment_date' => now(),
+    //         'type' => $paymentDetails['data']['metadata']['paymentType'] ?? 'general',
+    //         'reference' => $paymentDetails['data']['reference']
+    //     ]);
 
-        if ($agent && isset($paymentDetails['data']['split'])) {
-            $agentAmount = ($paymentDetails['data']['split']['shares']['subaccounts'][0]['amount'] ?? 0) / 100;
-            $netAmount -= $agentAmount;
-        }
+    //     return redirect()->route('dashboard')->with('success', 'Payment recorded successfully.');
+    // }
 
-        $customerCode = $paymentDetails['data']['customer']['customer_code'];
+    // protected function handleSubscriptionPayment($paymentDetails)
+    // {
+    //     $metadata = $paymentDetails['data']['metadata'];
+    //     $schoolSlug = $metadata['schoolSlug'];
+    //     $planId = $metadata['planId'];
+    //     $agent = Agent::find($metadata['agentId'] ?? null);
 
-        // $customerSubs = Paystack::getCustomerSubscriptions($customerCode);
-        $customerSubscriptions = PaystackHelper::getCustomerSubscriptions($customerCode);
-// dd($customerSubscriptions);
-        SubsPayment::create([
-            'school_id' => $school->id,
-            'agent_id' => $agent->id ?? null,
-            'plan_id' => $plan->id,
-            'amount' => $totalAmount,
-            'net_amount' => $netAmount,
-            'split_amount_agent' => $agentAmount,
-            'split_code' => $splitCode,
-            'reference' => $paymentDetails['data']['reference'],
-            'status' => 'paid',
-            'payment_date' => now(),
-        ]);
+    //     $school = School::where('slug', $schoolSlug)->first();
+    //     $plan = Plan::find($planId);
 
-        if ($agent) {
-            AgentPayment::create([
-                'agent_id' => $agent->id,
-                'school_id' => $school->id,
-                'amount' => $agentAmount,
-                'split_code' => $splitCode,
-                'status' => 'paid',
-                'payment_date' => now(),
-            ]);
-        }
+    //     if (!$school || !$plan) {
+    //         return redirect()->route('subscriptions')->withErrors('Invalid school or plan.');
+    //     }
 
-        // Mail::to($school->email)->send(new SubscriptionReceiptMail($school));
-        try {
-            $subscription = $this->subscriptionService->manageSubscription($school, $plan, $paymentDetails);
-            // Redirect with success message
-            Notification::make()
-                ->title('Subscription Successfull.')
-                ->success()
-                ->send();
+    //     $totalAmount = $paymentDetails['data']['amount'] / 100;
+    //     $transactionFee = $totalAmount * 0.015;
+    //     $netAmount = $totalAmount - $transactionFee;
 
-            return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]);
-        } catch (\Exception $e) {
-            // Handle the exception
-            Notification::make()
-                ->title('Subscription processing failed.')
-                ->danger()
-                ->send();
-            return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]);
-        }
+    //     $agentAmount = 0;
+    //     $splitCode = $paymentDetails['data']['split']['split_code'] ?? null;
 
-        // return redirect()->route('dashboard')->with('success', 'Subscription processed successfully.');
-    }
+    //     if ($agent && isset($paymentDetails['data']['split'])) {
+    //         $agentAmount = ($paymentDetails['data']['split']['shares']['subaccounts'][0]['amount'] ?? 0) / 100;
+    //         $netAmount -= $agentAmount;
+    //     }
+
+    //     $customerCode = $paymentDetails['data']['customer']['customer_code'];
+
+
+    //     SubsPayment::create([
+    //         'school_id' => $school->id,
+    //         'agent_id' => $agent->id ?? null,
+    //         'plan_id' => $plan->id,
+    //         'amount' => $totalAmount,
+    //         'net_amount' => $netAmount,
+    //         'split_amount_agent' => $agentAmount,
+    //         'split_code' => $splitCode,
+    //         'reference' => $paymentDetails['data']['reference'],
+    //         'status' => 'paid',
+    //         'payment_date' => now(),
+    //     ]);
+
+    //     if ($agent) {
+    //         AgentPayment::create([
+    //             'agent_id' => $agent->id,
+    //             'school_id' => $school->id,
+    //             'amount' => $agentAmount,
+    //             'split_code' => $splitCode,
+    //             'status' => 'paid',
+    //             'payment_date' => now(),
+    //         ]);
+    //     }
+
+    //     // Mail::to($school->email)->send(new SubscriptionReceiptMail($school));
+    //     try {
+    //         $subscription = $this->subscriptionService->manageSubscription($school, $plan, $paymentDetails);
+    //         // Redirect with success message
+    //         Notification::make()
+    //             ->title('Subscription Successfull.')
+    //             ->success()
+    //             ->send();
+
+    //         return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]);
+    //     } catch (\Exception $e) {
+    //         // Handle the exception
+    //         Notification::make()
+    //             ->title('Subscription processing failed.')
+    //             ->danger()
+    //             ->send();
+    //         return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]);
+    //     }
+
+    //     // return redirect()->route('dashboard')->with('success', 'Subscription processed successfully.');
+    // }
 }
