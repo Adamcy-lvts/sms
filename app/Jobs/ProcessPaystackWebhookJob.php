@@ -29,7 +29,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     public function __construct($webhookCall)
     {
         $this->webhookCall = $webhookCall;
-       
+        Log::info('Webhook job instantiated', ['webhookCall' => $webhookCall]);
     }
 
     /**
@@ -40,7 +40,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $payload = $this->webhookCall->payload;
         $eventType = $payload['event'] ?? null;
         Log::info('Handling Paystack webhook event: ' . $eventType);
-        dd($eventType);
+
         switch ($eventType) {
             case 'charge.success':
                 if ($this->isSubscriptionPayment($payload)) {
