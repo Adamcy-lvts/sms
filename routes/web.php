@@ -20,3 +20,5 @@ Route::post('/pay', [App\Http\Controllers\ProcessPaymentController::class, 'redi
 
 // Laravel 8 & 9
 Route::get('/payment/callback', [App\Http\Controllers\ProcessPaymentController::class, 'handleGatewayCallback']);
+
+Route::webhooks('webhook/paystack', 'paystack');
