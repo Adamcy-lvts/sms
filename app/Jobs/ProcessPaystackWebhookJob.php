@@ -37,9 +37,10 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
      */
     public function handle()
     {
+        Log::info($this->webhookCall);
         $payload = $this->webhookCall->payload;
         $eventType = $payload['event'] ?? null;
-        Log::info('Handling Paystack webhook event: ' . $eventType);
+  
 
         switch ($eventType) {
             case 'charge.success':
