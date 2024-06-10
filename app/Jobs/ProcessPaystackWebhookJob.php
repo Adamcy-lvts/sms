@@ -21,26 +21,15 @@ use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
 
 class ProcessPaystackWebhookJob extends ProcessWebhookJob
 {
-    // use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
-    /**
-     * Create a new job instance.
-     */
-    // public function __construct($webhookCall)
-    // {
-    //     $this->webhookCall = $webhookCall;
-    //     // Log::info('Webhook job instantiated', ['webhookCall' => $webhookCall]);
-    // }
-
-    /**
-     * Execute the job.
-     */
+    
     public function handle()
     {
         Log::info($this->webhookCall);
         $payload = $this->webhookCall->payload;
         $eventType = $payload['event'] ?? null;
-  
+
+        Log::info('Payload received', ['payload' => $payload]);
+        Log::info('Event type determined', ['event' => $eventType]);
 
         switch ($eventType) {
             case 'charge.success':
