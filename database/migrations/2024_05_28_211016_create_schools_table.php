@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('name')->unique(); // Unique school name
             $table->string('slug')->unique(); // Unique slug for URL identification
             $table->string('email')->unique(); // Unique email address
+            $table->string('customer_code')->nullable();
             $table->foreignId('agent_id')->nullable()->constrained('agents')->onDelete('set null');
             $table->text('address'); // School address
             $table->string('phone'); // School phone number

@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('plan_id')->constrained()->onDelete('cascade');
             $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->string('subscription_code')->nullable();
             $table->string('status')->default('active'); // Subscription status: active, cancelled, paused
             $table->timestamp('starts_at'); // The start date of the subscription
             $table->timestamp('ends_at')->nullable(); // The end date of the subscription, if it's not recurring
