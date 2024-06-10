@@ -39,7 +39,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     {
         $payload = $this->webhookCall->payload;
         $eventType = $payload['event'] ?? null;
-
+        Log::info('Handling Paystack webhook event: ' . $eventType);
         switch ($eventType) {
             case 'charge.success':
                 if ($this->isSubscriptionPayment($payload)) {
@@ -115,7 +115,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             ]);
         }
 
-    
+        Log::info('Subscription payment processed successfully', ['school_id' => $school->id]);
     }
 
     protected function handleNonSubscriptionPayment($payload)
@@ -151,6 +151,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
         DB::beginTransaction();
         try {
+            Log::info('Subscription created successfully', ['data' => $payload['data']]);
             $subscription = $school->subscriptions()->where('status', 'active')->first();
 
             if ($subscription && $subscription->plan_id != $plan->id) {
