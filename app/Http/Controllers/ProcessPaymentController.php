@@ -233,9 +233,10 @@ class ProcessPaymentController extends Controller
         }
 
         $customerCode = $paymentDetails['data']['customer']['customer_code'];
+
         // $customerSubs = Paystack::getCustomerSubscriptions($customerCode);
         $customerSubscriptions = PaystackHelper::getCustomerSubscriptions($customerCode);
-dd($customerSubscriptions);
+// dd($customerSubscriptions);
         SubsPayment::create([
             'school_id' => $school->id,
             'agent_id' => $agent->id ?? null,
