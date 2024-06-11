@@ -62,7 +62,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $data = json_decode(json_encode($payload['data']), false);
 
         // Accessing metadata safely
-        $metadata = $data->metadata ?? new stdClass();
+        $metadata = $data->metadata ?? null;
         $schoolSlug = $metadata->schoolSlug ?? null;
         $planCode = $data->plan->plan_code ?? null;
         $agentId = $metadata->agentId ?? null;
