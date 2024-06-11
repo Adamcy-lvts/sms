@@ -47,7 +47,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             case 'subscription.create':
                 $this->handleSubscriptionCreation($payload);
                 break;
-            case 'subscription.non-renewing':
+            case 'subscription.not_renew':
                 $this->handleSubscriptionDisable($payload);
                 break;
             default:
