@@ -22,7 +22,7 @@ return new class extends Migration
             $table->timestamp('cancelled_at')->nullable(); // The date when the subscription was cancelled
             $table->timestamp('trial_ends_at')->nullable(); // For handling trial periods
             $table->boolean('is_recurring')->default(false); // Whether the subscription is set to auto-renew
-            $table->date('next_billing_date')->nullable();
+            $table->date('next_payment_date')->nullable();
             $table->json('features')->nullable(); // Features included in the subscription, can store JSON data
             $table->timestamps();
 

@@ -177,6 +177,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $planCode = $data->plan->plan_code ?? null;
         $subscriptionCode = $data->subscription_code ?? null;
         $schoolEmail = $data->customer->email ?? null;  // Adjust based on actual metadata location
+        $nextPaymentDate = $data->next_payment_date ?? null;
 
         // Retrieve school and plan based on provided codes
         $school = School::where('email', $schoolEmail)->firstOrFail();
@@ -208,16 +209,18 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 $subscription->update([
                     'status' => 'inactive',
                     'ends_at' => now(),
+                    'next_payment_date' => $nextPaymentDate
                 ]);
 
                 // Create new subscription
-                $subscription = $this->createSubscription($school, $plan, $subscriptionCode);
+                $subscription = $this->createSubscription($school, $plan, $subscriptionCode, $nextPaymentDate);
             } else {
                 // Renewal or new subscription
                 $subscription = $subscription ? $subscription->update([
                     'ends_at' => now()->addDays($plan->duration),
                     'subscription_code' => $subscriptionCode,
-                ]) : $this->createSubscription($school, $plan, $subscriptionCode);
+                    'next_payment_date' => $nextPaymentDate
+                ]) : $this->createSubscription($school, $plan,$subscriptionCode, $nextPaymentDate);
             }
 
             DB::commit();
@@ -231,7 +234,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         }
     }
 
-    private function createSubscription($school, $plan, $subscriptionCode)
+    private function createSubscription($school, $plan, $subscriptionCode, $nextPaymentDate)
     {
         return $school->subscriptions()->create([
             'plan_id' => $plan->id,
@@ -240,7 +243,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'starts_at' => now(),
             'ends_at' => now()->addDays($plan->duration),
             'subscription_code' => $subscriptionCode,
-            'next_billing_date' => 
+            'next_payment_date' => $nextPaymentDate,
         ]);
     }
 }
