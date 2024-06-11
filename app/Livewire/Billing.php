@@ -2,36 +2,67 @@
 
 namespace App\Livewire;
 
+use App\Models\SubsPayment;
 use Livewire\Component;
 use Filament\Pages\Page;
+use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Contracts\HasTable;
 use Filament\Notifications\Notification;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Tables\Concerns\InteractsWithTable;
 
-class Billing extends Page
+
+class Billing extends Page implements HasForms, HasTable
 {
+    use InteractsWithTable;
+    use InteractsWithForms;
+
     protected static string $view = 'livewire.billing';
 
     public $subscriptionCode = '';
 
-    public function mount() {
-         
+    public function mount()
+    {
+
         $user = Auth::user();
 
         $school = $user->schools->first();
 
         $subscription = $school->subscriptions->first();
 
-        // dd($subscription);
 
         $this->subscriptionCode = $subscription->subscription_code ?? null;
-        // dd($this->subscriptionCode);
-        
+    }
+
+
+
+    public function table(Table $table): Table
+    {
+        return $table
+            ->query(SubsPayment::query())
+            ->columns([
+                TextColumn::make('amount'),
+                TextColumn::make('status'),
+                TextColumn::make('payment_date')->dateTime(),
+            ])
+            ->filters([
+                // ...
+            ])
+            ->actions([
+                // ...
+            ])
+            ->bulkActions([
+                // ...
+            ]);
     }
 
     public function manageSubscription()
     {
-        // dd($this->subscriptionCode);
+
         if (empty($this->subscriptionCode)) {
             Notification::make()
                 ->title('No Subscription Available.')
@@ -61,5 +92,4 @@ class Billing extends Page
                 ->send();
         }
     }
-
 }

@@ -12,6 +12,8 @@ use App\Models\AgentPayment;
 use Illuminate\Bus\Queueable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\SubscriptionReceiptMail;
 use App\Services\SubscriptionService;
 use Illuminate\Queue\SerializesModels;
 use Filament\Notifications\Notification;
@@ -26,7 +28,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
     public function handle()
     {
-        
+
         $payload = $this->webhookCall->payload;
         $eventType = $payload['event'] ?? null;
 
@@ -151,7 +153,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     {
         // Extracting payload data
         $data = json_decode(json_encode($payload['data']), false);
-        
+
         // Extract necessary information
         $customerCode = $data->customer->customer_code ?? null;
         $planCode = $data->plan->plan_code ?? null;
@@ -162,13 +164,13 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $school = School::where('email', $schoolEmail)->firstOrFail();
         $plan = Plan::where('plan_code', $planCode)->firstOrFail();
 
-         Log::info('Handling Subscription Creation', [
-       
-        'planCode' => $planCode,
-        'customerCode' => $customerCode,
-        'subscriptionCode' => $subscriptionCode,
-        'schoolDetails' => $school ? $school : 'School not found',
-         ]);
+        Log::info('Handling Subscription Creation', [
+
+            'planCode' => $planCode,
+            'customerCode' => $customerCode,
+            'subscriptionCode' => $subscriptionCode,
+            'schoolDetails' => $school ? $school : 'School not found',
+        ]);
         if (!$school || !$plan) {
             Log::error('Invalid school or plan.');
             return;
@@ -202,6 +204,9 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
             DB::commit();
             Log::info('Subscription created or updated successfully.');
+
+            // Send email receipt to the school
+            Mail::to($school->email)->send(new SubscriptionReceiptMail($subscription));
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Subscription processing failed: ' . $e->getMessage());
@@ -219,5 +224,4 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'subscription_code' => $subscriptionCode,
         ]);
     }
-
 }
