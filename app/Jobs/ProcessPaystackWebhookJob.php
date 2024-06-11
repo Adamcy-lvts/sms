@@ -25,7 +25,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
     public function handle()
     {
-        Log::info($this->webhookCall);
+        
         $payload = $this->webhookCall->payload;
         $eventType = $payload['event'] ?? null;
 
@@ -52,7 +52,9 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     protected function isSubscriptionPayment($payload)
     {
         $data = json_decode(json_encode($payload['data']), false);
-        log::info('check subs'. $data->metadata->paymentType);
+        Log::info('Payload Data', ['data' => json_encode($data)]);
+
+        log::info('check type'. $data->metadata->paymentType);
         // Check if the payment metadata indicates a subscription payment
         return isset($data->metadata->paymentType) &&
             $data->metadata->paymentType === 'subscription';
@@ -62,6 +64,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     {
         // Ensure payload is an object first
         $data = json_decode(json_encode($payload['data']), false);
+        Log::info('Payload Data', ['data' => json_encode($data)]);
 
         // Accessing metadata safely
         $metadata = $data->metadata ?? null;
