@@ -125,7 +125,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'status' => 'paid',
             'payment_date' => now(),
             'type' => $payload->data->metadata->paymentType ?? 'general',
-            'reference' => $payload->data->reference
+            'reference' => $data->reference
         ]);
 
         Log::info('Non-subscription payment recorded successfully.');
@@ -144,7 +144,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
         // Retrieve school and plan based on provided codes
         $school = School::where('slug', $schoolSlug)->first();
-        $plan = Plan::where('paystack_plan_code', $planCode)->first();
+        $plan = Plan::where('plan_code', $planCode)->first();
 
         if (!$school || !$plan) {
             Log::error('Invalid school or plan.');
