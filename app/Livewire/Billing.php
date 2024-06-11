@@ -24,15 +24,16 @@ class Billing extends Page implements HasForms, HasTable
     protected static string $view = 'livewire.billing';
 
     public $subscriptionCode = '';
+    public $school;
 
     public function mount()
     {
 
         $user = Auth::user();
 
-        $school = $user->schools->first();
+        $this->school = $user->schools->first();
 
-        $subscription = $school->subscriptions->first();
+        $subscription = $this->school->subscriptions->first();
 
 
         $this->subscriptionCode = $subscription->subscription_code ?? null;
@@ -46,8 +47,13 @@ class Billing extends Page implements HasForms, HasTable
             ->query(SubsPayment::query())
             ->columns([
                 TextColumn::make('amount'),
-                TextColumn::make('status'),
-                TextColumn::make('payment_date')->dateTime(),
+                TextColumn::make('status')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'pending' => 'gray',
+                        'paid' => 'success',
+                    }),
+                TextColumn::make('payment_date')->dateTime('F j, Y g:i A'),
             ])
             ->filters([
                 // ...

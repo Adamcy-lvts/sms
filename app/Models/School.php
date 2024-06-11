@@ -31,6 +31,15 @@ class School extends Model
         return $this->subscriptions()->active()->where('plan_id', $planId)->exists();
     }
 
+    public function currentSubscription()
+    {
+        return $this->subscriptions()
+            ->where('status', 'active')
+            ->where('ends_at', '>', now())
+            ->latest('starts_at')
+            ->first();
+    }
+
     public function subscriptions()
     {
         return $this->hasMany(Subscription::class, 'school_id');

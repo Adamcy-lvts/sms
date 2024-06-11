@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\PaymentMethod;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class SubsPayment extends Model
 {
@@ -13,4 +14,11 @@ class SubsPayment extends Model
         'school_id', 'agent_id', 'amount', 'net_amount', 'split_amount_agent',
         'split_code', 'status', 'payment_method_id', 'reference', 'payment_date'
     ];
+
+
+    public function paymentMethod() {
+
+        return $this->belongsTo(PaymentMethod::class);
+        
+    }
 }
