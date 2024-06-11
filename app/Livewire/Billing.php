@@ -22,7 +22,7 @@ class Billing extends Page
 
         $subscription = $school->subscriptions->first();
 
-        dd($subscription);
+        // dd($subscription);
 
         $this->subscriptionCode = $subscription->subscription_code ?? null;
         // dd($this->subscriptionCode);
@@ -31,7 +31,7 @@ class Billing extends Page
 
     public function manageSubscription()
     {
-        dd($this->subscriptionCode);
+        // dd($this->subscriptionCode);
         if (empty($this->subscriptionCode)) {
             Notification::make()
                 ->title('No Subscription Available.')
