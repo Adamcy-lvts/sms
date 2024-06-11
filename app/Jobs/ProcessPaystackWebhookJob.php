@@ -54,7 +54,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $data = $payload['data'];
         // Check if the payment metadata indicates a subscription payment
         return isset($data->metadata->paymentType) &&
-            $payload->data->metadata->paymentType === 'subscription';
+            $data->metadata->paymentType === 'subscription';
     }
 
     protected function handleSubscriptionPayment($payload)
