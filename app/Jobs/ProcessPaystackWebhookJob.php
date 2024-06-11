@@ -64,14 +64,15 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     {
         // Ensure payload is an object first
         $data = json_decode(json_encode($payload['data']), false);
-        Log::info('Payload Data', ['data' => json_encode($data)]);
+        // Log::info('Payload Data', ['data' => json_encode($data)]);
 
         // Accessing metadata safely
         $metadata = $data->metadata ?? null;
+        log::info('metadata'.' '.$metadata);
         $schoolSlug = $metadata->schoolSlug ?? null;
         $planCode = $data->plan->plan_code ?? null;
         $agentId = $metadata->agentId ?? null;
-        log::info('check subs' . $data->metadata);
+      
         $school = School::where('slug', $schoolSlug)->first();
         $plan = Plan::where('paystack_plan_code', $planCode)->first();
         $agent = Agent::find($agentId);
