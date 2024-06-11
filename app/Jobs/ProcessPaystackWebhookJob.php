@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use stdClass;
 use App\Models\Plan;
 use App\Models\Agent;
 use App\Models\School;
@@ -57,14 +58,14 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
     protected function handleSubscriptionPayment($payload)
     {
-        // Directly accessing properties as objects
-        $data = json_decode(json_encode($payload->data), false); 
+        // Ensure payload is an object first
+        $data = json_decode(json_encode($payload['data']), false);
 
-        // Safely extract metadata and handle potential null values using optional or data_get
-        $metadata = data_get($data, 'metadata');
-        $schoolSlug = data_get($metadata, 'schoolSlug');
-        $planCode = data_get($data->plan, 'plan_code');
-        $agentId = data_get($metadata, 'agentId');
+        // Accessing metadata safely
+        $metadata = $data->metadata ?? new stdClass();
+        $schoolSlug = $metadata->schoolSlug ?? null;
+        $planCode = $data->plan->plan_code ?? null;
+        $agentId = $metadata->agentId ?? null;
 
         $school = School::where('slug', $schoolSlug)->first();
         $plan = Plan::where('paystack_plan_code', $planCode)->first();
@@ -75,16 +76,13 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             return;
         }
 
-        $totalAmount = $data->amount / 100;  // Converting kobo to Naira
-        $transactionFee = $totalAmount * 0.015;  // Calculate the transaction fee
+        $totalAmount = $data->amount / 100; // Converting kobo to Naira
+        $transactionFee = $totalAmount * 0.015; // Calculate the transaction fee
         $netAmount = $totalAmount - $transactionFee;
 
         $agentAmount = 0;
-        $splitCode = data_get($data->split, 'split_code');
-
-        if ($agent && $splitCode) {
-            // Assuming subaccounts is an array and might be present
-            $agentAmount = (data_get($data->split->shares->subaccounts[0], 'amount', 0) / 100);
+        if (isset($data->split) && $data->split->split_code) {
+            $agentAmount = ($data->split->shares->subaccounts[0]->amount ?? 0) / 100;
             $netAmount -= $agentAmount;
         }
 
@@ -95,7 +93,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'amount' => $totalAmount,
             'net_amount' => $netAmount,
             'split_amount_agent' => $agentAmount,
-            'split_code' => $splitCode,
+            'split_code' => $data->split->split_code,
             'reference' => $data->reference,
             'status' => 'paid',
             'payment_date' => now(),
@@ -106,7 +104,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 'agent_id' => $agent->id,
                 'school_id' => $school->id,
                 'amount' => $agentAmount,
-                'split_code' => $splitCode,
+                'split_code' => $data->split->split_code,
                 'status' => 'paid',
                 'payment_date' => now(),
             ]);
@@ -116,9 +114,10 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     }
 
 
+
     protected function handleNonSubscriptionPayment($payload)
     {
-        $data = json_decode(json_encode($payload->data), false);
+        $data = json_decode(json_encode($payload['data']), false);
         Log::info($data);
         Payment::create([
             'amount' => $data->amount / 100,
@@ -134,7 +133,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     protected function handleSubscriptionCreation($payload)
     {
         // Extracting payload data
-        $data = json_decode(json_encode($payload->data), false);
+        $data = json_decode(json_encode($payload['data']), false);
         Log::info($data);
         // Extract necessary information
         $customerCode = $data->customer->customer_code ?? null;
