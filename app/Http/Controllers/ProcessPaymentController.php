@@ -101,7 +101,7 @@ class ProcessPaymentController extends Controller
         $paymentDetails = Paystack::getPaymentData();
 
         // Check if the payment was successful
-        if ($paymentDetails['data']['status'] !== 'success') {
+        if ($paymentDetails['dta']['status'] !== 'success') {
             return redirect()->route('subscriptions')->withErrors('Payment failed. Please try again.');
         }
 
