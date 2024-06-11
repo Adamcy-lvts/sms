@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use DateTime;
 use stdClass;
 use App\Models\Plan;
 use App\Models\Agent;
@@ -179,6 +180,9 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $schoolEmail = $data->customer->email ?? null;  // Adjust based on actual metadata location
         $nextPaymentDate = $data->next_payment_date ?? null;
 
+        $dateTime = new DateTime($data->next_payment_date);
+        $formattedDate = $dateTime->format('Y-m-d H:i:s');
+
         // Retrieve school and plan based on provided codes
         $school = School::where('email', $schoolEmail)->firstOrFail();
         $plan = Plan::where('plan_code', $planCode)->firstOrFail();
@@ -209,18 +213,18 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 $subscription->update([
                     'status' => 'inactive',
                     'ends_at' => now(),
-                    'next_payment_date' => $nextPaymentDate
+                    'next_payment_date' => $formattedDate
                 ]);
 
                 // Create new subscription
-                $subscription = $this->createSubscription($school, $plan, $subscriptionCode, $nextPaymentDate);
+                $subscription = $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate);
             } else {
                 // Renewal or new subscription
                 $subscription = $subscription ? $subscription->update([
                     'ends_at' => now()->addDays($plan->duration),
                     'subscription_code' => $subscriptionCode,
-                    'next_payment_date' => $nextPaymentDate
-                ]) : $this->createSubscription($school, $plan,$subscriptionCode, $nextPaymentDate);
+                    'next_payment_date' => $formattedDate
+                ]) : $this->createSubscription($school, $plan,$subscriptionCode, $formattedDate);
             }
 
             DB::commit();
@@ -234,7 +238,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         }
     }
 
-    private function createSubscription($school, $plan, $subscriptionCode, $nextPaymentDate)
+    private function createSubscription($school, $plan, $subscriptionCode, $formattedDate)
     {
         return $school->subscriptions()->create([
             'plan_id' => $plan->id,
@@ -243,7 +247,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'starts_at' => now(),
             'ends_at' => now()->addDays($plan->duration),
             'subscription_code' => $subscriptionCode,
-            'next_payment_date' => $nextPaymentDate,
+            'next_payment_date' => $formattedDate,
         ]);
     }
 }
