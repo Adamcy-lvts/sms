@@ -118,7 +118,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     protected function handleNonSubscriptionPayment($payload)
     {
         $data = json_decode(json_encode($payload['data']), false);
-        Log::info($data);
+        Log::info('payment payload: ' . $data);
         Payment::create([
             'amount' => $data->amount / 100,
             'status' => 'paid',
@@ -134,7 +134,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     {
         // Extracting payload data
         $data = json_decode(json_encode($payload['data']), false);
-        Log::info($data);
+        Log::info('subscription payload: ' . $data);
         // Extract necessary information
         $customerCode = $data->customer->customer_code ?? null;
         $planCode = $data->plan->plan_code ?? null;
