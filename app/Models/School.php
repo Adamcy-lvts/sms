@@ -48,7 +48,7 @@ class School extends Model
     public function canRenewSubscription()
     {
         $subscription = $this->subscriptions()->latest('created_at')->first();
-        return $subscription && $subscription->status === 'non-renewing'; // Adjust condition based on your logic
+        return $subscription && $subscription->status === 'cancelled'; // Adjust condition based on your logic
     }
 
 
