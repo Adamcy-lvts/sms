@@ -22,6 +22,7 @@ use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
 
 class ProcessPaystackWebhookJob extends ProcessWebhookJob
 {
+    public $school;
 
     public function handle()
     {
@@ -55,14 +56,14 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $data = json_decode(json_encode($payload['data']), false);
 
         // Log the metadata for debugging purposes
-        log::info('Metadata Content:', ['metadata' => json_encode($data->metadata)]);
+        // log::info('Metadata Content:', ['metadata' => json_encode($data->metadata)]);
 
         // Check if the payment metadata indicates a subscription payment
         if (isset($data->metadata->paymentType) && $data->metadata->paymentType === 'subscription') {
-            log::info('Payment detected as subscription.');
+            // log::info('Payment detected as subscription.');
             return true;
         } else {
-            log::info('Payment detected as non-subscription.');
+            // log::info('Payment detected as non-subscription.');
             return false;
         }
     }
@@ -79,15 +80,15 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $planCode = $data->plan->plan_code ?? null;
         $agentId = $metadata->agentId ?? null;
 
-        $school = School::where('slug', $schoolSlug)->first();
+        $this->school = School::where('slug', $schoolSlug)->first();
         $plan = Plan::where('plan_code', $planCode)->first();
         $agent = Agent::find($agentId);
 
         // Log the retrieved school and plan information
-        Log::info('Retrieved School:', ['school' => $school ? $school->toArray() : 'Not found']);
-        Log::info('Retrieved Plan:', ['plan' => $plan ? $plan->toArray() : 'Not found']);
+        // Log::info('Retrieved School:', ['school' => $school ? $school->toArray() : 'Not found']);
+        // Log::info('Retrieved Plan:', ['plan' => $plan ? $plan->toArray() : 'Not found']);
 
-        if (!$school || !$plan) {
+        if (!$this->school || !$plan) {
             Log::error('Invalid school or plan for subscription.');
             return;
         }
@@ -103,7 +104,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         }
 
         SubsPayment::create([
-            'school_id' => $school->id,
+            'school_id' => $this->school->id,
             'agent_id' => $agent->id ?? null,
             'plan_id' => $plan->id,
             'amount' => $totalAmount,
@@ -118,7 +119,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         if ($agent) {
             AgentPayment::create([
                 'agent_id' => $agent->id,
-                'school_id' => $school->id,
+                'school_id' => $this->school->id,
                 'amount' => $agentAmount,
                 'split_code' => $data->split->split_code,
                 'status' => 'paid',
@@ -126,7 +127,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             ]);
         }
 
-        Log::info('Subscription payment processed successfully', ['school_id' => $school->id]);
+        Log::info('Subscription payment processed successfully', ['school_id' => $this->school->id]);
     }
 
 
@@ -150,30 +151,37 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     {
         // Extracting payload data
         $data = json_decode(json_encode($payload['data']), false);
-        // Log::info('subscription payload: ' . $data);
+        
         // Extract necessary information
         $customerCode = $data->customer->customer_code ?? null;
         $planCode = $data->plan->plan_code ?? null;
         $subscriptionCode = $data->subscription_code ?? null;
-        $schoolSlug = $data->customer->metadata->schoolSlug ?? null;  // Adjust based on actual metadata location
+        // $schoolSlug = $data->customer->metadata->schoolSlug ?? null;  // Adjust based on actual metadata location
 
         // Retrieve school and plan based on provided codes
-        $school = School::where('slug', $schoolSlug)->first();
+        // $school = School::where('slug', $schoolSlug)->first();
         $plan = Plan::where('plan_code', $planCode)->first();
 
-        if (!$school || !$plan) {
+         Log::info('Handling Subscription Creation', [
+       
+        'planCode' => $planCode,
+        'customerCode' => $customerCode,
+        'subscriptionCode' => $subscriptionCode,
+        'schoolDetails' => $this->school ? $this->school->toArray() : 'School not found',
+         ]);
+        if (!$this->school || !$plan) {
             Log::error('Invalid school or plan.');
             return;
         }
 
         // Update school with customer code
-        $school->update(['customer_code' => $customerCode]);
+        $this->school->update(['customer_code' => $customerCode]);
 
         // Handle database operations within a transaction
         DB::beginTransaction();
         try {
             // Check if an active subscription exists
-            $subscription = $school->subscriptions()->where('status', 'active')->first();
+            $subscription = $this->school->subscriptions()->where('status', 'active')->first();
 
             if ($subscription && $subscription->plan_id != $plan->id) {
                 // This is an upgrade or downgrade
@@ -183,13 +191,13 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 ]);
 
                 // Create new subscription
-                $subscription = $this->createSubscription($school, $plan, $subscriptionCode);
+                $subscription = $this->createSubscription($this->school, $plan, $subscriptionCode);
             } else {
                 // Renewal or new subscription
                 $subscription = $subscription ? $subscription->update([
                     'ends_at' => now()->addDays($plan->duration),
                     'subscription_code' => $subscriptionCode,
-                ]) : $this->createSubscription($school, $plan, $subscriptionCode);
+                ]) : $this->createSubscription($this->school, $plan, $subscriptionCode);
             }
 
             DB::commit();
