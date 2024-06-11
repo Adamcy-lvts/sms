@@ -156,10 +156,10 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $customerCode = $data->customer->customer_code ?? null;
         $planCode = $data->plan->plan_code ?? null;
         $subscriptionCode = $data->subscription_code ?? null;
-        // $schoolSlug = $data->customer->metadata->schoolSlug ?? null;  // Adjust based on actual metadata location
+        $schoolEmail = $data->customer->email ?? null;  // Adjust based on actual metadata location
 
         // Retrieve school and plan based on provided codes
-        // $school = School::where('slug', $schoolSlug)->first();
+        $school = School::where('slug', $schoolEmail)->first();
         $plan = Plan::where('plan_code', $planCode)->first();
 
          Log::info('Handling Subscription Creation', [
@@ -167,21 +167,21 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         'planCode' => $planCode,
         'customerCode' => $customerCode,
         'subscriptionCode' => $subscriptionCode,
-        'schoolDetails' => $this->school ? $this->school->toArray() : 'School not found',
+        'schoolDetails' => $school ? $school : 'School not found',
          ]);
-        if (!$this->school || !$plan) {
+        if (!$school || !$plan) {
             Log::error('Invalid school or plan.');
             return;
         }
 
         // Update school with customer code
-        $this->school->update(['customer_code' => $customerCode]);
+        $school->update(['customer_code' => $customerCode]);
 
         // Handle database operations within a transaction
         DB::beginTransaction();
         try {
             // Check if an active subscription exists
-            $subscription = $this->school->subscriptions()->where('status', 'active')->first();
+            $subscription = $school->subscriptions()->where('status', 'active')->first();
 
             if ($subscription && $subscription->plan_id != $plan->id) {
                 // This is an upgrade or downgrade
@@ -191,13 +191,13 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 ]);
 
                 // Create new subscription
-                $subscription = $this->createSubscription($this->school, $plan, $subscriptionCode);
+                $subscription = $this->createSubscription($school, $plan, $subscriptionCode);
             } else {
                 // Renewal or new subscription
                 $subscription = $subscription ? $subscription->update([
                     'ends_at' => now()->addDays($plan->duration),
                     'subscription_code' => $subscriptionCode,
-                ]) : $this->createSubscription($this->school, $plan, $subscriptionCode);
+                ]) : $this->createSubscription($school, $plan, $subscriptionCode);
             }
 
             DB::commit();
