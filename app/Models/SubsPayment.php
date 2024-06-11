@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Subscription;
 use App\Models\PaymentMethod;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,7 +13,7 @@ class SubsPayment extends Model
 
     protected $fillable = [
         'school_id', 'agent_id', 'amount', 'net_amount', 'split_amount_agent',
-        'split_code', 'status', 'payment_method_id', 'reference', 'payment_date'
+        'split_code', 'status', 'payment_method_id', 'reference', 'payment_date', 'subscription_id'
     ];
 
 
@@ -20,5 +21,10 @@ class SubsPayment extends Model
 
         return $this->belongsTo(PaymentMethod::class);
         
+    }
+
+    public function subscription()
+    {
+        return $this->belongsTo(Subscription::class, 'subscription_id');
     }
 }

@@ -45,13 +45,14 @@
 
         <!-- Subscription Status and Details -->
         <div class="space-y-2">
-            <div class="text-green-400">
-                Current Plan: <strong class="font-medium">{{ $planName }}</strong>
-            </div>
-            <div class="text-yellow-300">
-                Next Billing Date: <strong class="font-medium">{{ $nextBillingDate }}</strong>
-            </div>
-
+            @if ($school->currentSubscription())
+                <div class="text-green-400">
+                    Current Plan: <strong class="font-medium">{{ $planName }}</strong>
+                </div>
+                <div class="text-yellow-300">
+                    Next Billing Date: <strong class="font-medium">{{ $nextBillingDate }}</strong>
+                </div>
+            @endif
         </div>
 
         <!-- Action Buttons -->
@@ -62,7 +63,7 @@
                 Manage Subscription
             </x-filament::button>
 
-            @if (!$school->currentSubscription())
+            @if (!$school->currentSubscription() && !$school->canRenewSubscription())
                 <x-filament::button size="sm" wire:click="subscribe">
                     Subscribe
                 </x-filament::button>

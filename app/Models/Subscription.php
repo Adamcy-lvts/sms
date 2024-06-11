@@ -89,4 +89,9 @@ class Subscription extends Model
             ]);
         }
     }
+
+    public function payments()
+    {
+        return $this->hasMany(SubsPayment::class, 'subscription_id');
+    }
 }
