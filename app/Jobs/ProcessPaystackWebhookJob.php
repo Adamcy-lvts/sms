@@ -47,7 +47,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             case 'subscription.create':
                 $this->handleSubscriptionCreation($payload);
                 break;
-            case 'subscription.disable':
+            case 'subscription.non-renewing':
                 $this->handleSubscriptionDisable($payload);
                 break;
             default:
@@ -66,7 +66,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $school = $this->retrieveSchool($data->customer->email);
 
         if ($school) {
-            $school->subscriptions()->where('status', 'active')->update(['status' => 'cancelled']);
+            $school->subscriptions()->where('status', 'active')->update(['status' => 'cancelled', 'cancelled_at' => now()]);
             Log::info('Subscription cancelled', ['school_id' => $school->id]);
         }
     }
