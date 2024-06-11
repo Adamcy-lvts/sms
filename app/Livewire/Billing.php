@@ -39,7 +39,7 @@ class Billing extends Page implements HasForms, HasTable
 
         $this->planName = $subscription->plan->name ?? null;
 
-        $this->nextBillingDate = $subscription->next_billing_date ?? null;
+        $this->nextBillingDate = $subscription->next_payment_date ?? null;
 
         $this->subscriptionCode = $subscription->subscription_code ?? null;
     }
