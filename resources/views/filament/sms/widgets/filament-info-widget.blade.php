@@ -2,7 +2,7 @@
     $latestSubscription = '';
     $latestSubscription = $school->subscriptions()->latest()->first();
     $status = $latestSubscription->status ?? 'none';
-    $badgeText = $status === 'active' ? 'Active' : ($status === 'expired' ? 'Expired' : 'No Subscription');
+    $badgeText = $status === 'active' ? 'Active' : ($status === 'cancelled' ? 'Cancelled' : 'No Subscription');
     $badgeClasses =
         $status === 'active'
             ? 'bg-green-50 text-green-700 ring-green-600/20 dark:border-green-600 dark:bg-green-700 dark:bg-opacity-25 dark:text-green-400'

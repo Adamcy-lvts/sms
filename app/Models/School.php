@@ -45,5 +45,11 @@ class School extends Model
         return $this->hasMany(Subscription::class, 'school_id');
     }
 
+    public function canRenewSubscription()
+    {
+        $subscription = $this->subscriptions()->latest('created_at')->first();
+        return $subscription && $subscription->status === 'non-renewing'; // Adjust condition based on your logic
+    }
+
 
 }

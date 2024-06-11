@@ -25,6 +25,8 @@ class Billing extends Page implements HasForms, HasTable
 
     public $subscriptionCode = '';
     public $school;
+    public $planName;
+    public $nextBillingDate;
 
     public function mount()
     {
@@ -33,8 +35,11 @@ class Billing extends Page implements HasForms, HasTable
 
         $this->school = $user->schools->first();
 
-        $subscription = $this->school->subscriptions->first();
+        $subscription = $this->school->subscriptions->where('status','active')->first();
 
+        $this->planName = $subscription->plan->name ?? null;
+
+        $this->nextBillingDate = $subscription->next_billing_date ?? null;
 
         $this->subscriptionCode = $subscription->subscription_code ?? null;
     }

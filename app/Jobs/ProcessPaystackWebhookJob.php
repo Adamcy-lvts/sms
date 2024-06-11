@@ -46,11 +46,29 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             case 'subscription.create':
                 $this->handleSubscriptionCreation($payload);
                 break;
+            case 'subscription.disable':
+                $this->handleSubscriptionDisable($payload);
+                break;
             default:
                 Log::info("Received unhandled Paystack event: {$eventType}");
         }
     }
 
+    private function retrieveSchool($email)
+    {
+        return School::where('email', $email)->first();
+    }
+
+    protected function handleSubscriptionDisable($payload)
+    {
+        $data = json_decode(json_encode($payload['data']), false);
+        $school = $this->retrieveSchool($data->customer->email);
+
+        if ($school) {
+            $school->subscriptions()->where('status', 'active')->update(['status' => 'cancelled']);
+            Log::info('Subscription cancelled', ['school_id' => $school->id]);
+        }
+    }
 
     protected function isSubscriptionPayment($payload)
     {
@@ -222,6 +240,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'starts_at' => now(),
             'ends_at' => now()->addDays($plan->duration),
             'subscription_code' => $subscriptionCode,
+            'next_billing_date' => 
         ]);
     }
 }
