@@ -6,7 +6,7 @@
         </div>
 
         <!-- Subscription status message -->
-        @if($school->currentSubscription())
+        @if ($school->currentSubscription())
             <div class="text-green-300">
                 You are currently subscribed.
             </div>
@@ -17,15 +17,17 @@
         @endif
 
         <!-- Buttons -->
-        <div class="flex space-x-2">
-            <x-filament::button wire:click="manageSubscription" color="secondary">
+        <div class="flex justify-between space-x-2">
+
+            <x-filament::button wire:click="manageSubscription">
                 Manage Subscription
             </x-filament::button>
-            @unless($school->currentSubscription())
-                <x-filament::button wire:click="subscribe" color="primary">
+
+            @if (!$school->currentSubscription())
+                <x-filament::button wire:click="subscribe">
                     Subscribe
                 </x-filament::button>
-            @endunless
+            @endif
         </div>
     </div>
 

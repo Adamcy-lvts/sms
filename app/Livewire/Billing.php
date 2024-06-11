@@ -46,7 +46,7 @@ class Billing extends Page implements HasForms, HasTable
         return $table
             ->query(SubsPayment::query())
             ->columns([
-                TextColumn::make('amount'),
+                TextColumn::make('amount')->money('NGN', true),
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
