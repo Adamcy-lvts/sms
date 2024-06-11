@@ -80,7 +80,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $agentId = $metadata->agentId ?? null;
 
         $school = School::where('slug', $schoolSlug)->first();
-        $plan = Plan::where('paystack_plan_code', $planCode)->first();
+        $plan = Plan::where('plan_code', $planCode)->first();
         $agent = Agent::find($agentId);
 
         // Log the retrieved school and plan information
