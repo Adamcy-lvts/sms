@@ -22,10 +22,10 @@ class Billing extends Page
 
         $subscription = $school->subscriptions->first();
 
-       
+        dd($subscription);
 
         $this->subscriptionCode = $subscription->subscription_code ?? null;
-        dd($this->subscriptionCode);
+        // dd($this->subscriptionCode);
         
     }
 
