@@ -52,9 +52,9 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
     protected function isSubscriptionPayment($payload)
     {
         $data = json_decode(json_encode($payload['data']), false);
-        Log::info('Payload Data', ['data' => json_encode($data)]);
+        // Log::info('Payload Data', ['data' => json_encode($data)]);
 
-        log::info('check type'. $data->metadata->paymentType);
+        log::info('check type'. ' '. $data->metadata);
         // Check if the payment metadata indicates a subscription payment
         return isset($data->metadata->paymentType) &&
             $data->metadata->paymentType === 'subscription';
@@ -68,7 +68,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
         // Accessing metadata safely
         $metadata = $data->metadata ?? null;
-        log::info('metadata'.' '.$metadata);
+        // log::info('metadata'.' '.$metadata);
         $schoolSlug = $metadata->schoolSlug ?? null;
         $planCode = $data->plan->plan_code ?? null;
         $agentId = $metadata->agentId ?? null;
