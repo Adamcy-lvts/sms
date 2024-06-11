@@ -20,6 +20,7 @@ class Subscription extends Model
         'cancelled_at',
         'trial_ends_at',
         'is_recurring',
+        'subscription_code',
         'features' // assuming you want to be able to set features directly
     ];
 

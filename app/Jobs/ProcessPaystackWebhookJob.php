@@ -159,8 +159,8 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $schoolEmail = $data->customer->email ?? null;  // Adjust based on actual metadata location
 
         // Retrieve school and plan based on provided codes
-        $school = School::where('email', $schoolEmail)->first();
-        $plan = Plan::where('plan_code', $planCode)->first();
+        $school = School::where('email', $schoolEmail)->firstOrFail();
+        $plan = Plan::where('plan_code', $planCode)->firstOrFail();
 
          Log::info('Handling Subscription Creation', [
        

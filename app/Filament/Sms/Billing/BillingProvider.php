@@ -24,7 +24,7 @@ class BillingProvider implements Provider
         //     $user = Auth::user();
         //     $school = $user->schools->first();
             return Billing::class;
-        // };
+        // }; 
     }
 
 
