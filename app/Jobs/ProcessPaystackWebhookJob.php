@@ -229,7 +229,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                     'next_payment_date' => $formattedDate
                 ]) : $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate);
             }
-
+            Log::info('this is the reference number' .' '. $this->reference );
             if ($subscription) {
                 // Update the payment record with the subscription id
                 SubsPayment::where('reference', $this->reference)->update(['subscription_id' => $subscription->id]);
