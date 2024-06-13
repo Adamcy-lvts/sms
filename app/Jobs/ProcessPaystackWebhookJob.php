@@ -16,7 +16,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\SubscriptionReceiptMail;
 use App\Services\SubscriptionService;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Queue\SerializesModels;
 use Filament\Notifications\Notification;
 use Illuminate\Queue\InteractsWithQueue;
@@ -151,9 +150,6 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             ]);
         }
 
-        // After successful payment processing, store the reference in the cache
-        Cache::put('sub_payment_ref_' . $reference, $reference, now()->addMinutes(1)); // Store for 1 minute
-
         Log::info('Subscription payment processed successfully', ['school_id' => $this->school->id]);
     }
 
@@ -233,18 +229,14 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                     'next_payment_date' => $formattedDate
                 ]) : $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate);
             }
-            
-            // After creating the subscription in the handleSubscriptionCreation method
-            $reference = Cache::get('sub_payment_ref_' . $reference);
-            Log::info('this is the reference number' .' '. $reference);
 
-            if ($subscription) {
+            // Retrieve the latest payment for the school
+            $latestPayment = SubsPayment::where('school_id', $school->id)->latest()->first();
+
+            if ($latestPayment) {
                 // Update the payment record with the subscription id
-                SubsPayment::where('reference', $reference)->update(['subscription_id' => $subscription->id]);
-                Cache::forget('sub_payment_ref_' . $reference); // Clear the cache
+                $latestPayment->update(['subscription_id' => $subscription->id]);
             }
-
-
 
             DB::commit();
             Log::info('Subscription created or updated successfully.');
