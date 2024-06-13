@@ -232,7 +232,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
             // Retrieve the latest payment for the school
             $latestPayment = SubsPayment::where('school_id', $school->id)->latest()->first();
-
+            Log::info('Latest Subscription payment: ' . $latestPayment);
             if ($latestPayment) {
                 // Update the payment record with the subscription id
                 $latestPayment->update(['subscription_id' => $subscription->id]);
