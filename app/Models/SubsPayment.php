@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Agent;
+use App\Models\School;
 use App\Models\Subscription;
 use App\Models\PaymentMethod;
 use Illuminate\Database\Eloquent\Model;
@@ -17,14 +19,27 @@ class SubsPayment extends Model
     ];
 
 
-    public function paymentMethod() {
+    public function paymentMethod()
+    {
 
         return $this->belongsTo(PaymentMethod::class);
-        
+
     }
 
     public function subscription()
     {
         return $this->belongsTo(Subscription::class, 'subscription_id');
     }
+
+    public function school()
+    {
+        return $this->belongsTo(School::class, 'school_id');
+    }
+
+    public function agent()
+    {
+        return $this->belongsTo(Agent::class, 'agent_id');
+    }
+
+
 }

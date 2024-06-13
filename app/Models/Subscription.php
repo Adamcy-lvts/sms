@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Plan;
 use App\Models\School;
+use App\Models\SubsPayment;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 

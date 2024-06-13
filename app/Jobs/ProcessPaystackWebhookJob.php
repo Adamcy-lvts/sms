@@ -26,6 +26,7 @@ use Spatie\WebhookClient\Jobs\ProcessWebhookJob;
 class ProcessPaystackWebhookJob extends ProcessWebhookJob
 {
     public $school;
+    public $reference;
 
     public function handle()
     {
@@ -100,6 +101,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $schoolSlug = $metadata->schoolSlug ?? null;
         $planCode = $data->plan->plan_code ?? null;
         $agentId = $metadata->agentId ?? null;
+        $this->reference = $data->reference ?? null;
 
         $this->school = School::where('slug', $schoolSlug)->first();
         $plan = Plan::where('plan_code', $planCode)->first();
@@ -179,6 +181,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $subscriptionCode = $data->subscription_code ?? null;
         $schoolEmail = $data->customer->email ?? null;  // Adjust based on actual metadata location
         $nextPaymentDate = $data->next_payment_date ?? null;
+       
 
         $dateTime = new DateTime($data->next_payment_date);
         $formattedDate = $dateTime->format('Y-m-d H:i:s');
@@ -224,7 +227,12 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                     'ends_at' => now()->addDays($plan->duration),
                     'subscription_code' => $subscriptionCode,
                     'next_payment_date' => $formattedDate
-                ]) : $this->createSubscription($school, $plan,$subscriptionCode, $formattedDate);
+                ]) : $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate);
+            }
+
+            if ($subscription) {
+                // Update the payment record with the subscription id
+                SubsPayment::where('reference', $this->reference)->update(['subscription_id' => $subscription->id]);
             }
 
             DB::commit();
