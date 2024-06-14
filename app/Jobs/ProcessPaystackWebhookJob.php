@@ -231,6 +231,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             }
 
             // Retrieve the latest payment for the school
+            Log::info('school test: ' . $school->id);
             $latestPayment = SubsPayment::where('school_id', $school->id)->latest()->first();
             Log::info('Latest Subscription payment: ' . $latestPayment);
             if ($latestPayment) {
