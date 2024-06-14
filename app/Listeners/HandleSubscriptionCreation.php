@@ -64,7 +64,7 @@ class HandleSubscriptionCreation
          $school->update(['customer_code' => $customerCode]);
  
          // Handle database operations within a transaction
-         DB::beginTransaction();
+        //  DB::beginTransaction();
          try {
              // Check if an active subscription exists
              $subscription = $school->subscriptions()->where('status', 'active')->first();
@@ -90,7 +90,8 @@ class HandleSubscriptionCreation
  
            
  
-             DB::commit();
+            //  DB::commit();
+
              Log::info('Subscription created or updated successfully.');
  
  
@@ -110,7 +111,7 @@ class HandleSubscriptionCreation
              }
  
              // Send email receipt to the school
-             Mail::to($school->email)->send(new SubscriptionReceiptMail($subscription));
+            //  Mail::to($school->email)->send(new SubscriptionReceiptMail($subscription));
          } catch (\Exception $e) {
              DB::rollBack();
              Log::error('Subscription processing failed: ' . $e->getMessage());
