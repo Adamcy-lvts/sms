@@ -230,9 +230,15 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 ]) : $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate);
             }
 
+            $latestPayment = SubsPayment::where('school_id', $school->id)->latest('created_at')->first();
+            Log::info('Latest Subscription payment: ' . $latestPayment);
+            $paymentCount = SubsPayment::where('school_id', $school->id)->count();
+            Log::info('Number of payments for school: ' . $paymentCount);
+
+
             // Retrieve the latest payment for the school
-            Log::info('school test: ' . $school->id);
-            $latestPayment = SubsPayment::where('school_id', $school->id)->latest()->first();
+        
+            // $latestPayment = SubsPayment::where('school_id', $school->id)->latest()->first();
             Log::info('Latest Subscription payment: ' . $latestPayment);
             if ($latestPayment) {
                 // Update the payment record with the subscription id
