@@ -177,16 +177,5 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
        
     }
 
-    private function createSubscription($school, $plan, $subscriptionCode, $formattedDate)
-    {
-        return $school->subscriptions()->create([
-            'plan_id' => $plan->id,
-            'school_id' => $school->id,
-            'status' => 'active',
-            'starts_at' => now(),
-            'ends_at' => now()->addDays($plan->duration),
-            'subscription_code' => $subscriptionCode,
-            'next_payment_date' => $formattedDate,
-        ]);
-    }
+   
 }
