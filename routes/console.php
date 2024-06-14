@@ -10,6 +10,12 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote')->hourly();
 
+Artisan::command('logs:clear', function () {
+    file_put_contents(storage_path('logs/laravel.log'), '');
+    $this->comment('Logs have been cleared!');
+})->describe('Clear log files');
+
+
 
 Artisan::command('fetch:banks', function () {
     $this->info('Fetching banks from Paystack...');
