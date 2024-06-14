@@ -113,7 +113,7 @@ class HandleSubscriptionCreation
              // Send email receipt to the school
             //  Mail::to($school->email)->send(new SubscriptionReceiptMail($subscription));
          } catch (\Exception $e) {
-             DB::rollBack();
+            //  DB::rollBack();
              Log::error('Subscription processing failed: ' . $e->getMessage());
          }
     }
