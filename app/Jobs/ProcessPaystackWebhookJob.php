@@ -230,6 +230,12 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 ]) : $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate);
             }
 
+          
+
+            DB::commit();
+            Log::info('Subscription created or updated successfully.');
+
+
             $latestPayment = SubsPayment::where('school_id', $school->id)->latest('created_at')->first();
             Log::info('Latest Subscription payment: ' . $latestPayment);
             $paymentCount = SubsPayment::where('school_id', $school->id)->count();
@@ -244,9 +250,6 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 // Update the payment record with the subscription id
                 $latestPayment->update(['subscription_id' => $subscription->id]);
             }
-
-            DB::commit();
-            Log::info('Subscription created or updated successfully.');
 
             // Send email receipt to the school
             Mail::to($school->email)->send(new SubscriptionReceiptMail($subscription));
