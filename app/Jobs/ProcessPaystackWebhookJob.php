@@ -39,15 +39,15 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         // Log::info('Event type determined', ['event' => $eventType]);
 
         switch ($eventType) {
+            case 'subscription.create':
+                $this->handleSubscriptionCreation($payload);
+                break;
             case 'charge.success':
                 if ($this->isSubscriptionPayment($payload)) {
                     $this->handleSubscriptionPayment($payload);
                 } else {
                     $this->handleNonSubscriptionPayment($payload);
                 }
-                break;
-            case 'subscription.create':
-                $this->handleSubscriptionCreation($payload);
                 break;
             case 'subscription.not_renew':
                 $this->handleSubscriptionDisable($payload);
@@ -234,24 +234,6 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
           
 
             DB::commit();
-
-            Log::info('Subscription created or updated successfully.');
-
-
-            $latestPayment = SubsPayment::where('school_id', $school->id)->latest('created_at')->first();
-            Log::info('Latest Subscription payment: ' . $latestPayment);
-            $paymentCount = SubsPayment::where('school_id', $school->id)->count();
-            Log::info('Number of payments for school: ' . $paymentCount);
-
-
-            // Retrieve the latest payment for the school
-        
-            // $latestPayment = SubsPayment::where('school_id', $school->id)->latest()->first();
-            Log::info('Latest Subscription payment: ' . $latestPayment);
-            if ($latestPayment) {
-                // Update the payment record with the subscription id
-                $latestPayment->update(['subscription_id' => $subscription->id]);
-            }
 
             // Send email receipt to the school
            //  Mail::to($school->email)->send(new SubscriptionReceiptMail($subscription));

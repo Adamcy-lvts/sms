@@ -18,7 +18,25 @@ class SubsPayment extends Model
         'split_code', 'status', 'payment_method_id', 'reference', 'payment_date', 'subscription_id'
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
 
+        static::created(function ($payment) {
+            // Check for an active subscription at the moment of payment creation
+            $activeSubscription = $payment->school->subscriptions()
+                                      ->where('status', 'active')
+                                      ->latest('created_at')
+                                      ->first();
+
+            if ($activeSubscription) {
+                // Link the payment to the active subscription
+                $payment->subscription_id = $activeSubscription->id;
+                $payment->save();
+            }
+        });
+    }
+    
     public function paymentMethod()
     {
 
