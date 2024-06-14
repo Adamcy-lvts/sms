@@ -172,6 +172,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
     protected function handleSubscriptionCreation($payload)
     {
+        sleep(1); // Sleep for 1 second
         // Extracting payload data
         $data = json_decode(json_encode($payload['data']), false);
 
