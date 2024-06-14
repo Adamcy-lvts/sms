@@ -30,7 +30,8 @@ class HandleSubscriptionCreation
     public function handle(SubscriptionCreationStarted $event)
     {
          // Extracting payload data
-         $data = json_decode(json_encode($payload['data']), false);
+        //  $data = json_decode(json_encode($payload['data']), false);
+         $data = json_decode(json_encode($event->payload['data']), false);
 
          // Extract necessary information
          $customerCode = $data->customer->customer_code ?? null;
