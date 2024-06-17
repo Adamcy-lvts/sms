@@ -3,7 +3,7 @@
         @if(auth()->user()->agent->subaccount_code)
             <div>
                 <h2 class="text-sm font-semibold">Your Referral Link</h2>
-                <p class="text-xs text-gray-400">Share this link to invite others and earn rewards.</p>
+                {{-- <p class="text-xs text-gray-400">Share this link to invite others and earn rewards.</p> --}}
             </div>
             <div class="flex items-center">
                 <!-- Display the referral link as a clickable anchor element -->

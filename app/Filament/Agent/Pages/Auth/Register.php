@@ -71,11 +71,11 @@ class Register extends AuthRegister
             'email' => $data['email'],
             'phone' => $data['phone'],
             'user_type' => 'agent',
-            'password' => Hash::make($data['password']),
+            'password' => $data['password'],
         ]);
 
         $bank = Bank::where('code',$data['bank'])->first();
-        Log::info($bank);
+
         $agent = Agent::create([
             'user_id' => $user->id,
             'business_name' => $data['business_name'],
@@ -92,8 +92,6 @@ class Register extends AuthRegister
             'percentage_charge' => 80,
             'primary_contact_email' => $data['email'],
         ];
-
-        Log::info( $subaccountData);
 
         // Dispatch the job to create the subaccount
         dispatch(new CreatePaystackSubaccount($agent, $subaccountData));

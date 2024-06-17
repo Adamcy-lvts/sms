@@ -30,15 +30,6 @@ class ProcessPaymentController extends Controller
      * Redirect the User to Paystack Payment Page
      * @return Url
      */
-    // public function redirectToGateway()
-    // {
-    //   dd(request()->all());
-    //     try {
-    //         return paystack()->getAuthorizationUrl()->redirectNow();
-    //     } catch (\Exception $e) {
-    //         return Redirect::back()->withMessage(['msg' => 'The paystack token has expired. Please refresh the page and try again.', 'type' => 'error']);
-    //     }
-    // }
 
     public function redirectToGateway(Request $request)
     {
@@ -46,6 +37,9 @@ class ProcessPaymentController extends Controller
         $school = $user->schools->first(); // Assume this returns the school associated with the user
 
         $agent = $school->agent; // Assuming there's a direct relationship set up in the School model
+
+        // Check if the school has had any subscriptions before
+        $isNewSubscriber = !$school->subscriptions()->exists(); // true if no subscriptions exist
 
         // Determine split payment details if applicable
         $splitData = null;
@@ -83,8 +77,14 @@ class ProcessPaymentController extends Controller
             'reference' => Paystack::genTranxRef(),
             'metadata' => $metadata,
             'plan' => $plan ? $plan->plan_code : null,
-            'split' => $splitData ? json_encode($splitData) : null
+            'split' => $splitData ? json_encode($splitData) : null,
+           
         ];
+
+        // Add start_date only for new subscribers
+        if ($isNewSubscriber) {
+            $data['start_date'] = now()->addDays(30)->toDateString(); // Start date 30 days from now
+        }
 
         try {
             $response = Paystack::getAuthorizationUrl($data)->redirectNow();
@@ -99,6 +99,8 @@ class ProcessPaymentController extends Controller
     public function handleGatewayCallback()
     {
         $paymentDetails = Paystack::getPaymentData();
+
+        Log::info('Payment Details:', $paymentDetails);
 
         // Check if the payment was successful
         if ($paymentDetails['data']['status'] !== 'success') {

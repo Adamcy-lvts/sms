@@ -35,7 +35,7 @@ class Billing extends Page implements HasForms, HasTable
 
         $this->school = $user->schools->first();
 
-        $subscription = $this->school->subscriptions->where('status','active')->first();
+        $subscription = $this->school->subscriptions->where('status', 'active')->first();
 
         $this->planName = $subscription->plan->name ?? null;
 
@@ -51,14 +51,23 @@ class Billing extends Page implements HasForms, HasTable
         return $table
             ->query(SubsPayment::query())
             ->columns([
+                TextColumn::make('subscription.plan.name')->label('Subscription Plan'),
                 TextColumn::make('amount')->money('NGN', true),
-                TextColumn::make('status')
+                TextColumn::make('subscription.status')->label('Subscription Status')->badge()
+                    ->color(fn (string $state): string => match ($state) {
+
+                        'active' => 'success',
+                        'expired' => 'danger',
+                        'cancelled' => 'warning',
+                    }),
+                TextColumn::make('status')->label('Payment Status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'pending' => 'gray',
                         'paid' => 'success',
                     }),
                 TextColumn::make('payment_date')->dateTime('F j, Y g:i A'),
+                TextColumn::make('subscriptions.next_payment_date')->dateTime('F j, Y g:i A'),
             ])
             ->filters([
                 // ...
@@ -101,6 +110,61 @@ class Billing extends Page implements HasForms, HasTable
                 ->title('Failed to Fetch Subscription Link.')
                 ->danger()
                 ->send();
+        }
+    }
+
+
+    public function subscribe()
+    {
+        return redirect()->route('filament.sms.pages.pricing-page', ['tenant' => $this->school->slug]);
+    }
+
+
+    public function cancelSubscription()
+    {
+        $subscription = $this->school->subscriptions->where('status', 'active')->first();
+
+        if (!$subscription) {
+            Notification::make()
+                ->title('No Active Subscription Available.')
+                ->danger()
+                ->send();
+            return;
+        }
+
+        // Check if the subscription has a Paystack subscription code
+        if (empty($subscription->subscription_code)) {
+            // Logic to cancel the subscription within the app
+            $subscription->status = 'cancelled'; // Example field to indicate active status
+            $subscription->cancelled_at = now(); // Example field to store cancellation time
+            $subscription->save();
+
+            Notification::make()
+                ->title('Subscription Cancelled Successfully.')
+                ->success()
+                ->send();
+        } else {
+            // Use existing logic to cancel through Paystack
+            $this->subscriptionCode = $subscription->subscription_code;
+
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . env('PAYSTACK_SECRET_KEY'),
+            ])->post("https://api.paystack.co/subscription/disable", [
+                'code' => $this->subscriptionCode,
+            ]);
+
+            if ($response->successful()) {
+                Notification::make()
+                    ->title('Subscription Cancelled Successfully.')
+                    ->success()
+                    ->send();
+            } else {
+                // Handle errors here
+                Notification::make()
+                    ->title('Failed to Cancel Subscription through Paystack.')
+                    ->danger()
+                    ->send();
+            }
         }
     }
 }

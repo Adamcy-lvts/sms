@@ -22,7 +22,7 @@ return new class extends Migration
             $table->string('split_code')->nullable();
             $table->string('status'); // Status of the payment (e.g., pending, completed, failed)
             $table->foreignId('payment_method_id')->nullable()->constrained('payment_methods')->onDelete('cascade'); // Method used for the payment (e.g., credit card, bank transfer)
-            $table->string('reference')->unique(); // A unique identifier provided by the payment gateway
+            $table->string('reference')->nullable()->unique(); // A unique identifier provided by the payment gateway
             $table->dateTime('payment_date')->nullable();
             $table->timestamps();
         });
