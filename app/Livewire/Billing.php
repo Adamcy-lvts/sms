@@ -16,7 +16,7 @@ use Filament\Notifications\Notification;
 use App\Filament\Sms\Pages\SubscriptionReceipt;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Tables\Concerns\InteractsWithTable;
-
+use Illuminate\Support\Facades\Log;
 
 class Billing extends Page implements HasForms, HasTable
 {
@@ -170,6 +170,8 @@ class Billing extends Page implements HasForms, HasTable
             ])->post("https://api.paystack.co/subscription/disable", [
                 'code' => $this->subscriptionCode,
             ]);
+
+            Log::info($response->json());
 
             if ($response->successful()) {
                 Notification::make()

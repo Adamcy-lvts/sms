@@ -12,7 +12,7 @@
             <p class="text-gray-600 dark:text-white text-sm">You are currently subscribed. To manage your subscription settings or to download invoices, click 'Manage
                 Subscription' below.</p>
         @else
-            <p class="text-gray-600 dark:text-white text-sm">You're no longer subscribed to SMS. To re-subscribe, click 'Subscribe' below. To update your payment card
+            <p class="text-gray-600 dark:text-white text-sm">You're not longer subscribed to any Plan. Click 'Subscribe' below to subscribed to plan of your choice. To update your payment card
                 click 'Manage Subscription' below.</p>
         @endif
         <div class="flex gap-4">
