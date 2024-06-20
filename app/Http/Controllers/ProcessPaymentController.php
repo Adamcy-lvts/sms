@@ -11,7 +11,13 @@ use App\Models\AgentPayment;
 use App\Models\Subscription;
 use Illuminate\Http\Request;
 use App\Helpers\PaystackHelper;
+use Illuminate\Support\Facades\DB;
+use Spatie\LaravelPdf\Facades\Pdf;
+use App\Models\SubscriptionReceipt;
 use Illuminate\Support\Facades\Log;
+use Spatie\Browsershot\Browsershot;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\SubscriptionReceiptMail;
 use App\Services\SubscriptionService;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Redirect;
@@ -21,6 +27,7 @@ class ProcessPaymentController extends Controller
 {
 
     protected $subscriptionService;
+    public $receipt;
 
     public function __construct(SubscriptionService $subscriptionService)
     {
@@ -35,17 +42,86 @@ class ProcessPaymentController extends Controller
     {
         $user = auth()->user();
         $school = $user->schools->first(); // Assume this returns the school associated with the user
+        if ($request->planId) {
+            $plan = Plan::find($request->planId);
+        }
 
         $agent = $school->agent; // Assuming there's a direct relationship set up in the School model
 
         // Check if the school has had any subscriptions before
         $isNewSubscriber = !$school->subscriptions()->exists(); // true if no subscriptions exist
 
+        // If the school is a new subscriber, create a local trial subscription
+        if ($isNewSubscriber) {
+            if ($isNewSubscriber) {
+
+
+                // Start the transaction
+                DB::beginTransaction();
+
+                try {
+                    $subscription = $school->subscriptions()->create([
+                        'plan_id' => $plan->id,
+                        'status' => 'active',
+                        'starts_at' => now(),
+                        'ends_at' => now()->addDays($plan->duration),
+                        'trial_ends_at' => now()->addDays($plan->trial_period ?? $plan->duration), // Assuming a 30-day trial period
+                        'is_on_trial' => true,
+
+                    ]);
+                    // Assuming this is the part where you create the subscription and payment
+                    $subsPayment = SubsPayment::create([
+                        'school_id' => $school->id,
+                        'agent_id' => $agent->id ?? null, // Assuming $agent is defined
+                        'amount' => 0.00, // Assuming the trial is free
+                        'status' => 'paid',
+                        'payment_date' => now(),
+                    ]);
+
+                    // $receipt = $subsPayment->subscriptionReceipt()->create([
+                    //     'payment_id' => $subsPayment->id,
+                    //     'school_id' => $school->id,
+                    //     'payment_date' => $subsPayment->payment_date,
+                    //     'receipt_for' => 'subscription', // Assuming 'Subscription' is the type for subscription payments
+                    //     'amount' => $plan->price, // Assuming $plan is defined
+                    //     'receipt_number' => SubscriptionReceipt::generateReceiptNumber($subsPayment->payment_date),
+                    //     // 'remarks' and 'qr_code' can be set here if needed
+                    // ]);
+
+                    // If all operations were successful, commit the transaction
+                    DB::commit();
+
+                    // Continue with sending the receipt by email and other operations
+                    // $this->sendReceiptByEmail($receipt, $subsPayment, $subscription); // Assuming $subscription is defined
+                    Notification::make()
+                        ->title('Success, You have been given a 30-day trial.')
+                        ->success()
+                        ->send();
+                    return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]); // Assuming $school is defined and has a slug
+                } catch (\Exception $e) {
+                    // Rollback the transaction if any operation fails
+                    DB::rollBack();
+
+                    // Handle the exception (e.g., log the error and notify the user)
+                    // Log::error('Failed to process payment and create subscription: ' . $e->getMessage());
+                    Log::error('Failed to process payment and create subscription: ' . $e->getMessage(), [
+                        'exception' => $e,
+                        'request' => $request->all(),
+                    ]);
+                    Notification::make()
+                        ->title("Failed to process payment and create subscription")
+                        ->danger()
+                        ->send();
+                    return redirect()->back()->withErrors('Failed to process payment and create subscription.');
+                }
+            }
+        }
+
+
+
         // Determine split payment details if applicable
         $splitData = null;
-        if ($request->planId) {
-            $plan = Plan::find($request->planId);
-        }
+
 
         if ($agent && $agent->subaccount_code) {
             $splitData = [
@@ -78,13 +154,8 @@ class ProcessPaymentController extends Controller
             'metadata' => $metadata,
             'plan' => $plan ? $plan->plan_code : null,
             'split' => $splitData ? json_encode($splitData) : null,
-           
-        ];
 
-        // Add start_date only for new subscribers
-        if ($isNewSubscriber) {
-            $data['start_date'] = now()->addDays(30)->toDateString(); // Start date 30 days from now
-        }
+        ];
 
         try {
             $response = Paystack::getAuthorizationUrl($data)->redirectNow();
@@ -95,6 +166,53 @@ class ProcessPaymentController extends Controller
         }
     }
 
+    // private function sendReceiptByEmail($receipt, $subsPayment, $subscription): void
+    // {
+    //     try {
+    //         $payment = $subsPayment;
+    //         $school = $payment->school;
+
+    //         $pdf = $payment->school->name . '_' . now() . '_' . 'receipt.pdf';
+
+    //         $receiptPath = storage_path("app/{$pdf}");
+
+    //         // Generate the PDF receipt
+    //         Pdf::view('pdfs.subscription_receipt_pdf', [
+    //             'payment' => $payment,
+    //             'receipt' => $receipt
+    //         ])->withBrowsershot(function (Browsershot $browsershot) {
+    //             $browsershot->setChromePath(config('app.chrome_path'));
+    //         })->save($receiptPath);
+
+    //         // Check if the user has an email address
+    //         if (!empty($payment->school->email)) {
+
+    //             // Send email receipt to the school
+    //             Mail::to($school->email)->send(new SubscriptionReceiptMail($subscription, $subsPayment, $receipt, $pdf, $receiptPath));
+
+    //             // Notify the user that the receipt has been sent successfully
+    //             Notification::make()
+    //                 ->title('Receipt has been sent to your email.')
+    //                 ->success()
+    //                 ->send();
+    //         } else {
+    //             // Notify the user that the customer doesn't have a valid email
+    //             Notification::make()
+    //                 ->title('Failed to send deposit receipt! Customer does not have an email address.')
+    //                 ->warning()
+    //                 ->send();
+    //         }
+    //     } catch (\Exception $e) {
+    //         // Log any exceptions that may arise during this process
+    //         Log::error("Error sending receipt: {$e->getMessage()}");
+
+    //         // Notify the user about the error
+    //         Notification::make()
+    //             ->title('Failed to send deposit receipt! Please try again later or send manually.')
+    //             ->danger()
+    //             ->send();
+    //     }
+    // }
 
     public function handleGatewayCallback()
     {
@@ -106,6 +224,8 @@ class ProcessPaymentController extends Controller
         if ($paymentDetails['data']['status'] !== 'success') {
             return redirect()->route('subscriptions')->withErrors('Payment failed. Please try again.');
         }
+
+        
 
         $metadata = $paymentDetails['data']['metadata'];
         $schoolSlug = $metadata['schoolSlug'];

@@ -17,6 +17,7 @@ return new class extends Migration
             $table->decimal('price', 10, 2);
             $table->text('description')->nullable();
             $table->integer('duration')->default(30); // Duration in days
+            $table->integer('trial_period')->default(30); // Trial period in days
             $table->string('plan_code');
             $table->json('features')->nullable(); // Stores an array of features
             $table->string('cto')->default('Purchase');

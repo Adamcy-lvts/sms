@@ -23,6 +23,7 @@ class Subscription extends Model
         'is_recurring',
         'subscription_code',
         'next_payment_date',
+        'is_on_trial',
         'features' // assuming you want to be able to set features directly
     ];
 

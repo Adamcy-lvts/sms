@@ -17,8 +17,8 @@
             <div class="flex flex-col">
                 <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Subscription Plan:</span>
                 <!-- Replace with dynamic content -->
-                <span
-                    class="text-md font-semibold text-gray-800 dark:text-white"> {{ optional(optional($latestSubscription)->plan)->name ?? 'N/A' }}</span>
+                <span class="text-md font-semibold text-gray-800 dark:text-white">
+                    {{ optional(optional($latestSubscription)->plan)->name ?? 'N/A' }}</span>
             </div>
             <div class="flex items-center">
 
@@ -38,8 +38,12 @@
                         </svg>
                     @endif
                     {{ $badgeText }}
+
                 </span>
+
             </div>
+
         </div>
+
     </x-filament::section>
 </x-filament-widgets::widget>

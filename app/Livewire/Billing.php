@@ -2,16 +2,18 @@
 
 namespace App\Livewire;
 
-use App\Models\SubsPayment;
 use Livewire\Component;
 use Filament\Pages\Page;
 use Filament\Tables\Table;
+use App\Models\SubsPayment;
+use Filament\Tables\Actions\Action;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Notifications\Notification;
+use App\Filament\Sms\Pages\SubscriptionReceipt;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Tables\Concerns\InteractsWithTable;
 
@@ -27,6 +29,7 @@ class Billing extends Page implements HasForms, HasTable
     public $school;
     public $planName;
     public $nextBillingDate;
+    public $subscription;
 
     public function mount()
     {
@@ -35,13 +38,13 @@ class Billing extends Page implements HasForms, HasTable
 
         $this->school = $user->schools->first();
 
-        $subscription = $this->school->subscriptions->where('status', 'active')->first();
+        $this->subscription = $this->school->subscriptions->where('status', 'active')->first();
 
-        $this->planName = $subscription->plan->name ?? null;
+        $this->planName = $this->subscription->plan->name ?? null;
 
-        $this->nextBillingDate = $subscription->next_payment_date ?? null;
+        $this->nextBillingDate = $this->subscription->next_payment_date ?? null;
 
-        $this->subscriptionCode = $subscription->subscription_code ?? null;
+        $this->subscriptionCode = $this->subscription->subscription_code ?? null;
     }
 
 
@@ -67,13 +70,22 @@ class Billing extends Page implements HasForms, HasTable
                         'paid' => 'success',
                     }),
                 TextColumn::make('payment_date')->dateTime('F j, Y g:i A'),
-                TextColumn::make('subscriptions.next_payment_date')->dateTime('F j, Y g:i A'),
+                TextColumn::make('subscriptions.next_payment_date')->hidden(!$this->subscriptionCode)->dateTime('F j, Y g:i A'),
             ])
             ->filters([
                 // ...
             ])
             ->actions([
-                // ...
+                Action::make('View Receipt')
+                    ->url(function (SubsPayment $record): string {
+                        $user = Auth::user(); // Get the authenticated user
+                        $school = $user->schools->first(); // Get the first school associated with the user
+                        $subscription = $school->subscriptions->where('status', 'active')->first(); // Get the active subscription
+
+                        return SubscriptionReceipt::getUrl(['tenant' => $school->slug, 'record' => $record->id]);
+                    })
+                    ->visible(fn (SubsPayment $record): bool => $record->status === 'paid')
+                    ->openUrlInNewTab()
             ])
             ->bulkActions([
                 // ...
@@ -83,10 +95,16 @@ class Billing extends Page implements HasForms, HasTable
     public function manageSubscription()
     {
 
-        if (empty($this->subscriptionCode)) {
+        if (empty($this->subscriptionCode) && !$this->subscription) {
             Notification::make()
                 ->title('No Subscription Available.')
                 ->danger()
+                ->send();
+            return;
+        } else if ($this->subscription && empty($this->subscriptionCode) && $this->subscription->is_on_trial) {
+            Notification::make()
+                ->title('You are on Free Trial.')
+                ->info()
                 ->send();
             return;
         }
@@ -122,9 +140,9 @@ class Billing extends Page implements HasForms, HasTable
 
     public function cancelSubscription()
     {
-        $subscription = $this->school->subscriptions->where('status', 'active')->first();
+        $this->subscription = $this->school->subscriptions->where('status', 'active')->first();
 
-        if (!$subscription) {
+        if (!$this->subscription) {
             Notification::make()
                 ->title('No Active Subscription Available.')
                 ->danger()
@@ -133,11 +151,11 @@ class Billing extends Page implements HasForms, HasTable
         }
 
         // Check if the subscription has a Paystack subscription code
-        if (empty($subscription->subscription_code)) {
+        if (empty($this->subscription->subscription_code)) {
             // Logic to cancel the subscription within the app
-            $subscription->status = 'cancelled'; // Example field to indicate active status
-            $subscription->cancelled_at = now(); // Example field to store cancellation time
-            $subscription->save();
+            $this->subscription->status = 'cancelled'; // Example field to indicate active status
+            $this->subscription->cancelled_at = now(); // Example field to store cancellation time
+            $this->subscription->save();
 
             Notification::make()
                 ->title('Subscription Cancelled Successfully.')
@@ -145,7 +163,7 @@ class Billing extends Page implements HasForms, HasTable
                 ->send();
         } else {
             // Use existing logic to cancel through Paystack
-            $this->subscriptionCode = $subscription->subscription_code;
+            $this->subscriptionCode = $this->subscription->subscription_code;
 
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . env('PAYSTACK_SECRET_KEY'),

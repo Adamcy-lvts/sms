@@ -127,7 +127,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             $netAmount -= $agentAmount;
         }
 
-        SubsPayment::create([
+        $subsPayment = SubsPayment::create([
             'school_id' => $this->school->id,
             'agent_id' => $agent->id ?? null,
             'plan_id' => $plan->id,
@@ -150,6 +150,8 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 'payment_date' => now(),
             ]);
         }
+
+     
 
         Log::info('Subscription payment processed successfully', ['school_id' => $this->school->id]);
     }

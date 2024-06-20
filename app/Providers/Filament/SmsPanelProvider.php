@@ -10,9 +10,12 @@ use App\Models\School;
 use Filament\PanelProvider;
 use Filament\Navigation\MenuItem;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\Facades\Blade;
 use App\Filament\Sms\Pages\PricingPage;
 use App\Filament\Sms\Pages\Auth\Register;
 use Filament\Http\Middleware\Authenticate;
+use Filament\Support\Facades\FilamentView;
 use App\Filament\Sms\Pages\Tenancy\Billing;
 use App\Filament\Sms\Pages\Auth\EditProfile;
 use App\Filament\Sms\Billing\BillingProvider;
@@ -46,7 +49,7 @@ class SmsPanelProvider extends PanelProvider
                 MenuItem::make()
                     ->label('Pricing')
                     ->url(function (): string {
-                       return PricingPage::getUrl();
+                        return PricingPage::getUrl();
                     })
                     ->icon('heroicon-o-currency-dollar'),
             ])
@@ -81,6 +84,12 @@ class SmsPanelProvider extends PanelProvider
             ])
             ->registration(Register::class)
             ->profile(EditProfile::class)
-            ->passwordReset();
+            ->passwordReset()
+            ->renderHook(
+
+                PanelsRenderHook::USER_MENU_BEFORE,
+                fn (): string => Blade::render('@livewire(\'trial-view\')'),
+
+            );
     }
 }

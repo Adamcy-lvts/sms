@@ -123,4 +123,6 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'chrome_path' => env('CHROME_PATH'),
+
 ];
