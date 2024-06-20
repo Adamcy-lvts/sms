@@ -24,6 +24,7 @@ class Subscription extends Model
         'subscription_code',
         'next_payment_date',
         'is_on_trial',
+        'token',
         'features' // assuming you want to be able to set features directly
     ];
 

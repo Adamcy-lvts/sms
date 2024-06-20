@@ -24,6 +24,7 @@ return new class extends Migration
             $table->boolean('is_recurring')->default(false); // Whether the subscription is set to auto-renew
             $table->date('next_payment_date')->nullable();
             $table->boolean('is_on_trial')->default(false); // Whether the subscription is a trial
+            $table->string('token')->nullable(); // A token for handling subscription verification
             $table->json('features')->nullable(); // Features included in the subscription, can store JSON data
             $table->timestamps();
 

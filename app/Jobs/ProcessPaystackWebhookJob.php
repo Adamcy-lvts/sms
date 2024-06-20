@@ -182,6 +182,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $customerCode = $data->customer->customer_code ?? null;
         $planCode = $data->plan->plan_code ?? null;
         $subscriptionCode = $data->subscription_code ?? null;
+        $token = $data->email_token ?? null;
         $schoolEmail = $data->customer->email ?? null;  // Adjust based on actual metadata location
         $nextPaymentDate = $data->next_payment_date ?? null;
 
@@ -223,14 +224,14 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
                 ]);
 
                 // Create new subscription
-                $subscription = $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate);
+                $subscription = $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate, $token);
             } else {
                 // Renewal or new subscription
                 $subscription = $subscription ? $subscription->update([
                     'ends_at' => now()->addDays($plan->duration),
                     'subscription_code' => $subscriptionCode,
                     'next_payment_date' => $formattedDate
-                ]) : $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate);
+                ]) : $this->createSubscription($school, $plan, $subscriptionCode, $formattedDate, $token);
             }
 
           
@@ -246,7 +247,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
        
     }
 
-    private function createSubscription($school, $plan, $subscriptionCode, $formattedDate)
+    private function createSubscription($school, $plan, $subscriptionCode, $formattedDate, $token)
     {
         return $school->subscriptions()->create([
             'plan_id' => $plan->id,
@@ -256,6 +257,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'ends_at' => now()->addDays($plan->duration),
             'subscription_code' => $subscriptionCode,
             'next_payment_date' => $formattedDate,
+            'token' => $token,
         ]);
     }
 
