@@ -154,7 +154,7 @@ class Register extends AuthRegister
                                 ->schema([
                                     TextInput::make('name')
                                         ->label('School Name')
-                                        ->live()
+                                        ->live(debounce: 1000)
                                         ->afterStateUpdated(fn (Set $set, ?string $state) => $set('slug', Str::slug($state)))
                                         ->required(),
 
