@@ -154,14 +154,14 @@ class Billing extends Page implements HasForms, HasTable
                 ->send();
             return;
         }
-
+        $this->dispatch('close-modal', id: 'cancel-subscription-modal');
         // Check if the subscription has a Paystack subscription code
         if (empty($this->subscription->subscription_code)) {
             // Logic to cancel the subscription within the app
             $this->subscription->status = 'cancelled'; // Example field to indicate active status
             $this->subscription->cancelled_at = now(); // Example field to store cancellation time
             $this->subscription->save();
-
+            $this->dispatch('close-modal', id: 'cancel-subscription-modal');
             Notification::make()
                 ->title('Subscription Cancelled Successfully.')
                 ->success()
@@ -180,12 +180,14 @@ class Billing extends Page implements HasForms, HasTable
             Log::info($response->json());
 
             if ($response->successful()) {
+                $this->dispatch('close-modal', id: 'cancel-subscription-modal');
                 Notification::make()
                     ->title('Subscription Cancelled Successfully.')
                     ->success()
                     ->send();
             } else {
                 // Handle errors here
+                $this->dispatch('close-modal', id: 'cancel-subscription-modal');
                 Notification::make()
                     ->title('Failed to Cancel Subscription through Paystack.')
                     ->danger()
