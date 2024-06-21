@@ -29,10 +29,6 @@ class ApplyTenantScopes
             fn (Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
         );
 
-        School::addGlobalScope(
-            fn (Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
-        );
-
         SubscriptionReceipt::addGlobalScope(
             fn (Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
         );
