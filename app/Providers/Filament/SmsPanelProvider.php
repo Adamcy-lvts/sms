@@ -14,6 +14,7 @@ use Filament\View\PanelsRenderHook;
 use Illuminate\Support\Facades\Blade;
 use App\Filament\Sms\Pages\PricingPage;
 use App\Filament\Sms\Pages\Auth\Register;
+use App\Http\Middleware\ApplyTenantScopes;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Support\Facades\FilamentView;
 use App\Filament\Sms\Pages\Tenancy\Billing;
@@ -53,7 +54,9 @@ class SmsPanelProvider extends PanelProvider
                     })
                     ->icon('heroicon-o-currency-dollar'),
             ])
-            // ->tenantMenu(false)
+            ->tenantMiddleware([
+                ApplyTenantScopes::class,
+            ], isPersistent: true)
             ->colors([
                 'primary' => Color::Emerald,
             ])
