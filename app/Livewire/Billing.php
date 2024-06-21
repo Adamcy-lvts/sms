@@ -169,6 +169,7 @@ class Billing extends Page implements HasForms, HasTable
                 'Authorization' => 'Bearer ' . env('PAYSTACK_SECRET_KEY'),
             ])->post("https://api.paystack.co/subscription/disable", [
                 'code' => $this->subscriptionCode,
+                'token' => $this->subscription->token,
             ]);
 
             Log::info($response->json());
