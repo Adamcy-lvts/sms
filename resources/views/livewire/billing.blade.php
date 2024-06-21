@@ -9,27 +9,25 @@
             </div>
         @endif
         @if ($school->currentSubscription())
-            <p class="text-gray-600 dark:text-white text-sm">You are currently subscribed. To manage your subscription settings or to download invoices, click 'Manage
+            <p class="text-gray-600 dark:text-white text-sm">You are currently subscribed. To manage your subscription
+                settings or to download invoices, click 'Manage
                 Subscription' below.</p>
         @else
-            <p class="text-gray-600 dark:text-white text-sm">You're not longer subscribed to any Plan. Click 'Subscribe' below to subscribed to plan of your choice. To update your payment card
+            <p class="text-gray-600 dark:text-white text-sm">You're not longer subscribed to any Plan. Click 'Subscribe'
+                below to subscribed to plan of your choice. To update your payment card
                 click 'Manage Subscription' below.</p>
         @endif
         <div class="flex gap-4">
             <!-- Manage Subscription Section -->
             <div>
-                <x-filament::button
-                    class="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition duration-300 ease-in-out"
-                    wire:click="manageSubscription">
+                <x-filament::button size="sm" wire:click="manageSubscription">
                     Manage Subscription
                 </x-filament::button>
             </div>
             <!-- Subscribe Section -->
             @if (!$school->currentSubscription())
                 <div>
-                    <x-filament::button
-                        class="px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition duration-300 ease-in-out"
-                        wire:click="subscribe">
+                    <x-filament::button size="sm" wire:click="subscribe">
                         Subscribe
                     </x-filament::button>
                 </div>
@@ -37,18 +35,8 @@
 
 
         </div>
-    </div>
-
-    <!-- Action Buttons -->
-    <!-- Buttons -->
-    <!-- Subscription Status Information -->
-    <div class="flex items-center text-sm space-x-2">
-        <i class="fas fa-info-circle"></i>
 
     </div>
-
-
-
     <!-- Cancel Subscription Section -->
     @if ($school->currentSubscription())
         <div class="bg-gray-800 dark:bg-gray-800 text-white p-4 rounded-lg shadow space-y-4 ">
@@ -60,8 +48,7 @@
                     Please note that canceling the subscription will revoke access to premium features after the end of
                     your current billing period.
                 </p>
-                <x-filament::button size="sm" class="bg-red-600 hover:bg-red-700 mt-2"
-                    wire:click="cancelSubscription">
+                <x-filament::button size="sm" class="bg-red-600 hover:bg-red-700 mt-2" wire:click="cancelSubs">
                     Cancel Subscription
                 </x-filament::button>
             </div>
@@ -78,4 +65,30 @@
             {{ $this->table }}
         </div>
     </div>
+
+
+    <x-filament::modal id="cancel-subscription-modal" alignment="center" icon="heroicon-o-exclamation-triangle"
+        icon-color="danger" width="xl">
+        <x-slot name="heading">
+            {{ 'Cancel Subscription' }}
+        </x-slot>
+        <x-slot name="description">
+            Are you sure you want to cancel your subscription? This action cannot be undone.
+        </x-slot>
+
+        <x-slot name="footer">
+            <div class="flex justify-between">
+                <x-filament::button size="xs" color="danger"
+                    x-on:click="$dispatch('close-modal', { id: 'cancel-subscription-modal'})">
+                    Close
+                </x-filament::button>
+
+                <x-filament::button color="primary" wire:click="cancelSubscription">
+                    Cancel Subscription
+                </x-filament::button>
+
+            </div>
+        </x-slot>
+
+    </x-filament::modal>
 </x-filament-panels::page>

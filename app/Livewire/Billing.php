@@ -138,6 +138,11 @@ class Billing extends Page implements HasForms, HasTable
     }
 
 
+    public function cancelSubs()
+    {
+        $this->dispatch('open-modal', id: 'cancel-subscription-modal');
+    }
+
     public function cancelSubscription()
     {
         $this->subscription = $this->school->subscriptions->where('status', 'active')->first();
