@@ -52,70 +52,69 @@ class ProcessPaymentController extends Controller
         $isNewSubscriber = !$school->subscriptions()->exists(); // true if no subscriptions exist
 
         // If the school is a new subscriber, create a local trial subscription
+
         if ($isNewSubscriber) {
-            if ($isNewSubscriber) {
 
+            // Start the transaction
+            DB::beginTransaction();
 
-                // Start the transaction
-                DB::beginTransaction();
+            try {
+                $subscription = $school->subscriptions()->create([
+                    'plan_id' => $plan->id,
+                    'status' => 'active',
+                    'starts_at' => now(),
+                    'ends_at' => now()->addDays($plan->duration),
+                    'trial_ends_at' => now()->addDays($plan->trial_period ?? $plan->duration), // Assuming a 30-day trial period
+                    'is_on_trial' => true,
 
-                try {
-                    $subscription = $school->subscriptions()->create([
-                        'plan_id' => $plan->id,
-                        'status' => 'active',
-                        'starts_at' => now(),
-                        'ends_at' => now()->addDays($plan->duration),
-                        'trial_ends_at' => now()->addDays($plan->trial_period ?? $plan->duration), // Assuming a 30-day trial period
-                        'is_on_trial' => true,
+                ]);
+                // Assuming this is the part where you create the subscription and payment
+                $subsPayment = SubsPayment::create([
+                    'school_id' => $school->id,
+                    'agent_id' => $agent->id ?? null, // Assuming $agent is defined
+                    'amount' => 0.00, // Assuming the trial is free
+                    'status' => 'paid',
+                    'payment_date' => now(),
+                ]);
 
-                    ]);
-                    // Assuming this is the part where you create the subscription and payment
-                    $subsPayment = SubsPayment::create([
-                        'school_id' => $school->id,
-                        'agent_id' => $agent->id ?? null, // Assuming $agent is defined
-                        'amount' => 0.00, // Assuming the trial is free
-                        'status' => 'paid',
-                        'payment_date' => now(),
-                    ]);
+                // $receipt = $subsPayment->subscriptionReceipt()->create([
+                //     'payment_id' => $subsPayment->id,
+                //     'school_id' => $school->id,
+                //     'payment_date' => $subsPayment->payment_date,
+                //     'receipt_for' => 'subscription', // Assuming 'Subscription' is the type for subscription payments
+                //     'amount' => $plan->price, // Assuming $plan is defined
+                //     'receipt_number' => SubscriptionReceipt::generateReceiptNumber($subsPayment->payment_date),
+                //     // 'remarks' and 'qr_code' can be set here if needed
+                // ]);
 
-                    // $receipt = $subsPayment->subscriptionReceipt()->create([
-                    //     'payment_id' => $subsPayment->id,
-                    //     'school_id' => $school->id,
-                    //     'payment_date' => $subsPayment->payment_date,
-                    //     'receipt_for' => 'subscription', // Assuming 'Subscription' is the type for subscription payments
-                    //     'amount' => $plan->price, // Assuming $plan is defined
-                    //     'receipt_number' => SubscriptionReceipt::generateReceiptNumber($subsPayment->payment_date),
-                    //     // 'remarks' and 'qr_code' can be set here if needed
-                    // ]);
+                // If all operations were successful, commit the transaction
+                DB::commit();
 
-                    // If all operations were successful, commit the transaction
-                    DB::commit();
+                // Continue with sending the receipt by email and other operations
+                // $this->sendReceiptByEmail($receipt, $subsPayment, $subscription); // Assuming $subscription is defined
+                Notification::make()
+                    ->title('Success, You have been given a 30-day trial.')
+                    ->success()
+                    ->send();
+                return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]); // Assuming $school is defined and has a slug
+            } catch (\Exception $e) {
+                // Rollback the transaction if any operation fails
+                DB::rollBack();
 
-                    // Continue with sending the receipt by email and other operations
-                    // $this->sendReceiptByEmail($receipt, $subsPayment, $subscription); // Assuming $subscription is defined
-                    Notification::make()
-                        ->title('Success, You have been given a 30-day trial.')
-                        ->success()
-                        ->send();
-                    return redirect()->route('filament.sms.tenant', ['tenant' => $school->slug]); // Assuming $school is defined and has a slug
-                } catch (\Exception $e) {
-                    // Rollback the transaction if any operation fails
-                    DB::rollBack();
-
-                    // Handle the exception (e.g., log the error and notify the user)
-                    // Log::error('Failed to process payment and create subscription: ' . $e->getMessage());
-                    Log::error('Failed to process payment and create subscription: ' . $e->getMessage(), [
-                        'exception' => $e,
-                        'request' => $request->all(),
-                    ]);
-                    Notification::make()
-                        ->title("Failed to process payment and create subscription")
-                        ->danger()
-                        ->send();
-                    return redirect()->back()->withErrors('Failed to process payment and create subscription.');
-                }
+                // Handle the exception (e.g., log the error and notify the user)
+                // Log::error('Failed to process payment and create subscription: ' . $e->getMessage());
+                Log::error('Failed to process payment and create subscription: ' . $e->getMessage(), [
+                    'exception' => $e,
+                    'request' => $request->all(),
+                ]);
+                Notification::make()
+                    ->title("Failed to process payment and create subscription")
+                    ->danger()
+                    ->send();
+                return redirect()->back()->withErrors('Failed to process payment and create subscription.');
             }
         }
+
 
 
 
@@ -225,7 +224,7 @@ class ProcessPaymentController extends Controller
             return redirect()->route('subscriptions')->withErrors('Payment failed. Please try again.');
         }
 
-        
+
 
         $metadata = $paymentDetails['data']['metadata'];
         $schoolSlug = $metadata['schoolSlug'];

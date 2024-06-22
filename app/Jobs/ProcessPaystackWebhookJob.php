@@ -140,6 +140,8 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'payment_date' => now(),
         ]);
 
+        log::info('Subscription Payment created'. $subsPayment);
+
         if ($agent) {
             AgentPayment::create([
                 'agent_id' => $agent->id,
