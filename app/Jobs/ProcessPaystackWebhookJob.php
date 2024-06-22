@@ -69,7 +69,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
         if ($school) {
             $school->subscriptions()->where('status', 'active')->update(['status' => 'cancelled', 'cancelled_at' => now()]);
-            Log::info('Subscription cancelled', ['school_id' => $school->id]);
+            // Log::info('Subscription cancelled', ['school_id' => $school->id]);
         }
     }
 
@@ -148,7 +148,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'payment_date' => now(),
         ]);
 
-        log::info('Subscription Payment created'. $subsPayment);
+        // log::info('Subscription Payment created'. $subsPayment);
 
         if ($agent) {
             AgentPayment::create([
@@ -163,7 +163,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
 
      
 
-        Log::info('Subscription payment processed successfully', ['school_id' => $this->school->id]);
+        // Log::info('Subscription payment processed successfully', ['school_id' => $this->school->id]);
     }
 
 
@@ -180,7 +180,7 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
             'reference' => $data->reference
         ]);
 
-        Log::info('Non-subscription payment recorded successfully.');
+        // Log::info('Non-subscription payment recorded successfully.');
     }
 
     protected function handleSubscriptionCreation($payload)
@@ -204,13 +204,13 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $school = School::where('email', $schoolEmail)->firstOrFail();
         $plan = Plan::where('plan_code', $planCode)->firstOrFail();
 
-        Log::info('Handling Subscription Creation', [
+        // Log::info('Handling Subscription Creation', [
 
-            'planCode' => $planCode,
-            'customerCode' => $customerCode,
-            'subscriptionCode' => $subscriptionCode,
-            'schoolDetails' => $school ? $school : 'School not found',
-        ]);
+        //     'planCode' => $planCode,
+        //     'customerCode' => $customerCode,
+        //     'subscriptionCode' => $subscriptionCode,
+        //     'schoolDetails' => $school ? $school : 'School not found',
+        // ]);
         if (!$school || !$plan) {
             Log::error('Invalid school or plan.');
             return;

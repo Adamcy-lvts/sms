@@ -69,9 +69,9 @@ class SubsPayment extends Model
             $school = $subsPayment->school;
 
             $pdf = $subsPayment->school->name . '_' . now() . '_' . 'receipt.pdf';
-            log::info($subsPayment);
+            log::info('this is the payment data'.$subsPayment);
             $receiptPath = storage_path("app/{$pdf}");
-            log::info($subsPayment);
+       
             // Generate the PDF receipt
             Pdf::view('pdfs.subscription_receipt_pdf', [
                 'payment' => $subsPayment,

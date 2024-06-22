@@ -27,4 +27,4 @@ Route::webhooks('webhook/paystack', 'paystack');
 Route::view('/pdf-view', 'pdfs.subscription_receipt_pdf')->name('pdf-view');
 
 
-Route::get('/receipt/{payment}/{receipt}', [ReceiptController::class, 'show'])->name('receipt.show');
+// Route::get('/receipt/{payment}/{receipt}', [ReceiptController::class, 'show'])->name('receipt.show');

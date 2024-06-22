@@ -7,9 +7,9 @@ Thank you for your recent payment to {{ config('app.name') }}. Below are the det
 **Plan:** {{ $subsPlan }}  
 
 @if(!$subscription->is_on_trial)
-**Amount Paid:** ${{ formatNaira($payment->amount) }}  
+**Amount Paid:** ${{ formatNaira($subsPayment->amount) }}  
 **Date:** {{ formatDate($receipt->payment_date) }}  
-**Payment Method:** {{ ucfirst($payment->method) ?? null }}
+**Payment Method:** {{ ucfirst($subsPayment->method) ?? null }}
 @endif
 
 @if($subscription->is_on_trial)

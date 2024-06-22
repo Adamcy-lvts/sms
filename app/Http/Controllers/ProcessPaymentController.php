@@ -217,7 +217,7 @@ class ProcessPaymentController extends Controller
     {
         $paymentDetails = Paystack::getPaymentData();
 
-        Log::info('Payment Details:', $paymentDetails);
+        // Log::info('Payment Details:', $paymentDetails);
 
         // Check if the payment was successful
         if ($paymentDetails['data']['status'] !== 'success') {
