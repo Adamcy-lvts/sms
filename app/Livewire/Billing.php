@@ -137,6 +137,11 @@ class Billing extends Page implements HasForms, HasTable
         return redirect()->route('filament.sms.pages.pricing-page', ['tenant' => $this->school->slug]);
     }
 
+    protected function refreshComponent()
+    {
+        $this->dispatch('$refresh');
+    }
+
 
     public function cancelSubs()
     {
@@ -162,6 +167,9 @@ class Billing extends Page implements HasForms, HasTable
             $this->subscription->cancelled_at = now(); // Example field to store cancellation time
             $this->subscription->save();
             $this->dispatch('close-modal', id: 'cancel-subscription-modal');
+
+            $this->refreshComponent();
+            
             Notification::make()
                 ->title('Subscription Cancelled Successfully.')
                 ->success()
@@ -180,7 +188,11 @@ class Billing extends Page implements HasForms, HasTable
             Log::info($response->json());
 
             if ($response->successful()) {
+
                 $this->dispatch('close-modal', id: 'cancel-subscription-modal');
+
+                $this->refreshComponent();
+
                 Notification::make()
                     ->title('Subscription Cancelled Successfully.')
                     ->success()
@@ -188,6 +200,8 @@ class Billing extends Page implements HasForms, HasTable
             } else {
                 // Handle errors here
                 $this->dispatch('close-modal', id: 'cancel-subscription-modal');
+
+                $this->refreshComponent();
                 Notification::make()
                     ->title('Failed to Cancel Subscription through Paystack.')
                     ->danger()
