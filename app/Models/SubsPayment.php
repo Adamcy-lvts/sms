@@ -30,6 +30,7 @@ class SubsPayment extends Model
         parent::boot();
 
         static::created(function ($payment) {
+            log::info($payment);
             // Check for an active subscription at the moment of payment creation
             $activeSubscription = $payment->school->subscriptions()
                 ->where('status', 'active')
@@ -64,23 +65,23 @@ class SubsPayment extends Model
     {
         log::info('Trying to send receipt');
         try {
-            $payment = $subsPayment;
-            $school = $payment->school;
+      
+            $school = $subsPayment->school;
 
-            $pdf = $payment->school->name . '_' . now() . '_' . 'receipt.pdf';
+            $pdf = $subsPayment->school->name . '_' . now() . '_' . 'receipt.pdf';
             log::info($subsPayment);
             $receiptPath = storage_path("app/{$pdf}");
-            log::info($payment);
+            log::info($subsPayment);
             // Generate the PDF receipt
             Pdf::view('pdfs.subscription_receipt_pdf', [
-                'payment' => $payment,
+                'payment' => $subsPayment,
                 'receipt' => $receipt
             ])->withBrowsershot(function (Browsershot $browsershot) {
                 $browsershot->setChromePath(config('app.chrome_path'));
             })->save($receiptPath);
 
             // Check if the user has an email address
-            if (!empty($payment->school->email)) {
+            if (!empty($subsPayment->school->email)) {
 
                 // Send email receipt to the school
                 Mail::to($school->email)->send(new SubscriptionReceiptMail($subscription, $subsPayment, $receipt, $pdf, $receiptPath));
