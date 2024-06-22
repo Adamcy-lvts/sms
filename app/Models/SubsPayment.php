@@ -44,7 +44,8 @@ class SubsPayment extends Model
             }
 
             $school = $payment->school;
-            $plan = $activeSubscription->plan;
+
+            $plan = $payment->subscription->plan;
 
             $receipt = $payment->subscriptionReceipt()->create([
                 'payment_id' => $payment->id,
