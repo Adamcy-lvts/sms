@@ -122,9 +122,17 @@ class ProcessPaystackWebhookJob extends ProcessWebhookJob
         $netAmount = $totalAmount - $transactionFee;
 
         $agentAmount = 0;
-        if (isset($data->split) && $data->split->split_code) {
-            $agentAmount = ($data->split->shares->subaccounts[0]->amount ?? 0) / 100;
-            $netAmount -= $agentAmount;
+        if ($agentId !== null) {
+            // If an agent exists, we assume split payment must also exist
+            if (isset($data->split) && !empty($data->split->split_code)) {
+                // Calculate agent amount based on the split payment information
+                $agentAmount = ($data->split->shares->subaccounts[0]->amount ?? 0) / 100;
+                $netAmount -= $agentAmount; // Adjust net amount
+            } else {
+                // Handle case where agent exists but split payment information is missing or invalid
+                // This could involve logging an error or taking some corrective action
+                Log::error("Agent exists but split payment information is missing or invalid", ['agentId' => $agentId]);
+            }
         }
 
         $subsPayment = SubsPayment::create([
