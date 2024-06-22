@@ -54,7 +54,7 @@ class SubsPayment extends Model
                 'receipt_number' => SubscriptionReceipt::generateReceiptNumber($payment->payment_date),
                 // 'remarks' and 'qr_code' can be set here if needed
             ]);
-
+            log::info('about to send receipt');
             // Send the receipt to the school via email
             $payment->sendReceiptByEmail($receipt, $payment, $activeSubscription);
         });
@@ -62,6 +62,7 @@ class SubsPayment extends Model
 
     public function sendReceiptByEmail($receipt, $subsPayment, $subscription): void
     {
+        log::info('Trying to send receipt');
         try {
             $payment = $subsPayment;
             $school = $payment->school;
