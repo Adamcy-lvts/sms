@@ -32,9 +32,9 @@ class SubsPayment extends Model
         static::created(function ($payment) {
             // Check for an active subscription at the moment of payment creation
             $activeSubscription = $payment->school->subscriptions()
-                                      ->where('status', 'active')
-                                      ->latest('created_at')
-                                      ->first();
+                ->where('status', 'active')
+                ->latest('created_at')
+                ->first();
 
             if ($activeSubscription) {
                 // Link the payment to the active subscription
@@ -67,9 +67,9 @@ class SubsPayment extends Model
             $school = $payment->school;
 
             $pdf = $payment->school->name . '_' . now() . '_' . 'receipt.pdf';
-
+            log::info($subsPayment);
             $receiptPath = storage_path("app/{$pdf}");
-
+            log::info($payment);
             // Generate the PDF receipt
             Pdf::view('pdfs.subscription_receipt_pdf', [
                 'payment' => $payment,
@@ -99,6 +99,8 @@ class SubsPayment extends Model
         } catch (\Exception $e) {
             // Log any exceptions that may arise during this process
             Log::error("Error sending receipt: {$e->getMessage()}");
+            Log::error("Error sending receipt: {$e->getFile()} (Line: {$e->getLine()})");
+            Log::error("Error sending receipt: {$e->getTraceAsString()}");
 
             // Notify the user about the error
             Notification::make()
@@ -107,12 +109,11 @@ class SubsPayment extends Model
                 ->send();
         }
     }
-    
+
     public function paymentMethod()
     {
 
         return $this->belongsTo(PaymentMethod::class);
-
     }
 
     public function SubscriptionReceipt()
@@ -134,6 +135,4 @@ class SubsPayment extends Model
     {
         return $this->belongsTo(Agent::class, 'agent_id');
     }
-
-
 }
