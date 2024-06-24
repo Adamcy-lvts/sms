@@ -39,6 +39,7 @@ class User extends Authenticatable implements HasName, FilamentUser, HasTenants
         'middle_name',
         'last_name',
         'email',
+        'status_id',
         'password',
     ];
 
@@ -63,6 +64,11 @@ class User extends Authenticatable implements HasName, FilamentUser, HasTenants
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function status()
+    {
+        return $this->belongsTo(Status::class);
     }
 
     public function agent()

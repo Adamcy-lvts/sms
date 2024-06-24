@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Model;
 use App\Filament\Resources\AgentResource;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Support\Facades\Log;
 
 class CreateAgent extends CreateRecord
 {
@@ -16,6 +17,7 @@ class CreateAgent extends CreateRecord
 
     protected function handleRecordCreation(array $data): Model
     {
+        // dd($data);
         DB::beginTransaction();
         try {
             // Create User model for authentication details
@@ -38,7 +40,6 @@ class CreateAgent extends CreateRecord
                 'account_number' => $data['account_number'],
                 'account_name' => $data['account_name'],
                 'bank_id' => $data['bank_id'],
-                'subaccount_code' => $data['subaccount_code'],
                 'percentage' => $data['percentage'],
                 'fixed_rate' => $data['fixed_rate']
             ]);
@@ -50,7 +51,13 @@ class CreateAgent extends CreateRecord
         } catch (\Exception $e) {
             // Rollback if there is an error
             DB::rollback();
+            Log::error($e->getMessage());
             throw $e;
         }
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return $this->getResource()::getUrl('index');
     }
 }

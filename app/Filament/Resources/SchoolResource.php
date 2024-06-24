@@ -14,9 +14,13 @@ use Filament\Resources\Resource;
 use Illuminate\Support\Facades\DB;
 use Filament\Tables\Actions\Action;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Fieldset;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Validation\Rules\Password;
 use App\Filament\Resources\SchoolResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\SchoolResource\RelationManagers;
@@ -31,26 +35,47 @@ class SchoolResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('slug')
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('email')
-                    ->email()
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\Textarea::make('address')
-                    ->required()
-                    ->columnSpanFull(),
-                Forms\Components\TextInput::make('phone')
-                    ->tel()
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('logo')
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('settings'),
+
+                Fieldset::make('School Admin Details')
+                    ->schema([
+                        Forms\Components\TextInput::make('first_name')
+                            ->required(),
+                        Forms\Components\TextInput::make('last_name')
+                            ->required(),
+
+                        Forms\Components\TextInput::make('email')
+                            ->email(),
+                        Forms\Components\TextInput::make('password')
+                            ->label(__('filament-panels::pages/auth/register.form.password.label'))
+                            ->password()
+                            ->rule(Password::default())
+                            ->dehydrateStateUsing(fn ($state) => Hash::make($state))
+                            ->same('passwordConfirmation')
+                            ->validationAttribute(__('filament-panels::pages/auth/register.form.password.validation_attribute')),
+                        Forms\Components\TextInput::make('passwordConfirmation')
+                            ->label(__('filament-panels::pages/auth/register.form.password_confirmation.label'))
+                            ->password()
+                            ->dehydrated(false)
+
+                    ]),
+
+                Fieldset::make('School Details')
+                    ->schema([
+                        Forms\Components\TextInput::make('name')
+                            ->required(),
+                        Forms\Components\TextInput::make('email')
+                            ->email(),
+                        Forms\Components\Textarea::make('address')
+                            ->columnSpanFull(),
+                        Forms\Components\TextInput::make('phone')
+                            ->tel()
+                            ->maxLength(255),
+                        Forms\Components\TextInput::make('settings'),
+                        Forms\Components\FileUpload::make('logo')->columnSpanFull(),
+
+
+                    ])
+
             ]);
     }
 
@@ -58,16 +83,14 @@ class SchoolResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('School Name')
+                TextColumn::make('name')->label('School Name')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('slug')
+                TextColumn::make('email')->copyable()
                     ->searchable(),
-                Tables\Columns\TextColumn::make('email')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('phone')
+                TextColumn::make('phone')->copyable()
                     ->searchable(),
 
-                Tables\Columns\TextColumn::make('created_at')->label('Registered On')
+                TextColumn::make('created_at')->label('Registered On')
                     ->dateTime()
             ])
             ->filters([
@@ -141,7 +164,8 @@ class SchoolResource extends Resource
                     })
                     ->visible(function ($record) {
                         return empty($record->currentSubscription());
-                    })
+                    }),
+                    Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

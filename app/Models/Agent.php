@@ -14,7 +14,7 @@ class Agent extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'business_name', 'account_name', 'account_number', 'bank_id', 'percentage', 'fixed_rate', 'referral_code', 'subaccount_code'];
+    protected $fillable = ['user_id', 'phone', 'business_name', 'account_name', 'account_number', 'bank_id', 'percentage', 'fixed_rate', 'referral_code', 'subaccount_code'];
 
     protected static function boot()
     {

@@ -40,7 +40,7 @@ class SubscriptionResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('school.name')->label('Plan'),
+                TextColumn::make('school.name')->label('School Name'),
                 TextColumn::make('plan.name')->label('Plan'),
                 TextColumn::make('status')->label('Status')->badge()
                     ->color(fn (string $state): string => match ($state) {
@@ -50,9 +50,9 @@ class SubscriptionResource extends Resource
                         'cancelled' => 'warning',
                     }),
                 TextColumn::make('subscription_code')->label('Subscription Code'),
-                TextColumn::make('starts_at')->label('Starts At')->dateTime('Y-m-d' . ' ' . 'H:i:s'),
-                TextColumn::make('ends_at')->label('Ends At')->dateTime('Y-m-d' . ' ' . 'H:i:s'),
-                TextColumn::make('cancelled_at')->label('Cancelled At')->dateTime('Y-m-d' . ' ' . 'H:i:s'),
+                TextColumn::make('starts_at')->label('Starts At')->dateTime('d F Y'. ' ' . 'H:i:s A'),
+                TextColumn::make('ends_at')->label('Ends At')->dateTime('d F Y' . ' ' . 'H:i:s A'),
+                TextColumn::make('cancelled_at')->label('Cancelled At')->dateTime('d F Y' . ' ' . 'H:i:s A'),
                 TextColumn::make('is_recurring')->label('Is Recurring'),
             ])
             ->filters([
@@ -60,6 +60,7 @@ class SubscriptionResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

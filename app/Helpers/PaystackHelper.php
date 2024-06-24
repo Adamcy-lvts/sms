@@ -61,6 +61,33 @@ class PaystackHelper
         return json_decode($result, true);
     }
 
+    // Update a plan on Paystack.
+    public static function updatePlan($idOrCode, $data)
+    {
+        $url = "https://api.paystack.co/plan/" . $idOrCode;
+        $fields_string = http_build_query($data);
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $fields_string);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Authorization: Bearer " . config('services.paystack.secret'),
+            "Content-Type: application/x-www-form-urlencoded"
+        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+        $result = curl_exec($ch);
+        if (curl_errno($ch)) {
+            Log::error('cURL error: ' . curl_error($ch));
+            curl_close($ch);
+            return null;
+        }
+
+        curl_close($ch);
+        return json_decode($result, true);
+    }
+
     public static function createSubscription($data)
     {
         $url = "https://api.paystack.co/subscription";
@@ -119,4 +146,51 @@ class PaystackHelper
             return null;
         }
     }
+
+
+    // public static function createPlan($name, $interval, $amount)
+
+    // {
+    //     $apiKey = config('services.paystack.secret');
+    //     $url = "https://api.paystack.co/plan";
+
+    //     $fields = [
+    //         'name' => $name,
+    //         'interval' => $interval,
+    //         'amount' => $amount
+    //     ];
+
+    //     $fields_string = http_build_query($fields);
+
+    //     try {
+    //         $ch = curl_init();
+
+    //         curl_setopt($ch, CURLOPT_URL, $url);
+    //         curl_setopt($ch, CURLOPT_POST, true);
+    //         curl_setopt($ch, CURLOPT_POSTFIELDS, $fields_string);
+    //         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+    //             "Authorization: Bearer " . $apiKey,
+    //             "Cache-Control: no-cache",
+    //         ));
+    //         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+    //         $result = curl_exec($ch);
+    //         curl_close($ch);
+
+    //         if (!$result) {
+    //             throw new \Exception('Failed to create plan');
+    //         }
+
+    //         return json_decode($result, true);
+    //     } catch (\Exception $e) {
+    //         Log::error('Exception occurred while creating plan', [
+    //             'name' => $name,
+    //             'interval' => $interval,
+    //             'amount' => $amount,
+    //             'error' => $e->getMessage()
+    //         ]);
+
+    //         return null;
+    //     }
+    // }
 }

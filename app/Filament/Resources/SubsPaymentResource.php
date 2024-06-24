@@ -71,9 +71,9 @@ class SubsPaymentResource extends Resource
                 Tables\Columns\TextColumn::make('agent.user.full_name')
                     ->numeric()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('amount')->money('NGN', true),
-                Tables\Columns\TextColumn::make('net_amount')->money('NGN', true),
-                Tables\Columns\TextColumn::make('split_amount_agent')->label('Agent Fee')->money('NGN', true),
+                Tables\Columns\TextColumn::make('amount')->money('₦', true),
+                Tables\Columns\TextColumn::make('net_amount')->money('₦', true),
+                Tables\Columns\TextColumn::make('split_amount_agent')->label('Agent Fee')->money('₦', true),
                 Tables\Columns\TextColumn::make('split_code')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('status')->label('Payment Status')
@@ -96,6 +96,7 @@ class SubsPaymentResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

@@ -26,8 +26,10 @@ class PlanResource extends Resource
     {
         return $form
             ->schema([
-                TextInput::make('title')->required(),
-                TextInput::make('price'),
+                TextInput::make('name')->required()->label('Plan Name'),
+                TextInput::make('price')->required(),
+                TextInput::make('duration')->required()->label('Duration (in days)')->default('30'),
+                TextInput::make('interval')->placeholder('e.g. monthly, yearly')->default('monthly'),
                 TextInput::make('description'),
                 Textarea::make('features'),
             ]);
@@ -38,7 +40,7 @@ class PlanResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name'),
-                TextColumn::make('price'),
+                TextColumn::make('price')->money('NGN', true),
                 TextColumn::make('plan_code'),
             ])
             ->filters([
@@ -46,6 +48,7 @@ class PlanResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

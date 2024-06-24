@@ -7,6 +7,7 @@ use Filament\Panel;
 use Filament\Widgets;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use App\Filament\Agent\Pages\Auth\Login;
 use Filament\Http\Middleware\Authenticate;
 use App\Filament\Agent\Pages\Auth\Register;
 use App\Filament\Agent\Pages\Auth\EditProfile;
@@ -31,7 +32,7 @@ class AgentPanelProvider extends PanelProvider
             ->colors([
                 'primary' => '#ea580c',
             ])
-            ->login()
+            ->login(Login::class)
             ->viteTheme('resources/css/filament/agent/theme.css')
             ->discoverResources(in: app_path('Filament/Agent/Resources'), for: 'App\\Filament\\Agent\\Resources')
             ->discoverPages(in: app_path('Filament/Agent/Pages'), for: 'App\\Filament\\Agent\\Pages')

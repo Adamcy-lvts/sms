@@ -81,7 +81,7 @@ class Register extends AuthRegister
             // Separate user and school data right from the beginning
             $schoolData = [
                 'name' => $data['name'],
-                'slug' => $data['slug'],
+                'slug' => Str::slug($data['name']),
                 'email' => $data['email'],
                 'address' => $data['address'],
                 'phone' => $data['phone']
@@ -154,15 +154,7 @@ class Register extends AuthRegister
                                 ->schema([
                                     TextInput::make('name')
                                         ->label('School Name')
-                                        ->live(debounce: 500)
-                                        ->afterStateUpdated(fn (Set $set, ?string $state) => $set('slug', Str::slug($state)))
                                         ->required(),
-
-                                    TextInput::make('slug')
-                                        ->label('Slug')
-                                        ->required()
-                                        ->maxLength(255)
-                                        ->unique(),
 
                                     TextInput::make('email')
                                         ->label(__('School Email'))
