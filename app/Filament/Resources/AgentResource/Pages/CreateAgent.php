@@ -25,7 +25,6 @@ class CreateAgent extends CreateRecord
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
                 'email' => $data['email'],
-                'phone' => $data['phone'],
                 'password' => $data['password'], // Ensure the password is hashed
                 'user_type' => 'agent' // Assuming there's a user_type field to distinguish users
             ]);
@@ -36,6 +35,7 @@ class CreateAgent extends CreateRecord
             // Create Agent record linked to the user
             $agent = Agent::create([
                 'user_id' => $user->id,
+                'phone' => $data['phone'],
                 'business_name' => $data['business_name'],
                 'account_number' => $data['account_number'],
                 'account_name' => $data['account_name'],
