@@ -32,7 +32,7 @@ class EditAgent extends EditRecord
             'last_name' => $this->record->user->last_name,
             'email' => $this->record->user->email,
             'status_id' => $this->record->user->status_id,
-            'phone' => $this->record->user->phone,
+            'phone' => $this->record->phone,
             // Agent fields
             'business_name' => $this->record->business_name,
             'account_number' => $this->record->account_number,
@@ -57,13 +57,13 @@ class EditAgent extends EditRecord
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
                 'email' => $data['email'],
-                'phone' => $data['phone'],
                 'status_id' => $data['status_id'],
                 // Include any other user fields that might be in your form
             ]);
 
             // Update the agent record
             $record->update([
+                'phone' => $data['phone'],
                 'business_name' => $data['business_name'],
                 'account_number' => $data['account_number'],
                 'account_name' => $data['account_name'],
