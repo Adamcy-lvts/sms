@@ -94,7 +94,7 @@ class AgentResource extends Resource
                     }),
                 TextColumn::make('user.email')->label('Email')->copyable()
                     ->searchable(),
-                TextColumn::make('user.phone')->label('Phone')->copyable()
+                TextColumn::make('phone')->label('Phone')->copyable()
                     ->searchable(),
                 TextColumn::make('business_name')
                     ->searchable(),
