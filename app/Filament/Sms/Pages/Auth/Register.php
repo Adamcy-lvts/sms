@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Model;
 use Filament\Forms\Components\Component;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Forms\Components\FileUpload;
 use Illuminate\Validation\Rules\Password;
 use Filament\Pages\Auth\Register as AuthRegister;
 use Filament\Http\Responses\Auth\Contracts\RegistrationResponse;
@@ -70,7 +71,7 @@ class Register extends AuthRegister
             return null;
         }
 
-    
+
 
         $user = $this->wrapInDatabaseTransaction(function () {
             $this->callHook('beforeValidate');
@@ -168,6 +169,8 @@ class Register extends AuthRegister
                                     TextInput::make('phone')
                                         ->label('Phone Number')
                                         ->required(),
+                                    FileUpload::make('logo')
+                                        ->directory('school-logos'),
                                 ]),
                             Wizard\Step::make('Admin Details')
                                 ->schema([

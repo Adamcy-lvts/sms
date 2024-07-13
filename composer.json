@@ -6,6 +6,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "amidesfahani/filament-tinyeditor": "^2.0",
         "filament/filament": "^3.2",
         "filipfonal/filament-log-manager": "^2.0",
         "laravel/framework": "^11.0",

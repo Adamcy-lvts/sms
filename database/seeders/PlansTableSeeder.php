@@ -27,18 +27,22 @@ class PlansTableSeeder extends Seeder
                 'interval' => "monthly",
                 'currency' => "NGN",
                 'features' => [
-                    'All Basic Features',
-                    'Advanced Analytics & Reporting',
-                    'Staff Management',
-                    'Teacher Profiles Management',
+                    'Student Management',
+                    'Admission Management',
+                    'Session & Term Management',
+                    'Classroom Management',
+                    'Exam Management',
+                    'Student Profile',
+                    'Subjects Management',
                     'Role-Based Access Control',
-                    'Receipt & Invoice Generation',
-                    'Attendance Tracking',
-                    'Library Management',
-                    'Homework Management',
-                    'Student Portal Access',
-                    'Student Performance Analytics',
-                    'Up to 20 Staff Accounts'
+                    'Teacher Profiles Management',
+                    'Staff Management',
+                    'Accounting Management',
+                    'Basic Analytics',
+                    'Send Email Noifications',
+                    '500 Students Limit',
+                    'Up to 5 Staff Accounts',
+
                 ]
             ],
             [
@@ -50,16 +54,14 @@ class PlansTableSeeder extends Seeder
                 'features' => [
                     'All Basic Features',
                     'Advanced Analytics & Reporting',
-                    'Staff Management',
-                    'Teacher Profiles Management',
-                    'Role-Based Access Control',
+                    'Import and Export Data from Excel',
                     'Receipt & Invoice Generation',
                     'Attendance Tracking',
-                    'Library Management',
-                    'Homework Management',
-                    'Student Portal Access',
-                    'Student Performance Analytics',
-                    'Up to 20 Staff Accounts'
+                    'Books Management',
+                    'Student Performance Metrics',
+                    'Up to 15 Staff Accounts',
+                    'Up to 1000 Students Limit',
+
                 ]
             ],
             [
@@ -71,11 +73,13 @@ class PlansTableSeeder extends Seeder
                 'features' => [
                     'All Standard Features',
                     'Computer-Based Test Integration',
-                    'Real-Time Data Analytics',
+                    'Real-Time Advanced Data Analytics',
                     'Custom Feature Requests',
                     'Enhanced Security Protocols',
-                    'Student & Parent Portal Access',
-                    'Unlimited Staff Accounts'
+                    'Student & Parent Dashboard Access',
+                    'Unlimited Staff Accounts',
+                    'Priority Support',
+                    'Unlimited Students Limit',
                 ]
             ],
         ];

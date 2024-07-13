@@ -20,6 +20,7 @@ class UserTableSeeder extends Seeder
                 'first_name'          => 'Adam',
                 'last_name'          => 'Mohammed',
                 'email'             => 'lv4mj1@gmail.com',
+                'status_id' => null,
                 'password'          => Hash::make('password'),
                 'remember_token'    => Str::random(60),
 

@@ -17,39 +17,30 @@ class RedirectIfUserNotSubscribed
      */
     public function handle(Request $request, Closure $next): Response
     {
-
-        $user = Auth::user();
-        $school = $user->schools->first();
-        
-        // Assuming $request->route() can be used to get the current route name
-        // and $request->route('tenant') to get the route parameter 'tenant'
-        if ($request->route()->getName() === 'filament.sms.pages.pricing-page' && $request->route('tenant') === $school->slug) {
-            // Bypass the subscription check for this specific route and parameter
-            return $next($request);
-        }
-
-        // Your existing subscription check logic here
-        // Redirect if the user is not subscribed
-        // ...
-
-        return $next($request);
-
-
         if (!Auth::check()) {
+            // Redirect to login if the user is not authenticated
             return redirect()->route('login');
         }
-
-      
-
+    
+        $user = Auth::user();
+        $school = $user->schools->first();
+    
+        // Bypass for pricing page with matching tenant slug
+        if ($request->route()->getName() === 'filament.sms.pages.pricing-page' && $request->route('tenant') === $school->slug) {
+            return $next($request);
+        }
+    
+        // Bypass for billing page
         if ($request->routeIs('filament.sms.tenant.billing')) {
-            return $next($request);  // Continue if already on the billing page
+            return $next($request);
         }
-
-        if (!$school || !$school->subscriptions()->where('status', 'active')->exists()) {
-            return redirect()->route('filament.sms.tenant.billing', ['tenant' => $school->slug]);
-            // return redirect()->route('filament.sms.pages.pricing-page', ['tenant' => $school->slug]);
-        }
-
+    
+        // Redirect to billing if no school or no active subscription
+        // if (!$school || !$school->subscriptions()->where('status', 'active')->exists()) {
+        //     return redirect()->route('filament.sms.tenant.billing', ['tenant' => $school->slug]);
+        // }
+    
+        // Proceed with the request if none of the conditions above are met
         return $next($request);
     }
 }

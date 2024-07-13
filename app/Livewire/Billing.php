@@ -55,7 +55,7 @@ class Billing extends Page implements HasForms, HasTable
             ->query(SubsPayment::query())
             ->columns([
                 TextColumn::make('subscription.plan.name')->label('Subscription Plan'),
-                TextColumn::make('amount')->money('NGN', true),
+                TextColumn::make('amount')->formatStateUsing(fn ($state) => formatNaira($state)),
                 TextColumn::make('subscription.status')->label('Subscription Status')->badge()
                     ->color(fn (string $state): string => match ($state) {
 

@@ -40,6 +40,7 @@ class SmsPanelProvider extends PanelProvider
             ->id('sms')
             ->path('sms')
             ->login()
+            ->brandName('Kings Private School')
             ->tenant(School::class, slugAttribute: 'slug')
             ->tenantProfile(EditSchoolProfile::class)
             ->tenantBillingProvider(new BillingProvider())

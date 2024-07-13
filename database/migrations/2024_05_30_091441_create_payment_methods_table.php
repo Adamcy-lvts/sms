@@ -14,6 +14,10 @@ return new class extends Migration
         Schema::create('payment_methods', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->string('slug')->unique()->nullable();
+            $table->string('description')->nullable();
+            $table->string('logo')->nullable();
             $table->boolean('active')->default(true);
             $table->timestamps();
         });

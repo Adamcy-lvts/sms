@@ -2,6 +2,7 @@
 
 namespace App\Filament\Sms\Pages\Tenancy;
 
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Form;
 use Filament\Pages\Page;
 use Filament\Forms\Components\TextInput;
@@ -27,6 +28,8 @@ class EditSchoolProfile extends EditTenantProfile
                 TextInput::make('email'),
                 TextInput::make('address'),
                 TextInput::make('phone'),
+                FileUpload::make('logo')
+                    ->directory('school-logos'),
                 // ...
             ]);
     }

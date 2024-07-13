@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('school_id')->constrained()->onDelete('cascade');
             $table->string('name');  // Name of the payment type, e.g., Tuition, Registration Fee, Donation
+            $table->decimal('amount', 10, 2);
             $table->boolean('active')->default(true);
             $table->text('description')->nullable();  // Additional details about the payment type
             $table->timestamps();
