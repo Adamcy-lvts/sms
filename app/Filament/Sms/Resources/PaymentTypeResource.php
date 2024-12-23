@@ -21,14 +21,19 @@ class PaymentTypeResource extends Resource
     protected static ?string $model = PaymentType::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
-
-    protected static ?string $navigationParentItem = 'Payments';
+    protected static ?string $navigationGroup = 'Financial Management';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 TextInput::make('name')->label('Name')->required(),
+                TextInput::make('amount')
+                ->label('Amount')
+                ->required()
+                ->numeric()
+                ->prefix('₦')
+                ->dehydrated(),
                 TextInput::make('description')->label('Description'),
 
 

@@ -17,6 +17,7 @@ class CreateSubject extends CreateRecord
     {
         $subjectData = [
             'name' => $data['name'],
+            'name_ar' => $data['name_ar'],
             'slug' => Str::slug($data['name']),
             'description' => $data['description'],
             'position' => $data['position'],

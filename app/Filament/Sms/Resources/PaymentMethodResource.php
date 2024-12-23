@@ -20,8 +20,7 @@ class PaymentMethodResource extends Resource
     protected static ?string $model = PaymentMethod::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
-
-    protected static ?string $navigationParentItem = 'Payments';
+    protected static ?string $navigationGroup = 'Financial Management';
 
     public static function form(Form $form): Form
     {
@@ -29,7 +28,7 @@ class PaymentMethodResource extends Resource
             ->schema([
                 TextInput::make('name')->label('Name')->required(),
                 TextInput::make('description')->label('Description'),
-                TextInput::make('logo')->label('Logo')->required(),
+                TextInput::make('logo')->label('Logo'),
             ]);
     }
 

@@ -2,36 +2,51 @@
 
 namespace App\Filament\Sms\Resources;
 
-use App\Filament\Sms\Resources\TermResource\Pages;
-use App\Filament\Sms\Resources\TermResource\RelationManagers;
-use App\Models\Term;
+use Carbon\Carbon;
 use Filament\Forms;
-use Filament\Forms\Components\Tabs\Tab;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
+use App\Models\Term;
 use Filament\Tables;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use App\Models\AcademicSession;
+use Filament\Resources\Resource;
+use Filament\Forms\Components\Tabs\Tab;
 use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Sms\Resources\TermResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Sms\Resources\TermResource\RelationManagers;
 
 class TermResource extends Resource
 {
     protected static ?string $model = Term::class;
-
+    protected static ?string $navigationGroup = 'School Management';
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\Select::make('academic_session_id')->relationship(name: 'session', titleAttribute: 'name')
-                    ->required(),
+                Forms\Components\Select::make('academic_session_id')
+                    ->label('Academic Session')
+                    ->options(AcademicSession::all()->pluck('name', 'id'))
+                    ->required()
+                    ->searchable(),
                 Forms\Components\TextInput::make('name')
-                    ->required(),
-                Forms\Components\DatePicker::make('start_date')->native(false)
-                    ->required(),
-                Forms\Components\DatePicker::make('end_date')->native(false)
-                    ->required(),
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\DatePicker::make('start_date')
+                    ->native(false)
+                    ->required()
+                    ->maxDate(Carbon::now()->addYears(2)->endOfYear())
+                    ->beforeOrEqual('end_date'),
+                Forms\Components\DatePicker::make('end_date')
+                    ->native(false)
+                    ->required()
+                    ->maxDate(Carbon::now()->addYears(2)->endOfYear())
+                    ->afterOrEqual('start_date'),
+                Forms\Components\Toggle::make('is_current')
+                    ->label('Current Term'),
+                // Add any other fields you need for your Term model
             ]);
     }
 
@@ -39,8 +54,13 @@ class TermResource extends Resource
     {
         return $table
             ->columns([
-    
-                Tables\Columns\TextColumn::make('session.name')
+                Tables\Columns\IconColumn::make('is_current')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->label('Current')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('academicSession.name')
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('name')->label('Term Name')

@@ -64,7 +64,7 @@ class TeacherResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\ImageColumn::make('staff.profile_picture')->label('Profile Picture')->circular(),
+                Tables\Columns\ImageColumn::make('staff.profile_picture_url')->label('Profile Picture')->circular(),
                 Tables\Columns\TextColumn::make('staff.full_name')->label('Staff Name'),
                 Tables\Columns\TextColumn::make('staff.phone_number')->label('Phone Number'),
                 Tables\Columns\TextColumn::make('classRoom.name')->label('Class Taken')->default('No class assign'),

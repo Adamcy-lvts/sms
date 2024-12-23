@@ -2,18 +2,20 @@
 
 namespace App\Filament\Sms\Resources;
 
-use App\Filament\Sms\Resources\ClassRoomResource\Pages;
-use App\Filament\Sms\Resources\ClassRoomResource\RelationManagers;
-use App\Models\ClassRoom;
 use Filament\Forms;
-use Filament\Forms\Components\Tabs\Tab;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables;
-use Filament\Tables\Columns\TextColumn;
+use Filament\Forms\Form;
+use App\Models\ClassRoom;
 use Filament\Tables\Table;
+use Filament\Resources\Resource;
+use Filament\Forms\Components\Tabs\Tab;
+use Filament\Tables\Columns\TextColumn;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Sms\Resources\ClassRoomResource\Pages;
+use App\Filament\Sms\Resources\ClassRoomResource\RelationManagers;
+use App\Filament\Sms\Resources\ClassRoomResource\Widgets\ClassRoomStatsOverview;
+use App\Filament\Sms\Resources\ClassRoomResource\RelationManagers\StudentsRelationManager;
 
 class ClassRoomResource extends Resource
 {
@@ -31,7 +33,7 @@ class ClassRoomResource extends Resource
                 Forms\Components\TextInput::make('capacity')
                     ->label('Capacity')
                     ->integer(),
-             
+
             ]);
     }
 
@@ -41,12 +43,13 @@ class ClassRoomResource extends Resource
             ->columns([
                 TextColumn::make('name'),
                 TextColumn::make('capacity'),
-                
+
             ])
             ->filters([
                 //
             ])
             ->actions([
+                Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
@@ -57,10 +60,18 @@ class ClassRoomResource extends Resource
             ]);
     }
 
+    public static function getWidgets(): array
+    {
+        return [
+            ClassRoomStatsOverview::class,
+
+        ];
+    }
+
     public static function getRelations(): array
     {
         return [
-            //
+            StudentsRelationManager::class
         ];
     }
 
@@ -70,6 +81,7 @@ class ClassRoomResource extends Resource
             'index' => Pages\ListClassRooms::route('/'),
             'create' => Pages\CreateClassRoom::route('/create'),
             'edit' => Pages\EditClassRoom::route('/{record}/edit'),
+            'view' => Pages\ViewClassRoom::route('/{record}')
         ];
     }
 }

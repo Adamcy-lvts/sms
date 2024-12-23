@@ -4,134 +4,310 @@ namespace App\Filament\Sms\Resources\StaffResource\Pages;
 
 use App\Models\User;
 use App\Models\Staff;
-use Filament\Actions;
 use App\Models\Teacher;
-use Illuminate\Support\Str;
-use App\Models\Qualification;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use App\Services\EmployeeIdGenerator;
 use Illuminate\Database\Eloquent\Model;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use App\Filament\Sms\Resources\StaffResource;
+use Illuminate\Validation\ValidationException;
 
 class CreateStaff extends CreateRecord
 {
     protected static string $resource = StaffResource::class;
 
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        $data['school_id'] = Filament::getTenant()->id;
+        return $data;
+    }
 
     protected function handleRecordCreation(array $data): Model
     {
-        // Check if staff already exists
-        $existingStaff = Staff::where('email', $data['email'])
-            ->orWhere('employee_id', $data['employee_id'])
-            ->first();
-
-        if ($existingStaff) {
-            Notification::make()
-                ->title('Staff Already Exists')
-                ->success()
-                ->body('Staff with the email or employee ID already exists. Please check and try again.')
-                ->send();
-            // $this->redirectRoute('filament.sms.resources.staff.index', ['tenant' => Filament::getTenant()]);
-            return $existingStaff;
-        }
-
-        $tenant = Filament::getTenant();
-
-        // dd($tenant);
-        // Create User record if the flag is set
-        if ($data['create_user'] ?? false) {
-
-            $userExist = User::where('email', $data['email'])->first();
-            if (!$userExist) {
-                $user = new User([
-                    'first_name' => $data['first_name'],
-                    'last_name' => $data['last_name'],
-                    'middle_name' => $data['middle_name'],
-                    // 'full_name' => $data['first_name'] . ' ' . $data['last_name'],
-                    'status_id' => $data['status_id'] ?? null,
-                    'email' => $data['email'],
-                    'password' => Hash::make($data['phone_number']),
-                ]);
-
-                $user->save();
-
-                if ($tenant) {
-                    $tenant->members()->attach($user);
+        return DB::transaction(function () use ($data) {
+            try {
+                // Generate Employee ID if needed
+                if (empty($data['employee_id'])) {
+                    try {
+                        $data['employee_id'] = app(EmployeeIdGenerator::class);
+                    } catch (\Exception $e) {
+                        DB::rollBack();
+                        Notification::make()
+                            ->danger()
+                            ->title('Error Generating Employee ID')
+                            ->body($e->getMessage())
+                            ->send();
+                        throw $e;
+                    }
                 }
 
-                $data['user_id'] = $user->id;
+                // Prepare staff data
+                $staffData = collect($data)->except([
+                    'qualifications',
+                    'teacher',
+                    'is_teacher',
+                    'create_user_account',
+                    'roles',
+                    'permissions',
+                    'default_password_type',
+                    'custom_password',
+                    'send_credentials',
+                    'force_password_change',
+                    'id_generation_type'
+                ])->toArray();
+
+                // Create staff record
+                try {
+                    $staff = Staff::create($this->mutateFormDataBeforeCreate($staffData));
+                } catch (\Exception $e) {
+                    DB::rollBack();
+                    Notification::make()
+                        ->danger()
+                        ->title('Error Creating Staff Record')
+                        ->body('Failed to create basic staff record: ' . $e->getMessage())
+                        ->send();
+                    throw $e;
+                }
+                // dd($data);
+                // Handle qualifications if present
+                if (!empty($data['qualifications'])) {
+                    // Format qualifications to match your JSON structure
+                    $qualificationsData = collect($data['qualifications'])->map(function ($qualification) {
+                        return [
+                            'name' => $qualification['name'],
+                            'institution' => $qualification['institution'],
+                            'year_obtained' => $qualification['year_obtained'],
+                            'documents' => $qualification['documents'] ?? null,
+                        ];
+                    })->toArray();
+
+                    // Create qualification record with JSON data
+                    $staff->qualifications()->create([
+                        'school_id' => Filament::getTenant()->id,
+                        'qualifications' => $qualificationsData
+                    ]);
+                }
+
+                // Handle teacher data
+                if ($data['is_teacher'] ?? false) {
+                    try {
+                        // Create teacher record
+                        $teacher = Teacher::create([
+                            'staff_id' => $staff->id,
+                            'school_id' => Filament::getTenant()->id,
+                            'specialization' => $data['teacher']['specialization'] ?? null,
+                            'teaching_experience' => $data['teacher']['teaching_experience'] ?? null,
+                        ]);
+
+                        // Sync relationships
+                        if (!empty($data['teacher']['subjects'])) {
+                            $teacher->subjects()->sync($data['teacher']['subjects']);
+                        }
+                        if (!empty($data['teacher']['class_rooms'])) {
+                            $teacher->classRooms()->sync($data['teacher']['class_rooms']);
+                        }
+                    } catch (\Exception $e) {
+                        DB::rollBack();
+                        Notification::make()
+                            ->danger()
+                            ->title('Error Creating Teacher Record')
+                            ->body('Failed to create teacher record: ' . $e->getMessage())
+                            ->send();
+                        throw $e;
+                    }
+                }
+
+                // Handle user account creation
+                if ($data['create_user_account'] ?? false) {
+                    try {
+                        $password = $this->generatePassword($data);
+                        $user = $this->createUserAccount($staff, $data, $password);
+
+                        $staff->user_id = $user->id;
+                        $staff->save();
+
+                        if ($data['send_credentials'] ?? false) {
+                            try {
+                                $this->sendLoginCredentials($staff, $password);
+                            } catch (\Exception $e) {
+                                // Don't rollback for email failures, just notify
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Warning')
+                                    ->body('Staff created successfully but failed to send credentials: ' . $e->getMessage())
+                                    ->send();
+                            }
+                        }
+                    } catch (\Exception $e) {
+                        DB::rollBack();
+                        Notification::make()
+                            ->danger()
+                            ->title('Error Creating User Account')
+                            ->body('Failed to create user account: ' . $e->getMessage())
+                            ->send();
+                        throw $e;
+                    }
+                }
+
+                // If we get here, everything succeeded
+                Notification::make()
+                    ->success()
+                    ->title('Success')
+                    ->body(
+                        $data['create_user_account']
+                            ? "Staff record and user account created successfully."
+                            : "Staff record created successfully."
+                    )
+                    ->send();
+
+                // Log the successful creation
+                // activity()
+                //     ->performedOn($staff)
+                //     ->causedBy(auth()->user())
+                //     ->withProperties([
+                //         'school_id' => Filament::getTenant()->id,
+                //         'action' => 'created',
+                //         'has_user_account' => $data['create_user_account'] ?? false,
+                //         'is_teacher' => $data['is_teacher'] ?? false,
+                //     ])
+                //     ->log('Created new staff record');
+
+                return $staff;
+            } catch (\Exception $e) {
+                // Log the error for debugging
+                Log::error('Staff creation failed: ' . $e->getMessage(), [
+                    'exception' => $e,
+                    'data' => $data
+                ]);
+
+                throw $e;
             }
-        }
+        });
+    }
 
-        // Create Staff record
-        $staffRecord = [
+    /**
+     * Override the default error handling to provide better messages
+     */
+    protected function onValidationError(ValidationException $exception): void
+    {
+        Notification::make()
+            ->danger()
+            ->title('Validation Error')
+            ->body('Please check the form for errors and try again.')
+            ->send();
+    }
 
-            'user_id' => $data['user_id'] ?? null,
-            'designation_id' => $data['designation_id'],
-            'employee_id' => $data['employee_id'],
-            'first_name' => $data['first_name'],
-            'last_name' => $data['last_name'],
-            'middle_name' => $data['middle_name'],
-            'gender' => $data['gender'],
-            'date_of_birth' => $data['date_of_birth'],
-            'phone_number' => $data['phone_number'],
+    /**
+     * Additional method to handle cleanup if needed
+     */
+    protected function handleCreationFailure(\Exception $e, array $data): void
+    {
+        // Add any additional cleanup logic here
+        Notification::make()
+            ->danger()
+            ->title('Error')
+            ->body('An unexpected error occurred while creating the staff record. Please try again.')
+            ->send();
+    }
+
+    protected function generatePassword(array $data): string
+    {
+        return match ($data['default_password_type'] ?? 'phone') {
             'email' => $data['email'],
-            'address' => $data['address'],
-            'hire_date' => $data['hire_date'],
-            'status_id' => $data['status_id'],
-            'salary' => $data['salary'],
-            'bank_id' => $data['bank_id'],
-            'account_number' => $data['account_number'],
-            'profile_picture' => $data['profile_picture'],
-            'qualifications' => $data['qualifications'],
-            'emergency_contact' => $data['emergency_contact'],
-        ];
+            'custom' => $data['custom_password'],
+            'phone' => $data['phone_number'],
+            default => $data['phone_number'],
+        };
+    }
 
-        $record = new ($this->getModel())($staffRecord);
+    protected function createUserAccount(Staff $staff, array $data, string $password): User
+    {
+        $userExist = User::where('email', $staff->email)->first();
 
-        if (static::getResource()::isScopedToTenant() && $tenant) {
-            $record = $this->associateRecordWithTenant($record, $tenant);
+        if ($userExist) {
+            return $userExist;
+        }
+        $user = User::create([
+            'first_name' => $staff->first_name,
+            'last_name' => $staff->last_name,
+            'email' => $staff->email,
+            'password' => Hash::make($password),
+            'status_id' => 1, // Assuming 1 is active status
+        ]);
+
+        // Assign roles and permissions
+        if (!empty($data['roles'])) {
+            $user->syncRoles($data['roles']);
         }
 
-        $record->save();
-
-        // Create Qualification record with JSON data
-        if (!empty($data['qualifications'])) {
-            $qualification = new Qualification([
-                'staff_id' => $record->id,
-                'qualifications' => $data['qualifications'], // Store as JSON
-            ]);
-
-            if ($tenant) {
-                $qualification = $this->associateRecordWithTenant($qualification, $tenant);
-            }
-
-            $qualification->save();
+        if (!empty($data['permissions'])) {
+            $user->syncPermissions($data['permissions']);
         }
 
+        // Attach user to school
+        $user->schools()->attach(Filament::getTenant()->id);
 
-        // Create Teacher record if the flag is set
-        if ($data['is_teacher'] ?? false) {
-            $teacher = new Teacher([
-                'staff_id' => $record->id,
-                'specialization' => $data['specialization'] ?? null,
-                'teaching_experience' => $data['teaching_experience'] ?? null,
-            ]);
+        return $user;
+    }
 
-            if ($tenant) {
-                $teacher = $this->associateRecordWithTenant($teacher, $tenant);
-            }
+    protected function sendLoginCredentials(Staff $staff, string $password): void
+    {
+        try {
+            Mail::to($staff->email)->send(new \App\Mail\StaffLoginCredentials(
+                staff: $staff,
+                password: $password,
+                forcePasswordChange: $staff->force_password_change ?? true
+            ));
 
-            $teacher->save();
+            Notification::make()
+                ->success()
+                ->title('Login Credentials Sent')
+                ->body("Login credentials have been sent to {$staff->email}")
+                ->send();
+        } catch (\Exception $e) {
+            Notification::make()
+                ->warning()
+                ->title('Could Not Send Credentials')
+                ->body("Login credentials could not be sent via email. Please provide them manually.")
+                ->send();
         }
-
-        return $record;
     }
 
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    protected function afterCreate(): void
+    {
+        $tenant = Filament::getTenant();
+        // activity()
+        //     ->performedOn($this->record)
+        //     ->causedBy(auth()->user())
+        //     ->withProperties([
+        //         'school_id' => $tenant->id,
+        //         'action' => 'created',
+        //     ])
+        //     ->log('Created new staff record');
+    }
+
+    protected function beforeCreate(): void
+    {
+        // Validate that the employee ID is unique
+        $employeeId = $this->data['employee_id'];
+        if (Staff::where('employee_id', $employeeId)->exists()) {
+            Notification::make()
+                ->danger()
+                ->title('Duplicate Employee ID')
+                ->body("The employee ID {$employeeId} is already in use. Please refresh the page to generate a new one.")
+                ->send();
+
+            $this->halt();
+        }
     }
 }

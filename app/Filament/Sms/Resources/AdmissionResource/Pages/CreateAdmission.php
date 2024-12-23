@@ -5,14 +5,43 @@ namespace App\Filament\Sms\Resources\AdmissionResource\Pages;
 use Filament\Actions;
 use App\Models\Admission;
 use Filament\Facades\Filament;
+use App\Models\AcademicSession;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\Model;
+use Filament\Notifications\Notification;
+use App\Services\AdmissionNumberGenerator;
 use Filament\Resources\Pages\CreateRecord;
 use App\Filament\Sms\Resources\AdmissionResource;
-use App\Models\AcademicSession;
 
 class CreateAdmission extends CreateRecord
 {
     protected static string $resource = AdmissionResource::class;
+
+    public function mount(): void
+    {
+        parent::mount();
+
+        try {
+            // Generate admission number
+            $generator = new AdmissionNumberGenerator();
+            $admissionNumber = $generator->generate();
+
+            // Pre-fill the form with the generated number
+            $this->form->fill([
+                'admission_number' => $admissionNumber
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to generate admission number', [
+                'error' => $e->getMessage(),
+                'school_id' => Filament::getTenant()->id
+            ]);
+
+            Notification::make()
+                ->title('Error generating admission number')
+                ->warning()
+                ->send();
+        }
+    }
 
     protected function handleRecordCreation(array $data): Model
     {
@@ -40,7 +69,7 @@ class CreateAdmission extends CreateRecord
             'previous_school_name' => $data['previous_school_name'],
             'previous_class' => $data['previous_class'],
             'admitted_date' => $data['admitted_date'],
-            'application_date' => $data['application_date'], 
+            'application_date' => $data['application_date'],
             'admission_number' => $data['admission_number'],
             'status_id' => $data['status_id'],
             'guardian_name' => $data['guardian_name'],
