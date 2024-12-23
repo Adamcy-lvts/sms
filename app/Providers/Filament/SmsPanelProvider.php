@@ -8,6 +8,8 @@ use Filament\Widgets;
 use App\Models\School;
 
 use Filament\PanelProvider;
+use Filament\Facades\Filament;
+use App\Livewire\ReportProgress;
 use Filament\Navigation\MenuItem;
 use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
@@ -15,6 +17,7 @@ use Illuminate\Support\Facades\Blade;
 use App\Filament\Sms\Pages\PricingPage;
 use App\Filament\Sms\Pages\Auth\Register;
 use App\Http\Middleware\ApplyTenantScopes;
+use App\Http\Middleware\SetAcademicPeriod;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Support\Facades\FilamentView;
 use App\Filament\Sms\Pages\Tenancy\Billing;
@@ -40,7 +43,10 @@ class SmsPanelProvider extends PanelProvider
             ->id('sms')
             ->path('sms')
             ->login()
-            ->brandName('Kings Private School')
+            ->brandName(function () {
+                $tenant = Filament::getTenant();
+                return $tenant ? "{$tenant->name}" : 'School SMS';
+            })
             ->tenant(School::class, slugAttribute: 'slug')
             ->tenantProfile(EditSchoolProfile::class)
             ->tenantBillingProvider(new BillingProvider())
@@ -57,14 +63,25 @@ class SmsPanelProvider extends PanelProvider
             ])
             ->tenantMiddleware([
                 ApplyTenantScopes::class,
+                SetAcademicPeriod::class,
             ], isPersistent: true)
             ->colors([
                 'primary' => Color::Emerald,
+                'danger' => Color::Red,
+                'gray' => Color::Zinc,
+                'info' => Color::Blue,
+                'success' => Color::Green,
+                'warning' => Color::Amber,
+                'indigo' => Color::Indigo,
             ])
+            ->databaseNotifications()
             ->discoverResources(in: app_path('Filament/Sms/Resources'), for: 'App\\Filament\\Sms\\Resources')
             ->discoverPages(in: app_path('Filament/Sms/Pages'), for: 'App\\Filament\\Sms\\Pages')
             ->pages([
                 Pages\Dashboard::class,
+                // ReportProgress::class,
+                // Pages\PreviewReportTemplate::class,
+                // Pages\ManageSettings::class,
             ])
             ->viteTheme('resources/css/filament/sms/theme.css')
             ->discoverWidgets(in: app_path('Filament/Sms/Widgets'), for: 'App\\Filament\\Sms\\Widgets')
@@ -82,6 +99,7 @@ class SmsPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+                // \App\Http\Middleware\SetAcademicPeriod::class,
             ])
             ->authMiddleware([
                 Authenticate::class,
@@ -90,10 +108,13 @@ class SmsPanelProvider extends PanelProvider
             ->profile(EditProfile::class)
             ->passwordReset()
             ->renderHook(
-
                 PanelsRenderHook::USER_MENU_BEFORE,
-                fn (): string => Blade::render('@livewire(\'trial-view\')'),
-
-            );
+                fn(): string => Blade::render('@livewire(\'current-academic-info\')')
+            )
+            // ->renderHook(
+            //     PanelsRenderHook::BODY_START,
+            //     fn(): string => Blade::render('@livewire(\'report-progress\')')
+            // )
+            ->spa();
     }
 }
