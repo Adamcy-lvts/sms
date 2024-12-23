@@ -2,53 +2,51 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\Status;
 use Illuminate\Database\Seeder;
 
 class StatusTableSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
         $statuses = [
-            ['name' => 'active', 'type' => 'general'],
-            ['name' => 'inactive', 'type' => 'general'],
-            ['name' => 'blocked', 'type' => 'general'],
-            ['name' => 'pending', 'type' => 'payment'],
-            ['name' => 'completed', 'type' => 'payment'],
-            ['name' => 'failed', 'type' => 'payment'],
-            ['name' => 'refunded', 'type' => 'payment'],
-            ['name' => 'paid', 'type' => 'payment'],
-            ['name' => 'unpaid', 'type' => 'payment'],
-            ['name' => 'approved', 'type' => 'admission'],
-            ['name' => 'rejected', 'type' => 'admission'],
-            ['name' => 'processing', 'type' => 'admission'],
+            // Student Statuses - Core statuses that appear in status column
             ['name' => 'active', 'type' => 'student'],
-            ['name' => 'graduated', 'type' => 'student'],
+            ['name' => 'inactive', 'type' => 'student'],
             ['name' => 'suspended', 'type' => 'student'],
-            ['name' => 'expelled', 'type' => 'student'],
-            ['name' => 'promoted', 'type' => 'student'],
-            ['name' => 'demoted', 'type' => 'student'],
+            ['name' => 'graduated', 'type' => 'student'],
             ['name' => 'transferred', 'type' => 'student'],
             ['name' => 'withdrawn', 'type' => 'student'],
-            ['name' => 'archived', 'type' => 'student'],
+            ['name' => 'expelled', 'type' => 'student'],
             ['name' => 'deceased', 'type' => 'student'],
+            
+            // Payment Statuses
+            ['name' => 'pending', 'type' => 'payment'],
+            ['name' => 'partial', 'type' => 'payment'],
+            ['name' => 'paid', 'type' => 'payment'],
+            ['name' => 'overdue', 'type' => 'payment'],
+            ['name' => 'refunded', 'type' => 'payment'],
+            
+            ['name' => 'active', 'type' => 'user'],
+            ['name' => 'inactive', 'type' => 'user'],
+            ['name' => 'blocked', 'type' => 'user'],
+     
+
+            // Staff Statuses
             ['name' => 'active', 'type' => 'staff'],
+            ['name' => 'inactive', 'type' => 'staff'],
             ['name' => 'resigned', 'type' => 'staff'],
             ['name' => 'terminated', 'type' => 'staff'],
-            ['name' => 'suspended', 'type' => 'staff'],
-            ['name' => 'archived', 'type' => 'staff'],
-            ['name' => 'deceased', 'type' => 'staff'],
-
+            ['name' => 'retired', 'type' => 'staff'],
+            
+            // Admission Statuses
+            ['name' => 'pending', 'type' => 'admission'],
+            ['name' => 'approved', 'type' => 'admission'],
+            ['name' => 'rejected', 'type' => 'admission'],
         ];
 
-        if (count($statuses) === 0) {
-            return;
-        }
         foreach ($statuses as $status) {
-            \App\Models\Status::create($status);
+            Status::firstOrCreate(['name' => $status['name'], 'type' => $status['type']], $status);
         }
     }
 }

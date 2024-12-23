@@ -12,7 +12,7 @@ class PaymentMethodTableSeeder extends Seeder
      */
     public function run(): void
     {
-        $school = \App\Models\School::find(1);
+        $school = \App\Models\School::findOrFail(2);
 
         $paymentMethods = [
             [

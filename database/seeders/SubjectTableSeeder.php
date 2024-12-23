@@ -6,87 +6,140 @@ use App\Models\School;
 use App\Models\Subject;
 use Illuminate\Support\Str;
 use Illuminate\Database\Seeder;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use Illuminate\Support\Facades\Log;
 
 class SubjectTableSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
+    protected $islamicSubjects = [
+        [
+            'name' => 'Al Quran (القرآن)',
+            'name_ar' => 'القرآن الكريم',
+            'description' => 'Study and memorization of the Holy Quran',
+            'description_ar' => 'دراسة وحفظ القرآن الكريم'
+        ],
+        [
+            'name' => 'Hadith (حديث)',
+            'name_ar' => 'الحديث النبوي',
+            'description' => 'Study of Prophetic traditions',
+            'description_ar' => 'دراسة الأحاديث النبوية الشريفة'
+        ],
+        [
+            'name' => 'Fiqh (فقه)',
+            'name_ar' => 'الفقه الإسلامي',
+            'description' => 'Islamic Jurisprudence',
+            'description_ar' => 'دراسة الأحكام الشرعية العملية'
+        ],
+        [
+            'name' => 'Tauheed (توحيد)',
+            'name_ar' => 'التوحيد',
+            'description' => 'Islamic Monotheism',
+            'description_ar' => 'دراسة العقيدة الإسلامية'
+        ],
+        [
+            'name' => 'Nahawu (نحو)',
+            'name_ar' => 'النحو',
+            'description' => 'Arabic Grammar',
+            'description_ar' => 'قواعد اللغة العربية'
+        ]
+    ];
+
+    protected $regularSubjects = [
+        [
+            'name' => 'Mathematics',
+            'description' => 'Study of numbers, quantities, shapes and patterns'
+        ],
+        [
+            'name' => 'English Language',
+            'description' => 'Study of English language and literature'
+        ],
+        [
+            'name' => 'Basic Science',
+            'description' => 'Introduction to scientific concepts and methods'
+        ],
+        [
+            'name' => 'Social Studies',
+            'description' => 'Study of society and relationships among people'
+        ],
+        [
+            'name' => 'Business Studies',
+            'description' => 'Introduction to business concepts and practices'
+        ],
+        [
+            'name' => 'Agricultural Science',
+            'description' => 'Study of agriculture and food production'
+        ],
+        [
+            'name' => 'Creative Arts',
+            'description' => 'Study of visual and performing arts'
+        ],
+        [
+            'name' => 'Home Economics',
+            'description' => 'Study of domestic and household management'
+        ],
+        [
+            'name' => 'Physical Education',
+            'description' => 'Study of physical fitness and sports'
+        ],
+        [
+            'name' => 'Computer Studies',
+            'description' => 'Study of computers and information technology'
+        ],
+        [
+            'name' => 'Civic Education',
+            'description' => 'Study of citizenship and civic responsibilities'
+        ],
+        [
+            'name' => 'Religious Studies',
+            'description' => 'Study of religious beliefs and practices'
+        ]
+    ];
+
     public function run(): void
     {
-        $school = School::find(1);
-        // Create a new subject or find an existing one
-        $subject1 = Subject::firstOrCreate([
-            'school_id' => $school->id, // Add this line
-            'name' => 'Mathematics',
-            'slug' => Str::slug('Mathematics'),
-            'description' => 'Mathematics is the study of numbers, shapes and patterns.',
-        ]);
+        // Get all schools
+        $schools = School::all();
+        
+        // Remove this incomplete line
+        // $school = School::where
 
-        // Create a new subject or find an existing one
-        $subject2 = Subject::firstOrCreate([
-            'school_id' => $school->id, // Add this line
-            'name' => 'English Language',
-            'slug' => Str::slug('English Language'),
-            'description' => 'English Language is the study of the English language.',
-        ]);
+        foreach ($schools as $school) {
+            Log::info('Creating subjects for school: ' . $school->name);
+            
+            // For schools with Arabic names, add both Islamic and regular subjects
+            if (!empty($school->name_ar)) {
+                // Add Islamic subjects
+                foreach ($this->islamicSubjects as $subject) {
+                    Subject::firstOrCreate(
+                        [
+                            'school_id' => $school->id,
+                            'name' => $subject['name'],
+                            'slug' => Str::slug($subject['name'])
+                        ],
+                        [
+                            'name_ar' => $subject['name_ar'],
+                            'description' => $subject['description'],
+                            'description_ar' => $subject['description_ar'],
+                            'is_active' => true
+                        ]
+                    );
+                }
+            }
 
-        // Create a new subject or find an existing one
-        $subject3 = Subject::firstOrCreate([
-            'school_id' => $school->id, // Add this line
-            'name' => 'Physics',
-            'slug' => Str::slug('Physics'),
-            'description' => 'Physics is the study of matter and energy.',
-        ]);
-
-        // Create a new subject or find an existing one
-        $subject4 = Subject::firstOrCreate([
-            'school_id' => $school->id, // Add this line
-            'name' => 'Chemistry',
-            'slug' => Str::slug('Chemistry'),
-            'description' => 'Chemistry is the study of matter and its properties.',
-        ]);
-
-        // Create a new subject or find an existing one
-        $subject5 = Subject::firstOrCreate([
-            'school_id' => $school->id, // Add this line
-            'name' => 'Biology',
-            'slug' => Str::slug('Biology'),
-            'description' => 'Biology is the study of living organisms.',
-        ]);
-
-        $school2 = School::find(2);
-        // Create a new subject or find an existing one
-        $subject6 = Subject::firstOrCreate([
-            'school_id' => $school2->id, // Add this line
-            'name' => 'History',
-            'slug' => Str::slug('History'),
-            'description' => 'History is the study of past events.',
-        ]);
-        $subject7 = Subject::firstOrCreate([
-            'school_id' => $school2->id, // Add this line
-            'name' => 'Geography',
-            'slug' => Str::slug('Geography'),
-            'description' => 'Geography is the study of the Earth and its features.',
-        ]);
-        $subject8 = Subject::firstOrCreate([
-            'school_id' => $school2->id, // Add this line
-            'name' => 'Computer Science',
-            'slug' => Str::slug('Computer Science'),
-            'description' => 'Computer Science is the study of computers and computational systems.',
-        ]);
-        $subject9 = Subject::firstOrCreate([
-            'school_id' => $school2->id, // Add this line
-            'name' => 'Economics',
-            'slug' => Str::slug('Economics'),
-            'description' => 'Economics is the study of the production, distribution, and consumption of goods and services.',
-        ]);
-        $subject10 = Subject::firstOrCreate([
-            'school_id' => $school2->id, // Add this line
-            'name' => 'Government',
-            'slug' => Str::slug('Government'),
-            'description' => 'Government is the study of the political systems and structures of a country.',
-        ]);
+            // Add regular subjects for all schools
+            foreach ($this->regularSubjects as $subject) {
+                Subject::firstOrCreate(
+                    [                        'school_id' => $school->id,
+                        'name' => $subject['name'],
+                        'slug' => Str::slug($subject['name'])
+                    ],
+                    [
+                        'description' => $subject['description'],
+                        'is_active' => true
+                    ]
+                );
+            }
+        }
+        
+        Log::info('Subject seeding completed');
     }
 }

@@ -28,7 +28,7 @@ class PlansTableSeeder extends Seeder
                 'currency' => "NGN",
                 'features' => [
                     'Student Management',
-                    'Admission Management',
+                    
                     'Session & Term Management',
                     'Classroom Management',
                     'Exam Management',
@@ -53,6 +53,7 @@ class PlansTableSeeder extends Seeder
                 'currency' => "NGN",
                 'features' => [
                     'All Basic Features',
+                    'Admission Management',
                     'Advanced Analytics & Reporting',
                     'Import and Export Data from Excel',
                     'Receipt & Invoice Generation',
