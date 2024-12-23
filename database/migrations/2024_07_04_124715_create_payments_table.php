@@ -14,15 +14,16 @@ return new class extends Migration
     {
         Schema::create('payments', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('original_payment_id')->nullable()->constrained('payments')->nullOnDelete();      
+            $table->boolean('is_balance_payment')->default(false);
             $table->foreignId('school_id')->constrained()->onDelete('cascade');
             $table->foreignId('student_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('receiver_id')->nullable()->constrained('users')->onDelete('set null');
-            $table->foreignId('payment_type_id')->constrained()->onDelete('restrict');
             $table->foreignId('payment_method_id')->constrained()->onDelete('restrict');
+            $table->foreignId('class_room_id')->constrained()->onDelete('cascade');
             $table->foreignId('status_id')->constrained()->onDelete('restrict');
             $table->foreignId('academic_session_id')->nullable()->constrained()->onDelete('set null');
             $table->foreignId('term_id')->nullable()->constrained()->onDelete('set null');
-            $table->foreignId('class_room_id')->nullable()->constrained()->onDelete('set null');
             $table->string('reference')->unique()->nullable();
             $table->string('payer_name')->nullable();
             $table->string('payer_phone_number')->nullable();
@@ -38,7 +39,7 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index([ 'student_id', 'term_id','class_room_id']);
-           
+              $table->index(['original_payment_id', 'is_balance_payment']);
             $table->timestamps();
         });
     }

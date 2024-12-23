@@ -6,6 +6,7 @@ use App\Models\Term;
 use App\Models\User;
 use App\Models\Agent;
 use App\Models\Staff;
+use App\Models\Expense;
 use App\Models\Payment;
 use App\Models\Student;
 use App\Models\Subject;
@@ -15,22 +16,35 @@ use App\Models\Admission;
 use App\Models\ClassRoom;
 use App\Models\Designation;
 use App\Models\PaymentType;
+use App\Traits\HasFeatures;
 use App\Models\Subscription;
 use App\Models\PaymentMethod;
 use App\Models\Qualification;
 use App\Models\SalaryPayment;
 use App\Models\AdmLtrTemplate;
 use App\Models\AcademicSession;
+use App\Models\ExpenseCategory;
 use App\Models\VariableTemplate;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class School extends Model
 {
     use HasFactory;
+    use HasFeatures;
 
     protected $fillable = [
-        'name', 'email', 'slug', 'address', 'agent_id', 'phone', 'logo', 'settings'
+        'name',
+        'email',
+        'slug',
+        'address',
+        'agent_id',
+        'phone',
+        'logo',
+        'settings'
     ];
 
     public function agent()
@@ -55,6 +69,32 @@ class School extends Model
             ->where('ends_at', '>', now())
             ->latest('starts_at')
             ->first();
+    }
+
+    public function settings(): HasOne
+    {
+        return $this->hasOne(SchoolSettings::class);
+    }
+
+
+    public function getLogoUrlAttribute(): string
+    {
+        return $this->logo
+            ? Storage::url($this->logo)
+            : asset('img/sch_logo.png');
+    }
+
+
+    public function hasFeature(string $feature): bool
+    {
+        $subscription = $this->currentSubscription();
+        return $subscription ? $subscription->hasFeature($feature) : false;
+    }
+
+    public function features(): array
+    {
+        $subscription = $this->currentSubscription();
+        return $subscription ? $subscription->plan->features : [];
     }
 
     public function subscriptions()
@@ -146,5 +186,45 @@ class School extends Model
     public function qualifications()
     {
         return $this->hasMany(Qualification::class);
+    }
+
+    public function assessmentTypes()
+    {
+        return $this->hasMany(AssessmentType::class);
+    }
+
+    function GradingScales(): HasMany
+    {
+        return $this->hasMany(GradingScale::class);
+    }
+
+    function subjectAssessments(): HasMany
+    {
+        return $this->hasMany(SubjectAssessment::class);
+    }
+
+    function studentGrades(): HasMany
+    {
+        return $this->hasMany(StudentGrade::class);
+    }
+
+    function reportTemplates(): HasMany
+    {
+        return $this->hasMany(ReportTemplate::class);
+    }
+
+    function attendanceRecords(): HasMany
+    {
+        return $this->hasMany(AttendanceRecord::class);
+    }
+
+    public function expenseCategories()
+    {
+        return $this->hasMany(ExpenseCategory::class);
+    }
+
+    public function expenses()
+    {
+        return $this->hasMany(Expense::class);
     }
 }

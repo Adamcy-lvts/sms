@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Lga;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class State extends Model
 {
@@ -14,7 +15,7 @@ class State extends Model
         'name'
     ];
 
-    public function lgas()
+    public function lgas(): HasMany
     {
         return $this->hasMany(Lga::class);
     }

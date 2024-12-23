@@ -34,6 +34,7 @@ return new class extends Migration
             $table->string('account_name')->nullable();
             $table->string('profile_picture')->nullable();
             $table->text('emergency_contact')->nullable();
+            $table->string('signature')->nullable();
             $table->timestamps();
         });
     }

@@ -72,10 +72,14 @@ class Subscription extends Model
         ]);
     }
 
-    public function isActive()
+    public function isActive(): bool
     {
-        // Check if the subscription is active
-        return $this->status === 'active' && (!$this->ends_at || $this->ends_at > now());
+        return $this->status === 'active' && $this->ends_at > now();
+    }
+
+    public function hasFeature(string $feature): bool
+    {
+        return $this->isActive() && $this->plan->hasFeature($feature);
     }
 
     public function scopeActive($query)

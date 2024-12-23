@@ -16,9 +16,10 @@ return new class extends Migration
             $table->string('identification_number')->nullable();
             $table->foreignId('school_id')->constrained()->onDelete('cascade');
             $table->foreignId('class_room_id')->constrained('class_rooms');
-            $table->foreignId('user_id')->constrained()->nullable();
+            $table->foreignId('user_id')->nullable()->constrained(); // Changed to make nullable first
             $table->foreignId('admission_id')->constrained('admissions')->nullable(); 
             $table->foreignId('status_id')->constrained();
+            $table->foreignId('created_by')->constrained('users'); // Add this line
             $table->string('admission_number')->nullable();
             $table->string('first_name');
             $table->string('last_name');

@@ -10,7 +10,10 @@ use App\Models\Teacher;
 use App\Models\Designation;
 use App\Models\Qualification;
 use App\Models\SalaryPayment;
+use Filament\Facades\Filament;
+use App\Services\EmployeeIdGenerator;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Staff extends Model
@@ -39,8 +42,37 @@ class Staff extends Model
         'account_name',
         'profile_picture',
         'emergency_contact',
+        'signature',
     ];
 
+    // protected static function boot()
+    // {
+    //     parent::boot();
+
+    //     static::creating(function ($staff) {
+    //         if (empty($staff->employee_id)) {
+    //             $tenant = Filament::getTenant();
+    //             $settings = $tenant->getSettingsAttribute();
+    //             $generator = new EmployeeIdGenerator($settings);
+                
+    //             $staff->employee_id = $generator->generate([
+    //                 'id_format' => $settings->employee_id_format_type,
+    //                 'designation_id' => $staff->designation_id,
+    //             ]);
+    //         }
+    //     });
+    // }
+
+    public function getProfilePictureUrlAttribute()
+    {
+        // If the student has a profile photo, return it
+        if ($this->profile_picture && Storage::disk('public')->exists($this->profile_picture)) {
+            return asset('storage/' . $this->profile_picture);
+        }
+
+        // If not, return the default image
+        return asset('img/default.jpg');
+    }
 
     public function school()
     {

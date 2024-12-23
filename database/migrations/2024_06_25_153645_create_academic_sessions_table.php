@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('name'); // e.g., "2023/2024"
             $table->date('start_date');
             $table->date('end_date');
+            $table->boolean('is_current')->default(0);
             $table->timestamps();
         });
     }

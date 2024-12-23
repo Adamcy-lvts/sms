@@ -9,20 +9,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Qualification extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
-        'school_id',
         'staff_id',
-        'qualifications',
-        // 'name',
-        // 'institution',
-        // 'year_obtained',
-        // 'document_path',
+        'school_id',
+        'qualifications'
     ];
 
     protected $casts = [
-        'qualifications' => 'array',
+        'qualifications' => 'array'
     ];
 
     public function staff()

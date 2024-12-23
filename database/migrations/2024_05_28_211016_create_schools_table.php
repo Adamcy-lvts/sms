@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('schools', function (Blueprint $table) {
             $table->id();
             $table->string('name')->unique(); // Unique school name
+            $table->string('name_ar')->nullable()->unique(); // Unique school name
             $table->string('slug')->unique(); // Unique slug for URL identification
             $table->string('email')->unique(); // Unique email address
             $table->string('customer_code')->nullable();
