@@ -1,3 +1,4 @@
+{{-- resources/views/filament/pages/subscription-receipt.blade.php --}}
 <x-filament-panels::page>
     
     <div class="bg-white dark:bg-gray-800 p-8  rounded-lg mt-20 max-w-6xl ">

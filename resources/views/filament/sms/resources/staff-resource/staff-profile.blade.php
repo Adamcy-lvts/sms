@@ -1,8 +1,9 @@
 <x-filament-panels::page>
+
     <div class="mx-auto">
-        <x-filament::avatar src="{{ asset('storage/' . $staff->profile_picture) }}" alt="{{ $staff->full_name }}"
-            size="w-48 h-48" />
+        <x-filament::avatar src="{{ $staff->profile_picture_url }}" alt="{{ $staff->full_name }}" size="w-48 h-48" />
     </div>
+
 
     <div x-data="{ activeTab: 'profile', isTeacher: @json($staff->teacher()->exists()) }">
         <x-filament::tabs class="mb-5">
@@ -92,7 +93,7 @@
 
         <div x-show.transition="activeTab === 'salary'">
             <!-- Salary content here -->
-      
+
             {{ $this->table }}
         </div>
     </div>

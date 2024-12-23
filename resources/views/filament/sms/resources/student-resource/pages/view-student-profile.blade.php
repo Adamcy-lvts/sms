@@ -1,7 +1,7 @@
 <x-filament-panels::page>
+
     <div class="mx-auto">
-        <x-filament::avatar src="{{ asset('storage/' . $student->profile_picture) }}"
-            alt="{{ $student->admission->full_name }}" size="w-48 h-48" />
+        <x-filament::avatar src="{{ $student->profile_picture_url }}" alt="{{ $student->full_name }}" size="w-48 h-48" />
     </div>
 
     <div x-data="{ activeTab: 'profile' }">
@@ -39,70 +39,17 @@
             <div class=" ">
 
                 <div>
-                    @livewire(\App\Livewire\StudentStats::class)
+                    @livewire(\App\Livewire\StudentStats::class, [
+                        'student' => $this->student,
+                    ])
                 </div>
 
                 <div>
                     {{ $this->academicInfolist }}
                 </div>
-               
 
-                <div class="bg-white p-4 rounded-lg shadow mb-6">
-                    <h3 class="text-lg font-semibold mb-4">Performance Trend</h3>
-                    <div class="h-64 bg-gray-200 rounded flex items-center justify-center">
-                        <p class="text-gray-500">Chart placeholder: Line chart showing performance trend over time</p>
-                    </div>
-                </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-white p-4 rounded-lg shadow">
-                        <h3 class="text-lg font-semibold mb-4">Top Subjects</h3>
-                        <ul class="space-y-2">
-                            <li class="flex justify-between items-center">
-                                <span>Mathematics</span>
-                                <span class="font-bold">98%</span>
-                            </li>
-                            <li class="flex justify-between items-center">
-                                <span>Physics</span>
-                                <span class="font-bold">95%</span>
-                            </li>
-                            <li class="flex justify-between items-center">
-                                <span>Computer Science</span>
-                                <span class="font-bold">92%</span>
-                            </li>
-                        </ul>
-                    </div>
-
-                    <div class="bg-white p-4 rounded-lg shadow">
-                        <h3 class="text-lg font-semibold mb-4">Recent Achievements</h3>
-                        <ul class="space-y-2">
-                            <li class="flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 text-yellow-500"
-                                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                                </svg>
-                                <span>1st Place in Science Fair</span>
-                            </li>
-                            <li class="flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 text-blue-500"
-                                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                                </svg>
-                                <span>Perfect Attendance Award</span>
-                            </li>
-                            <li class="flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 text-green-500"
-                                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                                </svg>
-                                <span>Most Improved in English</span>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
+                
             </div>
         </div>
 
@@ -184,12 +131,14 @@
                     <h3 class="text-lg font-semibold mb-4">Upcoming Events</h3>
                     <ul class="space-y-4">
                         <li class="flex items-center">
-                            <div class="bg-blue-100 text-blue-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded">Mar
+                            <div class="bg-blue-100 text-blue-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded">
+                                Mar
                                 15</div>
                             <span>Inter-School Debate Competition</span>
                         </li>
                         <li class="flex items-center">
-                            <div class="bg-green-100 text-green-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded">Apr
+                            <div class="bg-green-100 text-green-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded">
+                                Apr
                                 02</div>
                             <span>Science Fair</span>
                         </li>
@@ -330,7 +279,8 @@
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2023-09-01</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Fall Semester Tuition
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Fall Semester
+                                        Tuition
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$6,000</td>
                                     <td class="px-6 py-4 whitespace-nowrap">
@@ -417,4 +367,5 @@
         </div>
 
     </div>
+
 </x-filament-panels::page>
