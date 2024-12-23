@@ -51,9 +51,9 @@ services:
       - smsnet 
   
   redis:
-    image: redis:latest
+    image: redis:alpine
     ports:
-      - "6380:6380"
+      - "6379:6379"
     networks:
       - smsnet 
 

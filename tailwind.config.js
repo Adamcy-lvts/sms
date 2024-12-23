@@ -13,6 +13,7 @@ export default {
         extend: {
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+                'arabic': ['Noto Naskh Arabic', 'Arial'],
             },
         },
     },
