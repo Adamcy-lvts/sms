@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use App\Models\Term;
 use App\Models\Student;
 use App\Models\ClassRoom;
+use App\Models\ReportCard;
 use App\Models\StudentGrade;
 use Filament\Facades\Filament;
 use App\Models\AttendanceRecord;
@@ -13,6 +14,7 @@ use App\Models\AttendanceSummary;
 use App\Models\SubjectAssessment;
 use App\Services\CalendarService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Container\Attributes\Log;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 
@@ -41,371 +43,295 @@ class StudentStats extends BaseWidget
             $this->getCurrentRankingStat(),
             // Best Subject Performance
             $this->getBestSubjectStat(),
-            // Assignment Completion
-            $this->getAssignmentCompletionStat(),
+            // Worst Subject Performance
+            $this->getWorstSubjectStat(),
+            // Commented out Assignment Completion
+            // $this->getAssignmentCompletionStat(),
         ];
     }
-
-
-    // protected function getAttendanceStat(): Stat
-    // {
-    //     $currentTerm = Term::find(config('app.current_term')->id);
-    //     $termStart = Carbon::parse($currentTerm->start_date);
-    //     $termEnd = Carbon::parse($currentTerm->end_date);
-    //     $today = Carbon::today();
-
-    //     // Get school days calculation
-    //     $schoolDays = $this->calendarService->getSchoolDays($this->student->school, $currentTerm);
-    //     $totalSchoolDays = $schoolDays['total_days'];
-
-    //     // Calculate days elapsed (excluding weekends and holidays)
-    //     $elapsedSchoolDays = 0;
-    //     $current = $termStart->copy();
-    //     while ($current <= min($today, $termEnd)) {
-    //         if (!$current->isWeekend() && !in_array($current->format('Y-m-d'), $schoolDays['excluded_dates'])) {
-    //             $elapsedSchoolDays++;
-    //         }
-    //         $current->addDay();
-    //     }
-    //     // Get attendance summaries
-    //     $attendanceSummary = AttendanceSummary::where('student_id', $this->student->id)
-    //         ->where('term_id', $currentTerm->id)
-    //         ->first();
-
-    //     if (!$attendanceSummary) {
-    //         return Stat::make('Attendance Rate', 'No Data')
-    //             ->description('No attendance records yet')
-    //             ->color('gray');
-    //     }
-
-    //     // Calculate term progress percentage
-    //     $termProgress = ($elapsedSchoolDays / $totalSchoolDays) * 100;
-
-    //     // Only show rating if term is at least 25% complete
-    //     if ($termProgress < 25) {
-    //         return Stat::make('Attendance Rate', 'Term Started')
-    //             ->description('Too early to calculate')
-    //             ->color('info');
-    //     }
-
-    //     $currentRate = (float) $attendanceSummary->attendance_percentage;
-    //     $daysPresent = $attendanceSummary->present_count;
-
-    //     // Calculate attendance based on elapsed days instead of total term days
-    //     $adjustedRate = ($daysPresent / $elapsedSchoolDays) * 100;
-
-    //     $description = match (true) {
-    //         $termProgress >= 90 => 'Term nearly complete',
-    //         $termProgress >= 50 => 'Mid-term progress',
-    //         default => 'Term in progress'
-    //     };
-
-    //     $color = match (true) {
-    //         $adjustedRate >= 90 => 'success',
-    //         $adjustedRate >= 75 => 'info',
-    //         $adjustedRate >= 60 => 'warning',
-    //         default => 'danger'
-    //     };
-
-    //     return Stat::make('Attendance Rate', number_format($adjustedRate, 1) . '%')
-    //         ->description($description)
-    //         ->descriptionIcon('heroicon-m-calendar')
-    //         ->color($color)
-    //         ->chart([$adjustedRate]);
-    // }
-
 
 
     protected function getAttendanceStat(): Stat
     {
-        // Keep current term calculations
-        $currentTermStats = $this->getCurrentTermStats();
-        if (!$currentTermStats['hasData']) {
-            return $currentTermStats['stat'];
+        // Get current term information
+        $currentTerm = Term::find(config('app.current_term')->id);
+        $termStart = Carbon::parse($currentTerm->start_date);
+        $termEnd = Carbon::parse($currentTerm->end_date);
+        $today = Carbon::today();
+
+        // Check if term is already completed
+        $isTermCompleted = $termEnd->isPast();
+
+        // Get school days calculation
+        $schoolDays = $this->calendarService->getSchoolDays($this->student->school, $currentTerm);
+        $totalSchoolDays = $schoolDays['total_days'];
+
+        // Calculate elapsed school days
+        $elapsedSchoolDays = 0;
+        $current = $termStart->copy();
+        while ($current <= min($today, $termEnd)) {
+            if (!$current->isWeekend() && !in_array($current->format('Y-m-d'), $schoolDays['excluded_dates'])) {
+                $elapsedSchoolDays++;
+            }
+            $current->addDay();
         }
 
-        // Add historical context
-        $historicalStats = $this->getHistoricalStats();
+        // Get attendance summaries
+        $attendanceSummary = AttendanceSummary::where('student_id', $this->student->id)
+            ->where('term_id', $currentTerm->id)
+            ->first();
 
-        return Stat::make('Attendance Rate', number_format($currentTermStats['adjustedRate'], 1) . '%')
-            ->description($this->getAttendanceDescription($currentTermStats, $historicalStats))
+        if (!$attendanceSummary) {
+            return Stat::make('Attendance Rate', 'No Data')
+                ->description('No attendance records available')
+                ->color('gray');
+        }
+
+        // Calculate term progress percentage
+        $termProgress = ($elapsedSchoolDays / $totalSchoolDays) * 100;
+
+        if ($termProgress < 25) {
+            return Stat::make('Attendance Rate', 'Term Started')
+                ->description('Term recently started - attendance tracking in progress')
+                ->color('info');
+        }
+
+        // Include both present AND late attendance
+        $daysPresent = $attendanceSummary->present_count + $attendanceSummary->late_count;
+
+        // Calculate adjusted attendance rate
+        $adjustedRate = ($daysPresent / $elapsedSchoolDays) * 100;
+
+        // Create a more concise description based on the image example
+        // Simplified status description
+        $description = match (true) {
+            $isTermCompleted => 'Completed -Term attendance',
+            $termProgress >= 90 => 'Term ending soon',
+            $termProgress >= 50 => 'Mid-Term in progress',
+            $termProgress >= 25 => 'Term in progress',
+            default => 'Term started'
+        };
+
+        $color = match (true) {
+            $adjustedRate >= 90 => 'success',    // Excellent attendance
+            $adjustedRate >= 75 => 'info',       // Good attendance
+            $adjustedRate >= 60 => 'warning',    // Fair attendance
+            default => 'danger'                  // Poor attendance
+        };
+
+        return Stat::make('Attendance Rate', number_format($adjustedRate, 1) . '%')
+            ->description($description)
             ->descriptionIcon('heroicon-m-calendar')
-            ->color($currentTermStats['color'])
-            // Show trend with historical data
-            ->chart(array_merge(
-                $historicalStats['rates'],
-                [$currentTermStats['adjustedRate']]
-            ));
+            ->color($color)
+            ->chart([$adjustedRate]);
     }
 
-    private function getHistoricalStats(): array
-    {
-        // Get last 3 terms' attendance
-        return AttendanceSummary::where('student_id', $this->student->id)
-            ->whereNot('term_id', config('app.current_term')->id)
-            ->orderBy('created_at', 'desc')
-            ->take(3)
-            ->get()
-            ->map(fn($summary) => $summary->attendance_percentage)
-            ->toArray();
-    }
-
-
-    // protected function getCurrentRankingStat(): Stat
-    // {
-    //     // Get current class grades
-    //     $currentClassGrades = StudentGrade::whereHas('student', function ($query) {
-    //         $query->where('class_room_id', $this->student->class_room_id);
-    //     })
-    //         ->whereHas('assessment', function ($query) {
-    //             $query->where([
-    //                 'academic_session_id' => config('app.current_session')->id,
-    //                 'term_id' => config('app.current_term')->id
-    //             ]);
-    //         })
-    //         ->get();
-
-    //     if ($currentClassGrades->isEmpty()) {
-    //         return Stat::make('Current Ranking', 'No Data')
-    //             ->description('No grades recorded yet')
-    //             ->color('gray');
-    //     }
-
-    //     // Calculate averages and rank
-    //     $averages = $currentClassGrades
-    //         ->groupBy('student_id')
-    //         ->map(fn($grades) => $grades->avg('score'))
-    //         ->sort()
-    //         ->reverse();
-
-    //     $totalStudents = $averages->count();
-    //     $rank = $averages->keys()->search($this->student->id) + 1;
-    //     $percentile = (($totalStudents - $rank + 1) / $totalStudents) * 100;
-
-    //     // Get previous ranking if available
-    //     $previousRank = $this->getPreviousRanking();
-    //     $rankChange = $previousRank ? $previousRank - $rank : null;
-
-    //     return Stat::make('Class Ranking', $this->getOrdinal($rank) . ' of ' . $totalStudents)
-    //         ->description(
-    //             $rankChange !== null
-    //                 ? sprintf(
-    //                     '%s %d position(s)',
-    //                     $rankChange > 0 ? 'Improved' : 'Dropped',
-    //                     abs($rankChange)
-    //                 )
-    //                 : "Top " . number_format($percentile, 0) . "% of class"
-    //         )
-    //         ->descriptionIcon($rankChange > 0 ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down')
-    //         ->color($percentile >= 75 ? 'success' : ($percentile >= 50 ? 'warning' : 'danger'));
-    // }
 
     protected function getCurrentRankingStat(): Stat
     {
-        // Try to get average ranking from previous classes first
-        $averageRanking = $this->getAverageHistoricalRanking();
-        if ($averageRanking) {
-            return $this->formatRankingStat($averageRanking, 'Historical Average');
-        }
-
-        // Fallback to current/previous term ranking in current class
-        $currentRanking = $this->getCurrentTermRanking() ?? $this->getPreviousTermRanking();
-        if ($currentRanking) {
-            return $this->formatRankingStat($currentRanking, 'Current Class');
-        }
-
-        return Stat::make('Class Ranking', 'No Data')
-            ->description('Insufficient grade data')
-            ->color('gray');
-    }
-
-    protected function getAverageHistoricalRanking(): ?array
-    {
-        // Get all previous classes
-        $previousClasses = ClassRoom::where('school_id', $this->student->school_id)
-            ->where('id', '!=', $this->student->class_room_id)
-            ->get();
-
-        $rankings = collect();
-
-        foreach ($previousClasses as $class) {
-            $termRankings = StudentGrade::whereHas(
-                'student',
-                fn($q) =>
-                $q->where('class_room_id', $class->id)
-            )->get()
-                ->groupBy('term_id')
-                ->map(function ($grades) {
-                    $averages = $grades->groupBy('student_id')
-                        ->map(fn($g) => $g->avg('score'))
-                        ->sort()
-                        ->reverse();
-
-                    $rank = $averages->keys()->search($this->student->id) + 1;
-                    $total = $averages->count();
-
-                    return [
-                        'rank' => $rank,
-                        'total' => $total,
-                        'percentile' => (($total - $rank + 1) / $total) * 100
-                    ];
-                });
-
-            $rankings = $rankings->merge($termRankings);
-        }
-
-        if ($rankings->isEmpty()) return null;
-
-        return [
-            'rank' => round($rankings->avg('rank')),
-            'total' => round($rankings->avg('total')),
-            'percentile' => $rankings->avg('percentile')
-        ];
-    }
-
-    protected function getCurrentTermRanking(): ?array
-    {
-        return $this->getTermRanking(
-            $this->student->class_room_id,
-            config('app.current_session')->id,
-            config('app.current_term')->id
-        );
-    }
-
-    protected function getPreviousTermRanking(): ?array
-    {
-        $previousTerm = Term::where('school_id', $this->student->school_id)
-            ->where('start_date', '<', config('app.current_term')->start_date)
-            ->orderBy('start_date', 'desc')
+        // First try to get current term's report card
+        $currentReport = ReportCard::query()
+            ->where('student_id', $this->student->id)
+            ->whereIn('status', ['final', 'published'])
+            ->where('academic_session_id', config('app.current_session')->id)
+            ->where('term_id', config('app.current_term')->id)
+            ->where('class_size', '>', 0)
             ->first();
 
-        if (!$previousTerm) return null;
+        // If no current report, get the most recent previous report
+        if (!$currentReport) {
+            $previousReport = ReportCard::query()
+                ->where('student_id', $this->student->id)
+                ->whereIn('status', ['final', 'published'])
+                ->where('class_size', '>', 0)
+                ->latest()
+                ->first();
 
-        return $this->getTermRanking(
-            $this->student->class_room_id,
-            config('app.current_session')->id,
-            $previousTerm->id
-        );
+            if (!$previousReport) {
+                return $this->getNullRankingStat();
+            }
+
+            // Format the term information for previous report
+            $termInfo = "{$previousReport->academicSession->name} - {$previousReport->term->name}";
+            
+            return $this->formatRankingStat([
+                'rank' => (int) preg_replace('/[^0-9]/', '', $previousReport->position),
+                'total' => (int) $previousReport->class_size,
+                'average' => $previousReport->average_score ?? 0,
+            ], "Previous ($termInfo)");
+        }
+
+        // Return current term ranking
+        return $this->formatRankingStat([
+            'rank' => (int) preg_replace('/[^0-9]/', '', $currentReport->position),
+            'total' => (int) $currentReport->class_size,
+            'average' => $currentReport->average_score ?? 0,
+        ], 'Current Term');
     }
 
-    protected function getTermRanking($classId, $sessionId, $termId): ?array
+    protected function getNullRankingStat(): Stat
     {
-        $grades = StudentGrade::whereHas(
-            'student',
-            fn($q) =>
-            $q->where('class_room_id', $classId)
-        )->whereHas(
-            'assessment',
-            fn($q) =>
-            $q->where([
-                'academic_session_id' => $sessionId,
-                'term_id' => $termId
-            ])
-        )->get();
-
-        if ($grades->isEmpty()) return null;
-
-        $averages = $grades->groupBy('student_id')
-            ->map(fn($g) => $g->avg('score'))
-            ->sort()
-            ->reverse();
-
-        $rank = $averages->keys()->search($this->student->id) + 1;
-        $total = $averages->count();
-
-        return [
-            'rank' => $rank,
-            'total' => $total,
-            'percentile' => (($total - $rank + 1) / $total) * 100
-        ];
+        return Stat::make('Class Ranking', 'Not Available')
+            ->description('No ranking data available yet')
+            ->descriptionIcon('heroicon-m-academic-cap')
+            ->color('gray')
+            ->chart([0]);
     }
 
     protected function formatRankingStat(array $data, string $type): Stat
     {
+        $percentile = (($data['total'] - $data['rank'] + 1) / $data['total']) * 100;
+
+        $performance = match (true) {
+            $percentile >= 75 => 'Excellent - Top Quarter',
+            $percentile >= 50 => 'Above Average - Top Half',
+            $percentile >= 25 => 'Below Average',
+            default => 'Needs Improvement'
+        };
+
+        $color = match(true) {
+            str_contains($type, 'Previous') => 'info',
+            $percentile >= 75 => 'success',
+            $percentile >= 50 => 'warning',
+            default => 'danger'
+        };
+
         return Stat::make(
             'Class Ranking',
             $this->getOrdinal($data['rank']) . ' of ' . $data['total']
         )
-            ->description($type . ' - Top ' . number_format($data['percentile'], 0) . '%')
+            ->description("$type - $performance")
             ->descriptionIcon('heroicon-m-academic-cap')
-            ->color(
-                $data['percentile'] >= 75 ? 'success' : ($data['percentile'] >= 50 ? 'warning' : 'danger')
-            );
+            ->color($color);
     }
 
     protected function getBestSubjectStat(): Stat
     {
-        // Get student's subject performances
-        $subjectPerformances = StudentGrade::where('student_id', $this->student->id)
-            ->with(['assessment.subject'])
-            ->get()
-            ->groupBy('assessment.subject.name')
-            ->map(function ($grades) {
-                return [
-                    'average' => $grades->avg('score'),
-                    'trend' => $this->calculateSubjectTrend($grades)
-                ];
-            });
-
-        if ($subjectPerformances->isEmpty()) {
-            return Stat::make('Best Subject', 'No Data')
-                ->description('No subject grades yet')
-                ->color('gray');
-        }
-
-        // Find best subject
-        $bestSubject = $subjectPerformances
-            ->sortByDesc('average')
+        // Try to get current term's report card first
+        $currentReport = ReportCard::query()
+            ->where('student_id', $this->student->id)
+            ->whereIn('status', ['final', 'published'])
+            ->where('academic_session_id', config('app.current_session')->id)
+            ->where('term_id', config('app.current_term')->id)
             ->first();
 
-        $bestSubjectName = $subjectPerformances->keys()->first();
+        // If no current report, get the most recent previous report
+        if (!$currentReport || empty($currentReport->subject_scores)) {
+            $previousReport = ReportCard::query()
+                ->where('student_id', $this->student->id)
+                ->whereIn('status', ['final', 'published'])
+                ->latest()
+                ->first();
 
-        return Stat::make('Best Subject', $bestSubjectName)
-            ->description(sprintf('%.1f%% average', $bestSubject['average']))
-            ->descriptionIcon(
-                $bestSubject['trend'] > 0
-                    ? 'heroicon-m-arrow-trending-up'
-                    : 'heroicon-m-arrow-trending-down'
-            )
-            ->color('success');
+            if (!$previousReport || empty($previousReport->subject_scores)) {
+                return Stat::make('Best Subject', 'No Data')
+                    ->description('No subject grades yet')
+                    ->color('gray');
+            }
+
+            $subjects = collect($previousReport->subject_scores)->sortByDesc('total');
+            $bestSubject = $subjects->first();
+            $termInfo = "{$previousReport->academicSession->name} - {$previousReport->term->name}";
+
+            return $this->formatSubjectStat(
+                'Best Subject',
+                $bestSubject,
+                "Previous ($termInfo)",
+                true
+            );
+        }
+
+        // Return current term best subject
+        $subjects = collect($currentReport->subject_scores)->sortByDesc('total');
+        return $this->formatSubjectStat(
+            'Best Subject',
+            $subjects->first(),
+            'Current Term',
+            false
+        );
     }
 
+    protected function getWorstSubjectStat(): Stat
+    {
+        // Try to get current term's report card first
+        $currentReport = ReportCard::query()
+            ->where('student_id', $this->student->id)
+            ->whereIn('status', ['final', 'published'])
+            ->where('academic_session_id', config('app.current_session')->id)
+            ->where('term_id', config('app.current_term')->id)
+            ->first();
+
+        // If no current report, get the most recent previous report
+        if (!$currentReport || empty($currentReport->subject_scores)) {
+            $previousReport = ReportCard::query()
+                ->where('student_id', $this->student->id)
+                ->whereIn('status', ['final', 'published'])
+                ->latest()
+                ->first();
+
+            if (!$previousReport || empty($previousReport->subject_scores)) {
+                return Stat::make('Weakest Subject', 'No Data')
+                    ->description('No subject grades yet')
+                    ->color('gray');
+            }
+
+            $subjects = collect($previousReport->subject_scores)->sortBy('total');
+            $worstSubject = $subjects->first();
+            $termInfo = "{$previousReport->academicSession->name} - {$previousReport->term->name}";
+
+            return $this->formatSubjectStat(
+                'Weakest Subject',
+                $worstSubject,
+                "Previous ($termInfo)",
+                true
+            );
+        }
+
+        // Return current term worst subject
+        $subjects = collect($currentReport->subject_scores)->sortBy('total');
+        return $this->formatSubjectStat(
+            'Weakest Subject',
+            $subjects->first(),
+            'Current Term',
+            false
+        );
+    }
+
+    protected function formatSubjectStat(string $label, array $subject, string $term, bool $isPrevious): Stat
+    {
+        $subjectName = $subject['name_ar']
+            ? "{$subject['name']} ({$subject['name_ar']})"
+            : $subject['name'];
+
+        $color = $isPrevious 
+            ? 'info' 
+            : $this->getPerformanceColor($subject['total']);
+
+        return Stat::make($label, $subjectName)
+            ->description("$term - {$subject['total']}% - {$subject['remark']}")
+            ->descriptionIcon('heroicon-m-academic-cap')
+            ->color($color);
+    }
+
+    protected function getPerformanceColor(float $score): string
+    {
+        return match (true) {
+            $score >= 70 => 'success',  // Excellent performance
+            $score >= 60 => 'info',     // Good performance
+            $score >= 50 => 'warning',  // Fair performance
+            default => 'danger'         // Poor performance
+        };
+    }
+
+    // Comment out or remove the getAssignmentCompletionStat method
+    /*
     protected function getAssignmentCompletionStat(): Stat
     {
-        // Implementation depends on how assignments are tracked
-        // This is a placeholder that you'll need to customize
         return Stat::make('Assignment Completion', 'Coming Soon')
             ->description('Feature in development')
             ->color('gray');
     }
-
-    // Helper Methods
-
-    protected function getPreviousRanking(): ?int
-    {
-        // Get previous term's ranking
-        $previousTerm = Term::where('school_id', $this->student->school_id)
-            ->where('start_date', '<', config('app.current_term')->start_date)
-            ->orderBy('start_date', 'desc')
-            ->first();
-
-        if (!$previousTerm) return null;
-
-        // Calculate previous ranking logic here
-        // Similar to current ranking calculation but for previous term
-        return null; // Placeholder
-    }
-
-    protected function calculateSubjectTrend($grades)
-    {
-        if ($grades->count() < 2) return 0;
-
-        $chronological = $grades->sortBy('assessment.assessment_date');
-        $first = $chronological->first()->score;
-        $last = $chronological->last()->score;
-
-        return $last - $first;
-    }
+    */
 
     protected function getOrdinal($number)
     {

@@ -7,6 +7,7 @@ use App\Models\Staff;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\ActivityType;
+use App\Models\StudentGrade;
 use App\Helpers\CommentOptions;
 use App\Models\BehavioralTrait;
 use Illuminate\Database\Seeder;
@@ -109,12 +110,11 @@ class StudentTraitActivitySeeder extends Seeder
                     }
 
                     // Calculate overall performance for comments
-                    $avgScore = collect($student->grades()
-                        ->whereHas('assessment', function ($query) use ($term) {
-                            $query->where('term_id', $term->id);
-                        })
-                        ->get())
-                        ->avg('score') ?? 60; // Default to 60 if no grades
+                    $avgScore = StudentGrade::where([
+                        'student_id' => $student->id,
+                        'academic_session_id' => $session->id,
+                        'term_id' => $term->id,
+                    ])->avg('score') ?? 60; // Default to 60 if no grades
 
                     $avgBehavior = collect($traitScores)->avg() ?? 3;
                     $avgActivity = collect($activityScores)->avg() ?? 3;

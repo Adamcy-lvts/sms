@@ -12,11 +12,9 @@ class PaymentMethodTableSeeder extends Seeder
      */
     public function run(): void
     {
-        $school = \App\Models\School::findOrFail(2);
 
         $paymentMethods = [
             [
-                'school_id' => $school->id,
                 'name' => 'Bank Transfer',
                 'slug' => 'bank-transfer',
                 'description' => 'Payment made through bank transfer',
@@ -24,7 +22,6 @@ class PaymentMethodTableSeeder extends Seeder
                 'active' => true
             ],
             [
-                'school_id' => $school->id,
                 'name' => 'POS',
                 'slug' => 'pos',
                 'description' => 'Payment made through POS',
@@ -32,7 +29,6 @@ class PaymentMethodTableSeeder extends Seeder
                 'active' => true
             ],
             [
-                'school_id' => $school->id,
                 'name' => 'Cash',
                 'slug' => 'cash',
                 'description' => 'Payment made with cash',
@@ -40,7 +36,6 @@ class PaymentMethodTableSeeder extends Seeder
                 'active' => true
             ],
             [
-                'school_id' => $school->id,
                 'name' => 'Cheque',
                 'slug' => 'cheque',
                 'description' => 'Payment made with cheque',

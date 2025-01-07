@@ -39,37 +39,120 @@ class BulkReportCardService
         $this->statusService = $statusService;
     }
 
+    // public function startBulkGeneration(ClassRoom $classRoom, int $termId, int $academicSessionId, ?int $templateId = null): string
+    // {
+    //     $this->userId = auth()->id();
+    //     try {
+    //         Log::info('Starting bulk report generation', [
+    //             'class_room' => $classRoom->id,
+    //             'term_id' => $termId,
+    //             'session_id' => $academicSessionId
+    //         ]);
+
+    //         // Create batch ID
+    //         $batchId = Str::uuid()->toString();
+
+    //         // Create consistent temp directory path
+    //         $tempDir = storage_path("app/temp/reports/{$batchId}");
+    //         if (!File::exists($tempDir)) {
+    //             File::makeDirectory($tempDir, 0755, true);
+    //         }
+
+    //         // Get active students
+    //         $students = Student::where('class_room_id', $classRoom->id)
+    //             ->where('status_id', $this->statusService->getActiveStudentStatusId())
+    //             ->get();
+
+    //         if ($students->isEmpty()) {
+    //             throw new \Exception('No active students found in this class.');
+    //         }
+
+    //         // Prepare school logo
+    //         $schoolLogo = $this->prepareSchoolLogo($classRoom->school);
+
+    //         // Create jobs collection
+    //         $jobs = $students->map(function ($student) use ($termId, $academicSessionId, $templateId, $tempDir, $schoolLogo) {
+    //             return new GenerateStudentReportPDF(
+    //                 $student,
+    //                 $termId,
+    //                 $academicSessionId,
+    //                 $templateId,
+    //                 $tempDir,
+    //                 $schoolLogo
+    //             );
+    //         });
+
+    //         // Create and configure the batch
+    //         $batch = Bus::batch($jobs)
+    //             ->name("Generate Report Cards - {$classRoom->name}")
+    //             ->allowFailures()
+    //             ->then(function (Batch $batch) use ($tempDir, $batchId) {
+    //                 Log::info('All reports generated successfully', [
+    //                     'batch_id' => $batch->id,
+    //                     'total_jobs' => $batch->totalJobs
+    //                 ]);
+
+    //                 // Create ZIP file using the same temp directory
+    //                 // dispatch(new CreateReportZip($batch->id, $tempDir, $this->userId))
+    //                 //     ->onQueue('pdf-generation');
+    //             })
+    //             // Remove the finally callback that was cleaning up the directory
+    //             ->onQueue('pdf-generation')
+    //             ->dispatch();
+    //         cache(['report_batch_id_' . auth()->id() => $batch->id], now()->addHour());
+    //         // dd($batch);
+    //         Log::info('Batch created successfully', [
+    //             'batch_id' => $batch->id,
+    //             'batche' => $batch
+    //         ]);
+
+    //         return $batch->id;
+    //     } catch (\Exception $e) {
+    //         Log::error('Failed to start bulk generation', [
+    //             'error' => $e->getMessage(),
+    //             'trace' => $e->getTraceAsString()
+    //         ]);
+
+    //         if (isset($tempDir) && File::exists($tempDir)) {
+    //             File::deleteDirectory($tempDir);
+    //         }
+
+    //         throw $e;
+    //     }
+    // }
+
     public function startBulkGeneration(ClassRoom $classRoom, int $termId, int $academicSessionId, ?int $templateId = null): string
     {
         $this->userId = auth()->id();
         try {
+            // Log start of bulk generation process
             Log::info('Starting bulk report generation', [
                 'class_room' => $classRoom->id,
                 'term_id' => $termId,
                 'session_id' => $academicSessionId
             ]);
-
-            // Create batch ID
+    
+            // Create unique batch identifier
             $batchId = Str::uuid()->toString();
-
-            // Create consistent temp directory path
+    
+            // Setup temporary directory for PDF storage
             $tempDir = storage_path("app/temp/reports/{$batchId}");
             if (!File::exists($tempDir)) {
                 File::makeDirectory($tempDir, 0755, true);
             }
-
+    
             // Get active students
             $students = Student::where('class_room_id', $classRoom->id)
                 ->where('status_id', $this->statusService->getActiveStudentStatusId())
                 ->get();
-
+    
             if ($students->isEmpty()) {
                 throw new \Exception('No active students found in this class.');
             }
-
+    
             // Prepare school logo
             $schoolLogo = $this->prepareSchoolLogo($classRoom->school);
-
+    
             // Create jobs collection
             $jobs = $students->map(function ($student) use ($termId, $academicSessionId, $templateId, $tempDir, $schoolLogo) {
                 return new GenerateStudentReportPDF(
@@ -81,41 +164,61 @@ class BulkReportCardService
                     $schoolLogo
                 );
             });
+    
+            // Define batch with proper job chains
+            $batch = Bus::batch([
+                // First chain: Generate PDFs
+                $jobs->toArray(),
+                // Second chain: Create ZIP
+                [new CreateReportZip($batchId, $tempDir, $this->userId)]
+            ])
+            ->then(function (Batch $batch) {
+                Log::info('Batch completed successfully', [
+                    'batch_id' => $batch->id,
+                    'total_jobs' => $batch->totalJobs,
+                    'processed_jobs' => $batch->processedJobs()
+                ]);
+            })
+            ->catch(function (Batch $batch, Throwable $e) {
+                Log::error('Batch failed', [
+                    'batch_id' => $batch->id,
+                    'error' => $e->getMessage()
+                ]);
+            })
+            ->finally(function (Batch $batch) {
+                Log::info('Batch finished processing', [
+                    'batch_id' => $batch->id,
+                    'finished' => $batch->finished(),
+                    'cancelled' => $batch->cancelled()
+                ]);
+            })
+            ->name("Generate Report Cards - {$classRoom->name}")
+            ->allowFailures() // Allow individual jobs to fail without cancelling the entire batch
+            ->onQueue('pdf-generation')
+            ->dispatch();
 
-            // Create and configure the batch
-            $batch = Bus::batch($jobs)
-                ->name("Generate Report Cards - {$classRoom->name}")
-                ->allowFailures()
-                ->then(function (Batch $batch) use ($tempDir, $batchId) {
-                    Log::info('All reports generated successfully', [
-                        'batch_id' => $batch->id,
-                        'total_jobs' => $batch->totalJobs
-                    ]);
-
-                    // Create ZIP file using the same temp directory
-                    dispatch(new CreateReportZip($batch->id, $tempDir,$this->userId))
-                        ->onQueue('pdf-generation');
-                })
-                // Remove the finally callback that was cleaning up the directory
-                ->onQueue('pdf-generation')
-                ->dispatch();
-                cache(['report_batch_id_' . auth()->id() => $batch->id], now()->addHour());
-            Log::info('Batch created successfully', [
-                'batch_id' => $batch->id,
-                'batche' => $batch
-            ]);
-
+            // Cache batch information
+            cache([
+                'report_batch_' . auth()->id() => [
+                    'id' => $batch->id,
+                    'class' => $classRoom->name,
+                    'total_jobs' => $batch->totalJobs
+                ]
+            ], now()->addHour());
+    
             return $batch->id;
+    
         } catch (\Exception $e) {
             Log::error('Failed to start bulk generation', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-
+    
+            // Cleanup temporary directory on failure
             if (isset($tempDir) && File::exists($tempDir)) {
                 File::deleteDirectory($tempDir);
             }
-
+    
             throw $e;
         }
     }

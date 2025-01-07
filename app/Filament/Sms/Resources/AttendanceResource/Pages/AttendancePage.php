@@ -55,15 +55,25 @@ class AttendancePage extends Page implements HasForms, HasTable
 
     public function mount(): void
     {
+        $currentSession = config('app.current_session');
+        $currentTerm = config('app.current_term');
+
         $this->form->fill([
-            'academic_session_id' => config('app.current_session')->id,
-            'term_id' => config('app.current_term')->id,
+            'academic_session_id' => $currentSession->id ?? null,
+            'term_id' => $currentTerm->id ?? null,
             'date' => now()->format('Y-m-d'),
         ]);
     }
 
     public function table(Table $table): Table
     {
+        $tenant = Filament::getTenant();
+        
+        if (!$tenant) {
+            Log::error('No tenant found in attendance page');
+            return $table->query(Student::query()->where('id', 0)); // Empty query
+        }
+
         return $table
             ->query(Student::query()->with(['admission']))
             ->defaultSort('full_name', 'asc')
@@ -82,41 +92,38 @@ class AttendancePage extends Page implements HasForms, HasTable
                     ->label('Admission No.')
                     ->searchable()
                     ->sortable()
-                    ->visibleFrom('md'),
+                    ->visibleFrom('md')
+                    ->formatStateUsing(fn ($state) => $state ?? 'N/A'),
 
                 TextColumn::make('classRoom.name')
                     ->label('Class')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->formatStateUsing(fn ($state) => $state ?? 'Unassigned'),
 
                 TextColumn::make('todayAttendance')
                     ->label('Today\'s Attendance')
                     ->state(function (Student $record): string {
-                        $attendance = \App\Models\AttendanceRecord::where([
-                            'student_id' => $record->id,
+                        $attendance = AttendanceRecord::where([
+                            'student_id' => $record->id ?? 0,
                             'date' => now()->toDateString(),
                         ])->first();
 
                         if (!$attendance) return '-';
 
-                        $status = $attendance->status;
-
-                        // Add an indicator if the attendance was modified
-                        if ($attendance->modified_by) {
-                            $status .= ' (edited)';
-                        }
-
-                        return $status;
+                        return ($attendance->status ?? '-') . 
+                            ($attendance->modified_by ? ' (edited)' : '');
                     })
                     ->badge()
                     ->color(fn(string $state): string => match (explode(' ', $state)[0]) {
                         'present' => 'success',
                         'absent' => 'danger',
+                        'error' => 'gray',
                         default => 'gray',
                     })
                     ->tooltip(function (Student $record): ?string {
-                        $attendance = \App\Models\AttendanceRecord::where([
-                            'student_id' => $record->id,
+                        $attendance = AttendanceRecord::where([
+                            'student_id' => $record->id ?? 0,
                             'date' => now()->toDateString(),
                         ])->first();
 
@@ -124,14 +131,21 @@ class AttendancePage extends Page implements HasForms, HasTable
                             return null;
                         }
 
-                        return "Modified by: {$attendance->modifiedBy->name}\nReason: {$attendance->remarks}";
+                        $modifiedBy = $attendance->modifiedBy?->name ?? 'Unknown User';
+                        $remarks = $attendance->remarks ?? 'No reason provided';
+
+                        return "Modified by: {$modifiedBy}\nReason: {$remarks}";
                     }),
             ])
             ->filters([
                 SelectFilter::make('class_room_id')
                     ->label('Class')
-                    ->options(fn() => ClassRoom::where('school_id', Filament::getTenant()->id)
-                        ->pluck('name', 'id'))
+                    ->options(function () use ($tenant) {
+                        return ClassRoom::where('school_id', $tenant?->id ?? 0)
+                            ->pluck('name', 'id')
+                            ->filter()
+                            ->toArray() ?? [];
+                    })
                     ->multiple()
                     ->preload(),
 
@@ -167,31 +181,44 @@ class AttendancePage extends Page implements HasForms, HasTable
                             ->maxLength(255),
                     ])
                     ->action(function (Student $record, array $data) {
-                        $attendance = \App\Models\AttendanceRecord::where([
-                            'student_id' => $record->id,
-                            'date' => now()->toDateString(),
-                        ])->first();
+                        try {
+                            $attendance = AttendanceRecord::where([
+                                'student_id' => $record->id ?? 0,
+                                'date' => now()->toDateString(),
+                            ])->first();
 
-                        $oldStatus = $attendance->status;
+                            if (!$attendance) {
+                                throw new \Exception('Attendance record not found');
+                            }
 
-                        $attendance->update([
-                            'status' => $data['status'],
-                            'remarks' => $data['remarks'],
-                            'modified_by' => Auth::id(),
-                        ]);
+                            $oldStatus = $attendance->status ?? 'unknown';
 
-                        // Recalculate attendance summary
-                        \App\Models\AttendanceSummary::calculateForStudent(
-                            $record,
-                            config('app.current_session')->id,
-                            config('app.current_term')->id
-                        );
+                            $attendance->update([
+                                'status' => $data['status'] ?? 'present',
+                                'remarks' => $data['remarks'] ?? '',
+                                'modified_by' => Auth::id(),
+                            ]);
 
-                        Notification::make()
-                            ->success()
-                            ->title('Attendance Updated')
-                            ->body("Status changed from {$oldStatus} to {$data['status']}")
-                            ->send();
+                            // Recalculate attendance summary
+                            \App\Models\AttendanceSummary::calculateForStudent(
+                                $record,
+                                config('app.current_session')->id,
+                                config('app.current_term')->id
+                            );
+
+                            Notification::make()
+                                ->success()
+                                ->title('Attendance Updated')
+                                ->body("Status changed from {$oldStatus} to {$data['status']}")
+                                ->send();
+                        } catch (\Exception $e) {
+                            Log::error('Error updating attendance: ' . $e->getMessage());
+                            Notification::make()
+                                ->danger()
+                                ->title('Error')
+                                ->body('Failed to update attendance')
+                                ->send();
+                        }
                     }),
 
                 Action::make('markPresent')
@@ -330,47 +357,64 @@ class AttendancePage extends Page implements HasForms, HasTable
                     ->requiresConfirmation()
                     ->modalHeading('Mark Selected Students Present')
                     ->action(function (Collection $records): void {
-                        $marked = 0;
-                        $skipped = 0;
+                        try {
+                            $currentSession = config('app.current_session');
+                            $currentTerm = config('app.current_term');
+                            $tenant = Filament::getTenant();
 
-                        foreach ($records as $record) {
-                            $exists = AttendanceRecord::where([
-                                'student_id' => $record->id,
-                                'date' => now()->toDateString(),
-                                'academic_session_id' => config('app.current_session')->id,
-                                'term_id' => config('app.current_term')->id,
-                            ])->exists();
-
-                            if (!$exists) {
-                                AttendanceRecord::create([
-                                    'school_id' => Filament::getTenant()->id,
-                                    'class_room_id' => $record->class_room_id,
-                                    'student_id' => $record->id,
-                                    'academic_session_id' => config('app.current_session')->id,
-                                    'term_id' => config('app.current_term')->id,
-                                    'date' => now(),
-                                    'status' => 'present',
-                                    'recorded_by' => Auth::id(),
-                                ]);
-
-                                // Calculate attendance summary for each student
-                                \App\Models\AttendanceSummary::calculateForStudent(
-                                    $record,
-                                    config('app.current_session')->id,
-                                    config('app.current_term')->id
-                                );
-
-                                $marked++;
-                            } else {
-                                $skipped++;
+                            if (!$currentSession || !$currentTerm || !$tenant) {
+                                throw new \Exception('Required configuration is missing');
                             }
-                        }
 
-                        Notification::make()
-                            ->success()
-                            ->title('Bulk Attendance Marked')
-                            ->body("{$marked} students marked present. {$skipped} already marked.")
-                            ->send();
+                            $marked = 0;
+                            $skipped = 0;
+
+                            foreach ($records as $record) {
+                                $exists = AttendanceRecord::where([
+                                    'student_id' => $record->id,
+                                    'date' => now()->toDateString(),
+                                    'academic_session_id' => $currentSession->id,
+                                    'term_id' => $currentTerm->id,
+                                ])->exists();
+
+                                if (!$exists) {
+                                    AttendanceRecord::create([
+                                        'school_id' => $tenant->id,
+                                        'class_room_id' => $record->class_room_id,
+                                        'student_id' => $record->id,
+                                        'academic_session_id' => $currentSession->id,
+                                        'term_id' => $currentTerm->id,
+                                        'date' => now(),
+                                        'status' => 'present',
+                                        'recorded_by' => Auth::id(),
+                                    ]);
+
+                                    // Calculate attendance summary for each student
+                                    \App\Models\AttendanceSummary::calculateForStudent(
+                                        $record,
+                                        $currentSession->id,
+                                        $currentTerm->id
+                                    );
+
+                                    $marked++;
+                                } else {
+                                    $skipped++;
+                                }
+                            }
+
+                            Notification::make()
+                                ->success()
+                                ->title('Bulk Attendance Marked')
+                                ->body("{$marked} students marked present. {$skipped} already marked.")
+                                ->send();
+                        } catch (\Exception $e) {
+                            Log::error('Error in bulk mark present: ' . $e->getMessage());
+                            Notification::make()
+                                ->danger()
+                                ->title('Error')
+                                ->body('Failed to mark attendance. Please try again.')
+                                ->send();
+                        }
                     }),
 
                 BulkAction::make('markAllAbsent')
@@ -384,48 +428,65 @@ class AttendancePage extends Page implements HasForms, HasTable
                             ->required(),
                     ])
                     ->action(function (Collection $records, array $data): void {
-                        $marked = 0;
-                        $skipped = 0;
+                        try {
+                            $currentSession = config('app.current_session');
+                            $currentTerm = config('app.current_term');
+                            $tenant = Filament::getTenant();
 
-                        foreach ($records as $record) {
-                            $exists = AttendanceRecord::where([
-                                'student_id' => $record->id,
-                                'date' => now()->toDateString(),
-                                'academic_session_id' => config('app.current_session')->id,
-                                'term_id' => config('app.current_term')->id,
-                            ])->exists();
-
-                            if (!$exists) {
-                                AttendanceRecord::create([
-                                    'school_id' => Filament::getTenant()->id,
-                                    'class_room_id' => $record->class_room_id,
-                                    'student_id' => $record->id,
-                                    'academic_session_id' => config('app.current_session')->id,
-                                    'term_id' => config('app.current_term')->id,
-                                    'date' => now(),
-                                    'status' => 'absent',
-                                    'remarks' => $data['remarks'],
-                                    'recorded_by' => Auth::id(),
-                                ]);
-
-                                // Calculate attendance summary for each student
-                                \App\Models\AttendanceSummary::calculateForStudent(
-                                    $record,
-                                    config('app.current_session')->id,
-                                    config('app.current_term')->id
-                                );
-
-                                $marked++;
-                            } else {
-                                $skipped++;
+                            if (!$currentSession || !$currentTerm || !$tenant) {
+                                throw new \Exception('Required configuration is missing');
                             }
-                        }
 
-                        Notification::make()
-                            ->success()
-                            ->title('Bulk Attendance Marked')
-                            ->body("{$marked} students marked absent. {$skipped} already marked.")
-                            ->send();
+                            $marked = 0;
+                            $skipped = 0;
+
+                            foreach ($records as $record) {
+                                $exists = AttendanceRecord::where([
+                                    'student_id' => $record->id,
+                                    'date' => now()->toDateString(),
+                                    'academic_session_id' => $currentSession->id,
+                                    'term_id' => $currentTerm->id,
+                                ])->exists();
+
+                                if (!$exists) {
+                                    AttendanceRecord::create([
+                                        'school_id' => $tenant->id,
+                                        'class_room_id' => $record->class_room_id,
+                                        'student_id' => $record->id,
+                                        'academic_session_id' => $currentSession->id,
+                                        'term_id' => $currentTerm->id,
+                                        'date' => now(),
+                                        'status' => 'absent',
+                                        'remarks' => $data['remarks'],
+                                        'recorded_by' => Auth::id(),
+                                    ]);
+
+                                    // Calculate attendance summary for each student
+                                    \App\Models\AttendanceSummary::calculateForStudent(
+                                        $record,
+                                        $currentSession->id,
+                                        $currentTerm->id
+                                    );
+
+                                    $marked++;
+                                } else {
+                                    $skipped++;
+                                }
+                            }
+
+                            Notification::make()
+                                ->success()
+                                ->title('Bulk Attendance Marked')
+                                ->body("{$marked} students marked absent. {$skipped} already marked.")
+                                ->send();
+                        } catch (\Exception $e) {
+                            Log::error('Error in bulk mark absent: ' . $e->getMessage());
+                            Notification::make()
+                                ->danger()
+                                ->title('Error')
+                                ->body('Failed to mark attendance. Please try again.')
+                                ->send();
+                        }
                     }),
             ]);
     }

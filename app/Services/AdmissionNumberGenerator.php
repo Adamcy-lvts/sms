@@ -7,7 +7,9 @@ use Illuminate\Support\Str;
 use Filament\Facades\Filament;
 use App\Models\AcademicSession;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use App\Helpers\AdmissionNumberFormats;
+use App\Models\Status;
 
 class AdmissionNumberGenerator
 {
@@ -21,15 +23,37 @@ class AdmissionNumberGenerator
     public function __construct()
     {
         $this->tenant = Filament::getTenant();
+        if (!$this->tenant) {
+            $this->settings = (object)['admission_settings' => []];
+            return;
+        }
+
         $this->admission = app(Admission::class);
-        $this->settings = $this->tenant->settings;
-        // dd($this->settings);
+        $this->settings = $this->tenant->settings ?? (object)['admission_settings' => []];
         $this->separator = $this->settings->admission_settings['separator'] ?? '-';
         $this->format = $this->getFormatTemplate();
     }
 
+    protected function getSettings()
+    {
+        if (!$this->tenant) {
+            return null;
+        }
+
+        return Cache::tags(["school:{$this->tenant->slug}"])
+            ->remember(
+                "school_settings:{$this->tenant->id}",
+                86400,
+                fn() => $this->tenant->getSettingsAttribute()
+            );
+    }
+
     public function generate(): string
     {
+        if (!$this->tenant) {
+            return '';
+        }
+
         try {
             // Get base components
             $prefix = $this->settings->admission_settings['prefix'];
@@ -64,10 +88,9 @@ class AdmissionNumberGenerator
         } catch (\Exception $e) {
             Log::error('Admission number generation failed', [
                 'error' => $e->getMessage(),
-                'school_id' => $this->tenant->id,
-                'format' => $this->format
+                'school_id' => $this->tenant->id ?? 0,
             ]);
-            return $this->generateFallbackNumber();
+            return '';
         }
     }
 
@@ -98,24 +121,16 @@ class AdmissionNumberGenerator
 
     protected function getFormatTemplate(): string
     {
-        // Get the format type and custom format from settings
-        $formatType = $this->settings->admission_settings['format_type'];
-        $customFormat = $this->settings->admission_settings['custom_format'] ?? [];
+        $formatType = $this->settings->admission_settings['format_type'] ?? 'basic';
+        $customFormat = $this->settings->admission_settings['custom_format'] ?? '';
 
-        // If using custom format and it exists, validate and use it
-        if ($formatType === 'custom' && !empty($customFormat)) {
-            if ($this->validateCustomFormat($customFormat)) {
-                return $customFormat;
-            }
-            Log::warning('Invalid custom format, falling back to preset', [
-                'custom_format' => $customFormat,
-                'school_id' => $this->tenant->id
-            ]);
+        if ($formatType === 'custom' && $customFormat) {
+            return $this->validateCustomFormat($customFormat) ?? $this->getPresetFormat('basic');
         }
 
-        // Fallback to preset format
-        return $this->getPresetFormat($formatType ?? 'basic');
+        return $this->getPresetFormat($formatType);
     }
+
     public function validateCustomFormat(string $format): ?string
     {
         // Check for required components
@@ -154,26 +169,25 @@ class AdmissionNumberGenerator
 
     protected function getSchoolInitials(): string
     {
-        // Use cached value if available
-        if (isset($this->cache['school_initials'])) {
+        try {
+            if (isset($this->cache['school_initials'])) {
+                return $this->cache['school_initials'];
+            }
+
+            $settings = $this->settings->admission_settings ?? [];
+
+            $initials = $settings['school_initials']
+                ?? $this->generateInitials(
+                    $this->tenant->name ?? 'SCHOOL',
+                    $settings['initials_method'] ?? 'first_letters'
+                );
+
+            $this->cache['school_initials'] = strtoupper($initials);
             return $this->cache['school_initials'];
+        } catch (\Exception $e) {
+            Log::error('Error generating school initials: ' . $e->getMessage());
+            return 'SCH'; // Fallback initials
         }
-
-        // If custom initials are set, use them
-        if (!empty($this->settings->admission_settings['school_initials'])) {
-            $initials = $this->settings->admission_settings['school_initials'];
-        } else {
-            // Generate based on method
-            $method = $this->settings->admission_settings['initials_method'] ?? 'first_letters';
-            $initials = $this->generateInitials(
-                $this->tenant->name,
-                $method
-            );
-        }
-
-        // Cache and return
-        $this->cache['school_initials'] = strtoupper($initials);
-        return $this->cache['school_initials'];
     }
 
     protected function generateInitials(string $name, string $method): string
@@ -286,43 +300,56 @@ class AdmissionNumberGenerator
             return $this->cache['current_session'];
         }
 
-        $session = AcademicSession::where('school_id', $this->tenant->id)
+        $this->cache['current_session'] = AcademicSession::where('school_id', $this->tenant->id ?? 0)
             ->where('is_current', true)
             ->first();
 
-        $this->cache['current_session'] = $session;
-        return $session;
+        return $this->cache['current_session'];
     }
 
     protected function getNextSequentialNumber(): string
     {
-        $length = $this->settings->admission_settings['length'] ?? 3;
+        $settings = $this->settings->admission_settings ?? [];
+        $length = $settings['length'] ?? 3;
+
+        if (!$this->tenant) {
+            return str_pad('1', $length, '0', STR_PAD_LEFT);
+        }
+
         $query = $this->admission->where('school_id', $this->tenant->id);
 
-        if ($this->settings->admission_settings['reset_sequence_yearly'] ?? false) {
+        if ($settings['reset_sequence_yearly'] ?? false) {
             $query->whereYear('created_at', date('Y'));
         }
 
-        if ($this->settings->admission_settings['reset_sequence_by_session'] ?? false) {
+        if ($settings['reset_sequence_by_session'] ?? false) {
             $currentSession = $this->getCurrentSession();
             if ($currentSession) {
                 $query->where('academic_session_id', $currentSession->id);
             }
         }
+        // $lastAdmission = $query->orderByDesc('admission_number')->first();
+        // Only count approved admissions for number generation
+        $approvedStatus = Status::where('type', 'admission')
+            ->where('name', 'approved')
+            ->first();
 
-        $lastAdmission = $query->orderByDesc('admission_number')->first();
+        $lastAdmission = $query->where('status_id', $approvedStatus?->id)
+            ->orderByDesc('admission_number')
+            ->first();
+
+        $startNumber = $settings['number_start'] ?? 1;
 
         if (!$lastAdmission) {
-            $startNumber = $this->settings->admission_settings['number_start'] ?? 1;
             return str_pad($startNumber, $length, '0', STR_PAD_LEFT);
         }
 
-        if (preg_match('/(\d+)$/', $lastAdmission->admission_number, $matches)) {
+        if (preg_match('/(\d+)$/', $lastAdmission->admission_number ?? '', $matches)) {
             $nextNumber = intval($matches[1]) + 1;
             return str_pad($nextNumber, $length, '0', STR_PAD_LEFT);
         }
 
-        return str_pad('1', $length, '0', STR_PAD_LEFT);
+        return str_pad($startNumber, $length, '0', STR_PAD_LEFT);
     }
 
     protected function cleanupSeparators(string $number): string
@@ -337,6 +364,10 @@ class AdmissionNumberGenerator
 
     protected function ensureUnique(string $number): string
     {
+        if (empty($number) || !$this->tenant) {
+            return str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
+        }
+
         $originalNumber = $number;
         $counter = 1;
         $maxAttempts = 100;
@@ -363,7 +394,7 @@ class AdmissionNumberGenerator
             $counter++;
         }
 
-        throw new \RuntimeException("Could not generate unique admission number after $maxAttempts attempts");
+        return $originalNumber . mt_rand(1000, 9999);
     }
 
     protected function generateFallbackNumber(): string

@@ -21,19 +21,36 @@ class ClassRoomResource extends Resource
 {
     protected static ?string $model = ClassRoom::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-home';
+    protected static ?string $navigationGroup = 'School Management';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->label('Name')
-                    ->required(),
-                Forms\Components\TextInput::make('capacity')
-                    ->label('Capacity')
-                    ->integer(),
-
+                Forms\Components\Section::make()
+                    ->schema([
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\TextInput::make('name')
+                                    ->label('Class Name')
+                                    ->required()
+                                    ->maxLength(255),
+                                Forms\Components\TextInput::make('capacity')
+                                    ->label('Capacity')
+                                    ->integer()
+                                    ->required()
+                                    ->minValue(1),
+                                Forms\Components\Select::make('subjects')
+                                    ->multiple()
+                                    ->relationship('subjects', 'name')
+                                    ->preload()
+                                    ->searchable(),
+                            ]),
+                        Forms\Components\RichEditor::make('description')
+                            ->label('Description')
+                            ->columnSpanFull(),
+                    ])
             ]);
     }
 
@@ -41,13 +58,31 @@ class ClassRoomResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('name'),
-                TextColumn::make('capacity'),
-
+                TextColumn::make('name')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('capacity')
+                    ->sortable(),
+                
+                // TextColumn::make('students_count')
+                //     ->counts('students')
+                //     ->label('Students'),
+                // TextColumn::make('subjects_count')
+                //     ->counts('subjects')
+                //     ->label('Subjects'),
+                TextColumn::make('created_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('school')
+                    ->relationship('school', 'name'),
+                Tables\Filters\Filter::make('empty')
+                    ->query(fn (Builder $query) => $query->whereDoesntHave('students'))
+                    ->toggle(),
             ])
+            ->defaultSort('name', 'asc')
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),

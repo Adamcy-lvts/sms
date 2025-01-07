@@ -2,9 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
+use App\Models\School;
 use App\Models\PaymentType;
 use Illuminate\Support\Str;
+use Illuminate\Database\Seeder;
 
 class PaymentTypeSeeder extends Seeder
 {
@@ -78,7 +79,7 @@ class PaymentTypeSeeder extends Seeder
 
     public function run(): void
     {
-        $school = \App\Models\School::where('slug', 'kings-private-school')->first();
+        $school = School::where('slug', 'khalil-integrated-academy')->firstOrFail();
 
         foreach ($this->paymentTypes as $type) {
             PaymentType::firstOrCreate(

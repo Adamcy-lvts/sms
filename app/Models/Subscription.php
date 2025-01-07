@@ -101,4 +101,9 @@ class Subscription extends Model
     {
         return $this->hasMany(SubsPayment::class, 'subscription_id');
     }
+
+    public function getPaymentStatus(): string
+    {
+        return $this->payments()->latest('created_at')->first()->status;
+    }
 }

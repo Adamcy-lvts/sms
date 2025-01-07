@@ -37,6 +37,7 @@ return new class extends Migration
             $table->date('application_date')->nullable();
             $table->date('admitted_date')->nullable();
             $table->string('admission_number')->unique()->nullable();
+            $table->string('class_room_id')->nullable();
             $table->string('passport_photograph')->nullable();
             $table->foreignId('status_id')->constrained()->onDelete('cascade');
 

@@ -8,9 +8,12 @@ use Illuminate\Http\Request;
 use Spatie\LaravelPdf\Facades\Pdf;
 use Spatie\Browsershot\Browsershot;
 use Filament\Notifications\Notification;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 
 class SubscriptionReceipt extends Page
 {
+    use HasPageShield;
+    
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
     protected static string $view = 'filament.sms.pages.subscription-receipt';

@@ -9,14 +9,29 @@ use Filament\Facades\Filament;
 use Spatie\LaravelPdf\Facades\Pdf;
 use Illuminate\Support\Facades\Log;
 use Spatie\Browsershot\Browsershot;
+use Illuminate\Support\Facades\Storage;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use App\Filament\Sms\Resources\PaymentResource;
 
 class ViewPayment extends ViewRecord
 {
     protected static string $resource = PaymentResource::class;
     protected static string $view = 'filament.sms.resources.payment-resource.pages.view-payment';
+
+    public  $viewUrl;
+
+    public function mount(int | string $record): void
+    {
+        $this->record = $this->resolveRecord($record);
+        $school = Filament::getTenant();
+
+        $this->viewUrl = PaymentResource::getUrl('view', [
+            'record' => $this->record->id,
+            'tenant' => Filament::getTenant(),
+        ]);
+    }
 
     protected function getHeaderActions(): array
     {
@@ -54,16 +69,30 @@ class ViewPayment extends ViewRecord
         try {
             $school = $this->record->school;
             $fileName = Str::slug("{$school->slug}-receipt-{$this->record->reference}") . '.pdf';
-
-            // Create directory if it doesn't exist
             $directory = storage_path("app/public/{$school->slug}/documents");
+
+            // Fix logo checking and loading
+            $logoData = null;
+            if ($school->logo) {
+                // Remove the 'public/' prefix if it exists in the stored path
+                $logoPath = str_replace('public/', '', $school->logo);
+                
+                if (Storage::disk('public')->exists($logoPath)) {
+                    $fullLogoPath = Storage::disk('public')->path($logoPath);
+                    $extension = pathinfo($fullLogoPath, PATHINFO_EXTENSION);
+                    $logoData = 'data:image/' . $extension . ';base64,' . base64_encode(
+                        Storage::disk('public')->get($logoPath)
+                    );
+                }
+            }
+
             if (!file_exists($directory)) {
                 mkdir($directory, 0755, true);
             }
 
             $receiptPath = "{$directory}/{$fileName}";
 
-            // Generate PDF
+            // Generate PDF with logo data
             Pdf::view('pdfs.student-payment-receipt', [
                 'payment' => $this->record->load([
                     'student.classRoom',
@@ -74,6 +103,8 @@ class ViewPayment extends ViewRecord
                     'paymentMethod'
                 ]),
                 'school' => $school,
+                'viewUrl' => $this->viewUrl,
+                'logoData' => $logoData,
                 'isPrintMode' => false
             ])
                 ->format('a4')
@@ -109,11 +140,36 @@ class ViewPayment extends ViewRecord
 
             Notification::make()
                 ->title('Error generating receipt')
-                ->message('Something went wrong while generating the receipt.')
+                ->body('Something went wrong while generating the receipt.')
                 ->danger()
                 ->send();
 
             return null;
         }
     }
+
+    // public function getQrCodeData()
+    // {
+    //     $payment = $this->record;
+    //     $school = Filament::getTenant();
+
+    //     // Generate the URL to view the payment
+    //     $viewUrl = PaymentResource::getUrl('view', [
+    //         'record' => $payment->id,
+    //         'tenant' => $school->id
+    //     ]);
+
+    //     // Generate QR code with the URL
+    //     return QrCode::size(85)
+    //         ->errorCorrection('H')
+    //         ->format('svg')
+    //         ->generate($viewUrl);
+    // }
+
+    // protected function getViewData(): array
+    // {
+    //     return [
+    //         'qrCode' => $this->getQrCodeData(),
+    //     ];
+    // }
 }

@@ -56,6 +56,34 @@ class Payment extends Model
         'balance' => 'decimal:2',
     ];
 
+    public function shouldShowTerms(): bool
+    {
+        return $this->meta_data['show_terms'] ?? true;
+    }
+
+    public function getTerms(): array
+    {
+        return $this->meta_data['terms'] ?? [
+            '1' => 'Payment is non-refundable.',
+            '2' => 'Please keep this receipt for your records.'
+        ];
+    }
+
+    public function getPaymentTermsAttribute(): array
+    {
+        return $this->meta_data['terms'] ?? [
+            'Payment is non-refundable.',
+            'Please keep this receipt for your records.'
+        ];
+    }
+
+    public function setPaymentTermsAttribute(array $terms)
+    {
+        $metaData = $this->meta_data ?? [];
+        $metaData['terms'] = $terms;
+        $this->meta_data = $metaData;
+    }
+
     /**
      * Get the user who created the payment.
      */

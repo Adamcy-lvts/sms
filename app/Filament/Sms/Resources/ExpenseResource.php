@@ -40,7 +40,7 @@ class ExpenseResource extends Resource
 
     public static function form(Form $form): Form
     {
-        $tenant = Filament::getTenant();
+        $tenant = Filament::getTenant() ?? null;
 
         return $form->schema([
             Grid::make()
@@ -93,20 +93,22 @@ class ExpenseResource extends Resource
                                         ->native(false)
                                         ->label('Academic Session')
                                         ->options(function () use ($tenant) {
-                                            return $tenant->academicSessions()
-                                                ->pluck('name', 'id');
+                                            return $tenant?->academicSessions()
+                                                ->pluck('name', 'id')
+                                                ->toArray() ?? [];
                                         })
-                                        ->default(fn() => config('app.current_session')->id)
+                                        ->default(fn() => config('app.current_session')?->id ?? null)
                                         ->required(),
 
                                     Select::make('term_id')
                                         ->native(false)
                                         ->label('Term')
                                         ->options(function () use ($tenant) {
-                                            return $tenant->terms()
-                                                ->pluck('name', 'id');
+                                            return $tenant?->terms()
+                                                ->pluck('name', 'id')
+                                                ->toArray() ?? [];
                                         })
-                                        ->default(fn() => config('app.current_term')->id)
+                                        ->default(fn() => config('app.current_term')?->id ?? null)
                                         ->required(),
 
 
@@ -150,7 +152,7 @@ class ExpenseResource extends Resource
                             Grid::make(2)->schema([
                                 Select::make('expense_category_id')
                                     ->label('Category')
-                                    ->options(ExpenseCategory::all()->pluck('name','id')->toArray())
+                                    ->options(fn() => ExpenseCategory::all()->pluck('name', 'id')->toArray() ?? [])
                                     ->required()
                                     ->live()
                                     ->afterStateUpdated(fn(Set $set) => $set('expense_item_id', null)),
@@ -159,27 +161,31 @@ class ExpenseResource extends Resource
                                     ->label('Item')
                                     ->options(function (callable $get) use ($tenant) {
                                         $categoryId = $get('expense_category_id');
-                                        if (!$categoryId) return [];
+                                        if (!$categoryId || !$tenant) return [];
 
                                         return ExpenseItem::where('school_id', $tenant->id)
                                             ->where('expense_category_id', $categoryId)
                                             ->where('is_active', true)
                                             ->get()
                                             ->mapWithKeys(fn($item) => [
-                                                $item->id => "{$item->name} ({$item->unit} - ₦{$item->default_amount})"
-                                            ]);
+                                                $item->id => sprintf(
+                                                    "%s (%s - ₦%s)",
+                                                    $item->name ?? '',
+                                                    $item->unit ?? 'unit',
+                                                    $item->default_amount ?? '0'
+                                                )
+                                            ])
+                                            ->toArray() ?? [];
                                     })
                                     ->searchable()
                                     ->live()
                                     ->afterStateUpdated(function ($state, Set $set) {
                                         if ($state) {
                                             $item = ExpenseItem::find($state);
-                                            if ($item) {
-                                                $set('unit_price', $item->default_amount);
-                                                $set('unit', $item->unit);
-                                                $set('quantity', 1);
-                                                $set('amount', $item->default_amount);
-                                            }
+                                            $set('unit_price', $item?->default_amount ?? 0);
+                                            $set('unit', $item?->unit ?? 'unit');
+                                            $set('quantity', 1);
+                                            $set('amount', $item?->default_amount ?? 0);
                                         }
                                     })
                                     ->required(),
@@ -283,7 +289,7 @@ class ExpenseResource extends Resource
 
     public static function table(Table $table): Table
     {
-        $tenant = Filament::getTenant();
+        $tenant = Filament::getTenant() ?? null;
         return $table
             ->defaultGroup('category.name')
             ->columns([
@@ -293,16 +299,18 @@ class ExpenseResource extends Resource
 
                 TextColumn::make('category.name')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->formatStateUsing(fn ($state) => $state ?? 'Uncategorized'),
 
                 TextColumn::make('category.type')
                     ->label('Expense Type')
                     ->badge()
                     ->color(
                         fn(string $state): string =>
-                        match ($state) {
+                        match ($state ?? '') {
                             'fixed' => 'info',
-                            'variable' => 'warning'
+                            'variable' => 'warning',
+                            default => 'gray'
                         }
                     ),
 
@@ -336,18 +344,20 @@ class ExpenseResource extends Resource
                 SelectFilter::make('academic_session_id')
                     ->label('Academic Session')
                     ->options(function () use ($tenant) {
-                        return $tenant->academicSessions()
-                            ->pluck('name', 'id');
+                        return $tenant?->academicSessions()
+                            ->pluck('name', 'id')
+                            ->toArray() ?? [];
                     })
-                    ->default(fn() => config('app.current_session')->id ?? null ),
+                    ->default(fn() => config('app.current_session')?->id ?? null ),
 
                 SelectFilter::make('term_id')
                     ->label('Term')
                     ->options(function () use ($tenant) {
-                        return $tenant->terms()
-                            ->pluck('name', 'id');
+                        return $tenant?->terms()
+                            ->pluck('name', 'id')
+                            ->toArray() ?? [];
                     })
-                    ->default(fn() => config('app.current_term')->id ?? null ),
+                    ->default(fn() => config('app.current_term')?->id ?? null ),
 
                 SelectFilter::make('status')
                     ->options([

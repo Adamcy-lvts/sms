@@ -14,12 +14,16 @@ return new class extends Migration
         Schema::create('payment_methods', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
-            $table->string('slug')->unique()->nullable();
+            $table->foreignId('school_id')->constrained();
+            $table->string('slug')->nullable();
             $table->string('description')->nullable();
             $table->string('logo')->nullable();
             $table->boolean('active')->default(true);
             $table->timestamps();
+
+            // Add composite unique constraints
+            $table->unique(['school_id', 'name']);
+            $table->unique(['school_id', 'slug']);
         });
     }
 

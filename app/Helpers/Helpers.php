@@ -1,5 +1,7 @@
 <?php
 
+use Filament\Facades\Filament;
+
 function formatDate($date)
 {
     // Create a new DateTime object from the provided date
@@ -21,4 +23,20 @@ function getOrdinal($number): string
         3 => 'rd',
         default => 'th'
     };
+}
+
+// app/Helpers/helpers.php
+
+if (!function_exists('setPermissionsTeamId')) {
+    function setPermissionsTeamId($schoolId)
+    {
+        session(['current_school_id' => $schoolId]);
+    }
+}
+
+if (!function_exists('getPermissionsTeamId')) {
+    function getPermissionsTeamId()
+    {
+        return session('current_school_id') ?? Filament::getTenant()?->id;
+    }
 }

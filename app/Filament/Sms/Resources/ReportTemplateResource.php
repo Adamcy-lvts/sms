@@ -454,6 +454,8 @@ class ReportTemplateResource extends Resource
                                 ])->columns(4),
                         ]),
 
+
+                        
                     Tabs\Tab::make('Student Information')
                         ->icon('heroicon-o-user-circle')
                         ->schema([
@@ -1384,7 +1386,10 @@ class ReportTemplateResource extends Resource
                                         ->schema([
                                             TextInput::make('title')
                                                 ->label('Section Title')
-                                                ->default(fn(int $index) => $index === 0 ? "Class Teacher's Comment" : "Principal's Comment"),
+                                                ->default(function (callable $get, ?string $state) {
+                                                    $itemIndex = count($get('../sections') ?? []);
+                                                    return $itemIndex === 0 ? "Class Teacher's Comment" : "Principal's Comment";
+                                                }),
 
                                             Grid::make(2)->schema([
                                                 Toggle::make('enabled')

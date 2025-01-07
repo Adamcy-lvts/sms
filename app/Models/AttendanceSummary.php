@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use App\Models\ClassRoom;
+use App\Services\CalendarService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -53,35 +55,46 @@ class AttendanceSummary extends Model
         return $this->belongsTo(Term::class);
     }
 
-    public static function calculateForStudent(Student $student, int $academicSessionId, int $termId, int $totalSchoolDays = null): self {
-        
+    public static function calculateForStudent(Student $student, int $academicSessionId, int $termId, int $totalSchoolDays = null): self
+    {
+
+        // Get term dates
+        $term = Term::find($termId);
+        $termStart = Carbon::parse($term->start_date);
+        $today = Carbon::today();
+
+        // Get attendance records
         $records = AttendanceRecord::where([
             'student_id' => $student->id,
             'academic_session_id' => $academicSessionId,
             'term_id' => $termId,
-        ])->get();
+        ])
+            ->whereDate('date', '<=', $today)  // Only count up to current date
+            ->get();
+
+        // Calculate actual school days elapsed
+        $calendarService = app(CalendarService::class);
+        $schoolDays = $calendarService->getSchoolDays($student->school, $term);
+        $elapsedSchoolDays = $schoolDays['elapsed_days'] ?? $totalSchoolDays;
 
         $stats = [
-            'total_days' => $totalSchoolDays ?? $records->count(), // Use provided school days or fallback
+            'total_days' => $elapsedSchoolDays,
             'present_count' => $records->where('status', 'present')->count(),
             'absent_count' => $records->where('status', 'absent')->count(),
             'late_count' => $records->where('status', 'late')->count(),
             'excused_count' => $records->where('status', 'excused')->count(),
         ];
 
-        $stats['attendance_percentage'] = $stats['total_days'] > 0
-            ? (($stats['present_count'] + $stats['late_count']) / $stats['total_days']) * 100
+        $stats['attendance_percentage'] = $elapsedSchoolDays > 0
+            ? (($stats['present_count'] + $stats['late_count']) / $elapsedSchoolDays) * 100
             : 0;
 
-        return static::updateOrCreate(
-            [
-                'student_id' => $student->id,
-                'class_room_id' => $student->class_room_id,
-                'school_id' => $student->school_id,
-                'academic_session_id' => $academicSessionId,
-                'term_id' => $termId,
-            ],
-            $stats
-        );
+        return static::updateOrCreate([
+            'student_id' => $student->id,
+            'class_room_id' => $student->class_room_id,
+            'school_id' => $student->school_id,
+            'academic_session_id' => $academicSessionId,
+            'term_id' => $termId,
+        ], $stats);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Filament\Sms\Resources\StudentResource\Pages;
 
 use Filament\Actions;
 use App\Models\Student;
+use App\Models\ReportCard;
 use Faker\Provider\ar_EG\Text;
 use Filament\Infolists\Infolist;
 use Filament\Forms\Contracts\HasForms;
@@ -16,6 +17,7 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Contracts\HasInfolists;
 use App\Filament\Sms\Resources\StudentResource;
 use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Concerns\InteractsWithInfolists;
 
 class StudentProfile extends ViewRecord implements HasInfolists
@@ -58,14 +60,22 @@ class StudentProfile extends ViewRecord implements HasInfolists
                         Section::make('Personal Details')
                             ->icon('heroicon-o-user')
                             ->schema([
-                                Grid::make(2)->schema([
+                                Grid::make(3)->schema([
                                     TextEntry::make('full_name')
                                         ->color('primary')
-                                        ->label('Student Name')
-                                        ->weight('bold'),
+                                        ->label('Student Name'),
                                     TextEntry::make('admission.date_of_birth')->label('Date of Birth')
                                         ->color('primary')
                                         ->date('F j, Y'),
+                                    TextEntry::make('status.name')
+                                        ->label('Student Status')
+                                        ->badge()
+                                        ->color(fn(string $state): string => match ($state) {
+                                            'active' => 'success',
+                                            'inactive' => 'danger',
+                                            'graduated' => 'info',
+                                            default => 'warning',
+                                        }),
                                     Grid::make(4)->schema([
                                         TextEntry::make('admission.gender')->label('Gender')->color('primary'),
                                         TextEntry::make('admission.religion')->label('Religion')->color('primary'),
@@ -90,7 +100,7 @@ class StudentProfile extends ViewRecord implements HasInfolists
                             ])->columnSpan(1),
                     ]),
 
-                Section::make('Admission Information')
+                Section::make('Academic Information')
                     ->columns(2)
                     ->schema([
                         TextEntry::make('classRoom.name')->label('Class Room')->color('primary'),
@@ -140,10 +150,85 @@ class StudentProfile extends ViewRecord implements HasInfolists
             ]);
     }
 
-    public function academicInfolist(Infolist $infolist): Infolist
+    protected function getScoreColor($score): string
     {
+        return match (true) {
+            $score >= 70 => 'success',
+            $score >= 60 => 'info',
+            $score >= 50 => 'warning',
+            default => 'danger'
+        };
+    }
+
+    public function topSubjectsInfolist(Infolist $infolist): Infolist
+    {
+        // Get all report cards for student
+        $reportCards = ReportCard::where('student_id', $this->student->id)
+            ->where('status', 'final')
+            ->get();
+
+        // Aggregate subject scores across terms
+        $subjectAverages = collect();
+
+        foreach ($reportCards as $report) {
+            if (!empty($report->subject_scores)) {
+                $subjects = collect($report->subject_scores);
+                
+                $subjects->each(function ($subject) use (&$subjectAverages) {
+                    $name = $subject['name'];
+                    if (!$subjectAverages->has($name)) {
+                        $subjectAverages[$name] = collect();
+                    }
+                    $subjectAverages[$name]->push($subject['total']);
+                });
+            }
+        }
+
+        // Calculate overall averages and sort
+        $topSubjects = $subjectAverages
+            ->map(fn($scores, $name) => [
+                'name' => $name,
+                'average' => $scores->avg(),
+                'highest' => $scores->max(),
+                'score_count' => $scores->count()
+            ])
+            ->sortByDesc('average')
+            ->values() // Convert to array with numeric indices
+            ->take(5);
+
         return $infolist
             ->record($this->student)
-            ->schema([]);
+            ->schema([
+                Section::make('Academic Performance')
+                    ->description('Student academic performance overview')
+                    ->icon('heroicon-o-academic-cap')
+                    ->schema([
+                        // Only show if we have subjects
+                        Section::make('Top Performing Subjects')
+                            ->description('Based on average performance across all terms')
+                            ->visible(fn() => $topSubjects->isNotEmpty())
+                            ->schema([
+                                RepeatableEntry::make('subjects')
+                                    ->schema([
+                                        TextEntry::make('name')
+                                            ->label('Subject')
+                                            ->weight('bold'),
+                                        TextEntry::make('average')
+                                            ->label('Average Score')
+                                            ->formatStateUsing(fn($state) => number_format($state, 1) . '%')
+                                            ->color(fn($state) => $this->getScoreColor($state)),
+                                        TextEntry::make('highest')
+                                            ->label('Highest Score')
+                                            ->formatStateUsing(fn($state) => number_format($state, 1) . '%'),
+                                        TextEntry::make('score_count')
+                                            ->label('Terms Assessed')
+                                    ])
+                                    ->columns(4)
+                            ])
+                    ])
+            ])
+            ->state([
+                'subjects' => $topSubjects->toArray()
+            ]);
     }
 }

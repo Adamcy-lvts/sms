@@ -16,12 +16,16 @@ use Illuminate\Support\Facades\Cache;
 use App\Helpers\AdmissionNumberFormats;
 use Filament\Notifications\Notification;
 use App\Services\AdmissionNumberGenerator;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 
 class ManageSettings extends Page
 {
+    use HasPageShield;
+    
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
     protected static ?string $navigationLabel = 'School Settings';
     protected static ?string $navigationGroup = 'Settings';
+    protected static bool $shouldRegisterNavigation = false;
     protected static ?string $slug = 'settings';
     protected static string $view = 'filament.sms.pages.manage-settings';
 
@@ -89,7 +93,7 @@ class ManageSettings extends Page
                                     'with_year' => 'With Year (ADM-23-001)',
                                     'school_initials' => 'School Initials (KPS-001)',
                                     'school_year' => 'School with Year (KPS-23-001)',
-                                    'with_session' => 'With Session (ADM-2324-001)',
+                                    'with_session' => 'With Session and default prefix (ADM-2324-001)',
                                     'school_session' => 'School with Session (KPS-2324-001)',
                                     'custom' => 'Custom Format'
                                 ])
@@ -224,10 +228,42 @@ class ManageSettings extends Page
                                 ->helperText('Available tokens: {PREFIX}, {YY}, {NUM}, {DEPT}')
                                 ->visible(fn(Get $get) => $get('employee_settings.format_type') === 'custom'),
 
+                            Forms\Components\Select::make('employee_settings.prefix_type')
+                                ->label('Prefix Type')
+                                ->options([
+                                    'default' => 'Default (EMP)',
+                                    'school' => 'School Name',
+                                    'custom' => 'Custom'
+                                ])
+                                ->default('default')
+                                ->live()
+                                ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                    if ($state === 'school') {
+                                        $schoolName = Filament::getTenant()->name;
+                                        $prefix = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $schoolName), 0, 3));
+                                        $set('employee_settings.prefix', $prefix);
+                                    } elseif ($state === 'default') {
+                                        $set('employee_settings.prefix', 'EMP');
+                                    }
+                                }),
+
                             Forms\Components\TextInput::make('employee_settings.prefix')
                                 ->label('Default Prefix')
                                 ->default('EMP')
                                 ->required(),
+
+                            Forms\Components\Select::make('employee_settings.year_format')
+                                ->label('Year Format')
+                                ->options([
+                                    'none' => 'No Year',
+                                    'short' => 'Short Year (23)',
+                                    'full' => 'Full Year (2023)'
+                                ])
+                                ->default('short')
+                                ->visible(fn (Get $get) => in_array(
+                                    $get('employee_settings.format_type'),
+                                    ['with_year', 'with_department']
+                                )),
 
                             Forms\Components\TextInput::make('employee_settings.number_length')
                                 ->label('Sequential Number Length')

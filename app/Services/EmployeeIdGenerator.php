@@ -6,6 +6,7 @@ use App\Models\Staff;
 use App\Models\Designation;
 use App\Settings\AppSettings;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Employee ID Generator Service
@@ -22,7 +23,7 @@ use Filament\Facades\Filament;
 
 class EmployeeIdGenerator
 {
- 
+
     protected $tenant;
     protected $staff;
     protected $settings;
@@ -39,31 +40,121 @@ class EmployeeIdGenerator
         $this->settings = $settings ?? $this->tenant->getSettingsAttribute();
     }
 
-    protected function getFormat(array $data): string
+    // In EmployeeIdGenerator.php and AdmissionNumberGenerator.php
+
+    protected function getSettings()
     {
-        // Check if specific format is requested
-        if (isset($data['id_format'])) {
-            return $this->getFormatByType($data['id_format'], $data);
+        if (!$this->tenant) {
+            return null;
         }
 
-        // Get from settings
-        return $this->getFormatByType(
-            $this->settings->employee_id_format_type,
-            $data
-        );
+        return Cache::tags(["school:{$this->tenant->slug}"])
+            ->remember(
+                "school_settings:{$this->tenant->id}",
+                86400,
+                fn() => $this->tenant->getSettingsAttribute()
+            );
     }
 
-    protected function getFormatByType(string $type, array $data): string
+    // In EmployeeIdGenerator.php
+
+    // In EmployeeIdGenerator.php
+    protected function getFormat(array $data): string
     {
-        if ($type === 'custom') {
-            return $this->settings->employee_id_custom_format;
-        }
+        $settings = $this->settings->employee_settings;
+        $formatType = $settings['format_type'] ?? 'basic';
+        $numLength = $settings['number_length'] ?? 3;
+
+        return match ($formatType) {
+            'basic' => "{PREFIX}{NUM:$numLength}",
+            'with_year' => "{PREFIX}{YY}{NUM:$numLength}",
+            'with_department' => "{DEPT}{YY}{NUM:$numLength}",
+            'custom' => $settings['custom_format'] ?? "{PREFIX}{NUM:$numLength}",
+            default => "{PREFIX}{NUM:$numLength}"
+        };
+    }
+
+    protected function getFormatByType(?string $type, array $data): string
+    {
+        $type = $type ?? 'basic';
+        $numLength = $this->settings->employee_settings['number_length'] ?? 3;
 
         return match ($type) {
-            'basic' => '{PREFIX}{NUM:' . $this->settings->employee_id_number_length . '}',
-            'with_year' => '{PREFIX}{YY}{NUM:' . $this->settings->employee_id_number_length . '}',
-            'with_department' => '{DEPT}{YY}{NUM:' . $this->settings->employee_id_number_length . '}',
-            default => '{PREFIX}{YYYY}{NUM:' . $this->settings->employee_id_number_length . '}'
+            'basic' => "{PREFIX}{NUM:$numLength}",
+            'with_year' => "{PREFIX}{YY}{NUM:$numLength}",
+            'with_department' => "{DEPT}{YY}{NUM:$numLength}",
+            'custom' => $this->settings->employee_settings['custom_format'] ?? "{PREFIX}{NUM:$numLength}",
+            default => "{PREFIX}{NUM:$numLength}"
+        };
+    }
+
+    protected function parseFormat(string $format, array $data): string
+    {
+        $settings = $this->settings->employee_settings;
+        $prefix = $this->getPrefix($settings);
+        $separator = $settings['separator'] ?? '';
+        $numLength = $settings['number_length'] ?? 3;
+        $yearFormat = $settings['year_format'] ?? 'short';
+        
+        // Get year based on format
+        $year = match ($yearFormat) {
+            'full' => date('Y'),
+            'short' => date('y'),
+            default => ''
+        };
+
+        // Replace format tokens
+        $replacements = [
+            '{PREFIX}' => $prefix,
+            '{YY}' => date('y'),
+            '{YYYY}' => date('Y'),
+            '{DEPT}' => $this->getDepartmentPrefix($data),
+            "{NUM:$numLength}" => $this->getNextNumber($format),
+        ];
+
+        $result = str_replace(array_keys($replacements), array_values($replacements), $format);
+
+        // Handle separator and preserve numbers
+        if ($separator) {
+            $parts = [];
+            $cleanId = preg_replace('/[^a-zA-Z0-9]/', '', $result);
+
+            // Split based on format type and year format
+            if (str_contains($format, '{YY}') || str_contains($format, '{YYYY}')) {
+                // Find prefix part
+                $yearPos = strpos($cleanId, $year);
+                if ($yearPos !== false) {
+                    $parts[] = substr($cleanId, 0, $yearPos);
+                    $parts[] = $year;
+                    $parts[] = substr($cleanId, $yearPos + strlen($year));
+                }
+            } else {
+                // Split into standard parts
+                $prefixPart = substr($cleanId, 0, strlen($prefix));
+                $numberPart = substr($cleanId, -$numLength);
+                $parts = [$prefixPart, $numberPart];
+            }
+
+            // Filter out empty parts and join with separator
+            $result = implode($separator, array_filter($parts));
+        }
+
+        return $result;
+    }
+
+    protected function getPrefix(array $settings): string
+    {
+        $prefixType = $settings['prefix_type'] ?? 'default';
+        
+        return match ($prefixType) {
+            'school' => strtoupper(substr(
+                preg_replace('/[^a-zA-Z]/', '', 
+                $this->tenant->name), 
+                0, 
+                3
+            )),
+            'custom' => $settings['prefix'] ?? 'EMP',
+            default => 'EMP'
         };
     }
 
@@ -113,82 +204,37 @@ class EmployeeIdGenerator
      * {DEPT}   - Department code (e.g., "ADM")
      * {NUM:n}  - Sequential number with n digits (e.g., "0001")
      */
-    protected function parseFormat(string $format, array $data): string
-    {
-         // Example replacements:
-        // Input: "{PREFIX}{YY}{NUM:4}"
-        // Step 1: "EMP{YY}{NUM:4}"
-        // Step 2: "EMP23{NUM:4}"
-        // Final: "EMP230001"
-        // Get the actual number length from settings
-        $numLength = $this->settings->employee_id_number_length;
-
-        // First replace the NUM token with the actual length
-        $format = str_replace('{NUM}', "{NUM:$numLength}", $format);
-
-        $replacements = [
-            '{PREFIX}' => $this->settings->employee_id_prefix,
-            '{YYYY}' => date('Y'),
-            '{YY}' => date('y'),
-            '{MM}' => date('m'),
-            '{DD}' => date('d'),
-            '{DEPT}' => $this->getDepartmentPrefix($data),
-            "{NUM:$numLength}" => $this->getNextNumber($format),
-        ];
-
-        $result = str_replace(
-            array_keys($replacements),
-            array_values($replacements),
-            $format
-        );
-
-        // Add separator if configured
-        if ($this->settings->employee_id_separator) {
-            $result = implode(
-                $this->settings->employee_id_separator,
-                str_split($result, 3)
-            );
-        }
-
-        return $result;
-    }
 
     /**
      * Get next number based on existing IDs using settings
      */
     protected function getNextNumber(string $format): string
     {
-        // Use number length from settings
-        $length = $this->settings->employee_id_number_length;
+        // Get number length from settings
+        $length = $this->settings->employee_settings['number_length'] ?? 3;
 
-        // Create pattern for finding last number based on format type
-        $searchPattern = match ($this->settings->employee_id_format_type) {
-            'basic' => sprintf(
-                '/^%s(\d{%d})$/',
-                $this->settings->employee_id_prefix,
-                $length
-            ),
-            'with_year' => sprintf(
-                '/^%s\d{2}(\d{%d})$/',
-                $this->settings->employee_id_prefix,
-                $length
-            ),
-            'with_department' => sprintf(
-                '/^[A-Z]{3}\d{2}(\d{%d})$/',
-                $length
-            ),
+        // If there are no staff records, start from 1
+        if ($this->staff->where('school_id', $this->tenant->id)->doesntExist()) {
+            return str_pad('1', $length, '0', STR_PAD_LEFT);
+        }
+
+        // Create pattern to extract the numeric part based on format type
+        $formatType = $this->settings->employee_settings['format_type'] ?? 'basic';
+        $prefix = preg_quote($this->settings->employee_settings['prefix'] ?? 'EMP', '/');
+        $separator = preg_quote($this->settings->employee_settings['separator'] ?? '', '/');
+
+        // Build regex pattern based on format type with properly escaped characters
+        $pattern = match ($formatType) {
+            'basic' => "/^{$prefix}{$separator}(\d+)$/",
+            'with_year' => "/^{$prefix}{$separator}\d{2}(\d{" . $length . "})$/",
+            'with_department' => "/^[A-Z]{3}{$separator}\d{2}(\d{" . $length . "})$/",
             'custom' => $this->buildCustomSearchPattern($format, $length),
-            default => sprintf(
-                '/^%s\d{4}(\d{%d})$/',
-                $this->settings->employee_id_prefix,
-                $length
-            )
+            default => "/^{$prefix}{$separator}(\d+)$/"
         };
 
-        // Get last staff with matching pattern
+        // Get last employee ID
         $lastStaff = $this->staff
             ->where('school_id', $this->tenant->id)
-            ->where('employee_id', 'REGEXP', $searchPattern)
             ->orderBy('employee_id', 'desc')
             ->first();
 
@@ -196,14 +242,21 @@ class EmployeeIdGenerator
             return str_pad('1', $length, '0', STR_PAD_LEFT);
         }
 
-        // Extract and increment last number
-        if (preg_match($searchPattern, $lastStaff->employee_id, $matches)) {
-            $lastNumber = intval($matches[1]) + 1;
-            return str_pad($lastNumber, $length, '0', STR_PAD_LEFT);
+        try {
+            // Extract number from last ID with error handling
+            if (preg_match($pattern, $lastStaff->employee_id, $matches)) {
+                $lastNumber = (int) ($matches[1] ?? 0);
+                $nextNumber = $lastNumber + 1;
+            } else {
+                // If pattern doesn't match, start from 1
+                $nextNumber = 1;
+            }
+        } catch (\Exception $e) {
+            // If there's any regex error, fallback to 1
+            $nextNumber = 1;
         }
 
-        // Fallback to starting number if pattern doesn't match
-        return str_pad('1', $length, '0', STR_PAD_LEFT);
+        return str_pad((string) $nextNumber, $length, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -211,31 +264,38 @@ class EmployeeIdGenerator
      */
     protected function buildCustomSearchPattern(string $format, int $length): string
     {
-        // Replace all tokens with their regex equivalents
-        $pattern = preg_quote($format, '/');
-        $pattern = str_replace(
-            [
-                preg_quote('{PREFIX}'),
-                preg_quote('{YYYY}'),
-                preg_quote('{YY}'),
-                preg_quote('{MM}'),
-                preg_quote('{DD}'),
-                preg_quote('{DEPT}'),
-                preg_quote("{NUM:$length}"),
-            ],
-            [
-                preg_quote($this->settings->employee_id_prefix),
-                '\d{4}',
-                '\d{2}',
-                '\d{2}',
-                '\d{2}',
-                '[A-Z]{3}',
-                "(\d{$length})",
-            ],
-            $pattern
-        );
+        try {
+            // Replace all tokens with their regex equivalents
+            $pattern = preg_quote($format, '/');
+            $prefix = preg_quote($this->settings->employee_settings['prefix'] ?? 'EMP', '/');
+            
+            $pattern = str_replace(
+                [
+                    preg_quote('{PREFIX}', '/'),
+                    preg_quote('{YYYY}', '/'),
+                    preg_quote('{YY}', '/'),
+                    preg_quote('{MM}', '/'),
+                    preg_quote('{DD}', '/'),
+                    preg_quote('{DEPT}', '/'),
+                    preg_quote("{NUM:$length}", '/'),
+                ],
+                [
+                    $prefix,
+                    '\d{4}',
+                    '\d{2}',
+                    '\d{2}',
+                    '\d{2}',
+                    '[A-Z]{3}',
+                    "(\d{$length})",
+                ],
+                $pattern
+            );
 
-        return '/^' . $pattern . '$/';
+            return "/^$pattern$/";
+        } catch (\Exception $e) {
+            // Return a safe fallback pattern if there's an error
+            return "/(\d+)$/";
+        }
     }
 
     public function generate(array $data = []): string

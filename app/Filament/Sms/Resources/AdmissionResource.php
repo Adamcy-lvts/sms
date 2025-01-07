@@ -10,12 +10,16 @@ use App\Models\Status;
 use App\Helpers\Gender;
 use App\Models\Student;
 use Filament\Forms\Get;
+use Filament\Forms\Set;
 use App\Helpers\Options;
+use App\Models\Template;
 use Filament\Forms\Form;
 use App\Models\Admission;
 use App\Models\ClassRoom;
 use Filament\Tables\Table;
+use Illuminate\Support\Str;
 use Filament\Facades\Filament;
+use App\Models\AcademicSession;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Illuminate\Support\Collection;
@@ -24,19 +28,22 @@ use Illuminate\Support\HtmlString;
 use Filament\Forms\Components\Grid;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Filters\Filter;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
-use Filament\Infolists\Components\Section as InfolistSection;
-use Filament\Forms\Components\Section as FormSection;
+use Illuminate\Support\Facades\Mail;
+use App\Services\PdfGeneratorService;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Wizard;
 use Illuminate\Support\Facades\Blade;
 use Filament\Forms\Components\Section;
+use App\Services\TemplateRenderService;
 use Filament\Forms\Components\Fieldset;
 use Filament\Forms\Components\Tabs\Tab;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Illuminate\Support\Facades\Storage;
 use Filament\Infolists\Components\Group;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\ImageColumn;
@@ -47,7 +54,9 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Forms\Components\Section as FormSection;
 use App\Filament\Sms\Resources\AdmissionResource\Pages;
+use Filament\Infolists\Components\Section as InfolistSection;
 use App\Filament\Sms\Resources\AdmissionResource\Pages\NewStudent;
 use App\Filament\Sms\Resources\AdmissionResource\RelationManagers;
 use App\Filament\Sms\Resources\StudentResource\Pages\CreateStudent;
@@ -67,6 +76,7 @@ class AdmissionResource extends Resource
 
     public static function form(Form $form): Form
     {
+        $school = Filament::getTenant();
         return $form
             ->schema([
 
@@ -80,15 +90,20 @@ class AdmissionResource extends Resource
                                     Forms\Components\TextInput::make('admission_number')
                                         ->maxLength(255)
                                         ->unique(ignorable: fn($record) => $record)
-                                        ->placeholder('Will be auto-generated')
                                         ->disabled()
-                                        ->dehydrated(),
+                                        ->prefixIcon('heroicon-m-information-circle')
+                                        ->helperText('This is a preview of the admission number that will be assigned when approved')
+                                        ->dehydrated(
+                                            fn(Get $get): bool =>
+                                            $get('status_id') && Status::find($get('status_id'))?->name === 'approved'
+                                        ),
 
                                     Forms\Components\Select::make('academic_session_id')
-                                        ->relationship(name: 'academicSession', titleAttribute: 'name')
-                                        ->searchable()
-                                        ->preload()
-                                        ->required(),
+                                        ->label('Academic Session')
+                                        ->options(AcademicSession::pluck('name', 'id'))
+                                        ->default(function () {
+                                            return config('app.current_session')->id ?? null;
+                                        }),
 
                                     Forms\Components\TextInput::make('first_name')
                                         ->required()
@@ -150,7 +165,7 @@ class AdmissionResource extends Resource
                                         ->image()
                                         ->maxSize(2048)
                                         ->disk('public')
-                                        ->directory('admission_passport')
+                                        ->directory("{$school->slug}/student_profile_pictures")
                                         ->columnSpanFull(),
                                 ]),
 
@@ -191,18 +206,59 @@ class AdmissionResource extends Resource
                                         ->maxLength(255),
                                     Forms\Components\TextInput::make('previous_class')
                                         ->maxLength(255),
-                                    Forms\Components\DatePicker::make('admitted_date')->native(false)
-                                        ->required(),
-                                    Forms\Components\DatePicker::make('application_date')->native(false),
+                                    Forms\Components\DatePicker::make('admitted_date')
+                                        ->native(false)
+                                        ->displayFormat('d F Y')
+                                        ->visible(fn(Get $get) => $get('status_id') && Status::find($get('status_id'))?->name === 'approved')
+                                        ->required(fn(Get $get) => $get('status_id') && Status::find($get('status_id'))?->name === 'approved')
 
-                                    Forms\Components\Select::make('status_id')->options(Status::where('type', 'admission')->pluck('name', 'id')->toArray())->label('Status')
-                                        ->required(),
+                                        ->dehydrated(),
+                                    Forms\Components\DatePicker::make('application_date')
+                                        ->native(false)
+                                        ->displayFormat('d F Y')
+                                        ->required()
+
+                                        ->dehydrated(),
+
+                                    Forms\Components\Select::make('status_id')->options(Status::where('type', 'admission')
+                                        ->pluck('name', 'id')->toArray())->label('Status')
+                                        ->live()
+                                        ->required()
+                                        ->helperText(
+                                            fn(Get $get): string =>
+                                            Status::find($get('status_id'))?->name === 'approved'
+                                                ? 'The admission number shown above will be officially assigned upon submission.'
+                                                : ''
+                                        )
+                                        ->prefixIcon(
+                                            fn(Get $get): string =>
+                                            Status::find($get('status_id'))?->name === 'approved'
+                                                ? 'heroicon-m-information-circle'
+                                                : ''
+                                        ),
+
+                                    // Add new classroom field
+                                    Forms\Components\Select::make('class_room_id')
+                                        ->label('Class Room')
+                                        ->options(fn() => ClassRoom::where('school_id', Filament::getTenant()->id)
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id'))
+                                        ->searchable()
+                                        ->preload()
+                                        ->required(
+                                            fn(Get $get): bool =>
+                                            $get('status_id') && Status::find($get('status_id'))?->name === 'approved'
+                                        )
+                                        ->visible(
+                                            fn(Get $get): bool =>
+                                            $get('status_id') && Status::find($get('status_id'))?->name === 'approved'
+                                        ),
                                 ])
                         ]),
 
-                    Wizard\Step::make('Guardian/Parent Information')
+                    Wizard\Step::make('Parent Information/Guardian')
                         ->schema([
-                            Fieldset::make('Guardian/Parent Information')
+                            Fieldset::make('Parent Information/Guardian')
                                 ->schema([
                                     Forms\Components\TextInput::make('guardian_name')
                                         ->required()
@@ -223,24 +279,39 @@ class AdmissionResource extends Resource
                         ]),
                     Wizard\Step::make('Emergency Contact Information')
                         ->schema([
-                            Fieldset::make('Personal Infomration 2')
+                            Fieldset::make('Emergency Contact')
                                 ->schema([
+                                    // Add hint action to first field
                                     Forms\Components\TextInput::make('emergency_contact_name')
                                         ->required()
-                                        ->maxLength(255),
+                                        ->maxLength(255)
+                                        ->hintAction(
+                                            \Filament\Forms\Components\Actions\Action::make('copyFromGuardian')
+                                                ->label('Same as Guardian')
+                                                ->icon('heroicon-m-document-duplicate')
+                                                ->action(function (Set $set, Get $get) {
+                                                    // Copy all guardian fields
+                                                    $set('emergency_contact_name', $get('guardian_name'));
+                                                    $set('emergency_contact_relationship', $get('guardian_relationship'));
+                                                    $set('emergency_contact_phone_number', $get('guardian_phone_number'));
+                                                    $set('emergency_contact_email', $get('guardian_email'));
+                                                })
+                                        ),
+
                                     Forms\Components\TextInput::make('emergency_contact_relationship')
                                         ->required()
                                         ->maxLength(255),
+
                                     Forms\Components\TextInput::make('emergency_contact_phone_number')
                                         ->tel()
                                         ->required()
                                         ->maxLength(255),
+
                                     Forms\Components\TextInput::make('emergency_contact_email')
                                         ->email()
                                         ->maxLength(255),
-                                ]),
-
-                        ]),
+                                ])
+                        ])
                 ])->skippable()->persistStepInQueryString()->submitAction(new HtmlString(Blade::render(<<<BLADE
                 <x-filament::button
                     type="submit"
@@ -290,7 +361,7 @@ class AdmissionResource extends Resource
 
                 // Add Guardian name for reference
                 TextColumn::make('guardian_name')
-                    ->label('Guardian')
+                    ->label('Parent/Guardian')
                     ->searchable()
                     ->toggleable(true)
                     ->description(fn($record) => $record->guardian_phone_number),
@@ -418,17 +489,25 @@ class AdmissionResource extends Resource
                         ->requiresConfirmation()
                         ->modalHeading('Enroll Student')
                         ->modalDescription(fn(Admission $record) => "Enroll {$record->full_name} as a student")
+                        ->visible(
+                            fn(Admission $record): bool =>
+                            $record->status?->name === 'approved' || $record->status?->name === 'pending' &&
+                                !$record->student()->exists()
+                        )
                         ->form([
                             Section::make('Class Assignment')
                                 ->description('Assign student to a class')
                                 ->schema([
                                     Select::make('class_room_id')
-                                        ->label('Class')
+                                        ->label('Class Room')
                                         ->options(fn() => ClassRoom::where('school_id', Filament::getTenant()->id)
                                             ->orderBy('name')
                                             ->pluck('name', 'id'))
                                         ->required()
-                                        ->searchable(),
+                                        ->searchable()
+                                        ->native(false)  // Add this
+                                        ->live(false),   // Add this
+
 
                                     Select::make('status_id')
                                         ->label('Student Status')
@@ -442,6 +521,9 @@ class AdmissionResource extends Resource
 
                                     Forms\Components\TextInput::make('identification_number')
                                         ->label('Student ID')
+                                        ->default(fn(Admission $record) =>  $record->admission_number ? $record->admission_number : (new \App\Services\AdmissionNumberGenerator())->generate())
+                                        ->disabled()
+                                        ->dehydrated()
                                         ->placeholder('Optional - Will be auto-generated if empty')
                                         ->maxLength(255),
 
@@ -451,11 +533,8 @@ class AdmissionResource extends Resource
                                         ->default(false),
                                 ])
                         ])
-                        ->visible(
-                            fn(Admission $record): bool =>
-                            $record->status?->name === 'approved' || $record->status?->name === 'processing' &&
-                                !$record->student()->exists()
-                        )
+                        ->modalWidth('lg')  // Add this
+                        ->modalAlignment('center')  // Add this
                         ->action(function (Admission $record, array $data): void {
                             DB::beginTransaction();
 
@@ -500,7 +579,7 @@ class AdmissionResource extends Resource
                                     $record->update(['status_id' => $enrolledStatus->id]);
                                 }
 
-                                DB::commit();
+
 
                                 Notification::make()
                                     ->success()
@@ -516,6 +595,8 @@ class AdmissionResource extends Resource
                                             ]))
                                     ])
                                     ->send();
+
+                                DB::commit();
                             } catch (\Exception $e) {
                                 DB::rollBack();
 
@@ -533,319 +614,13 @@ class AdmissionResource extends Resource
                         ->icon('heroicon-o-document-magnifying-glass')
                         ->color('warning')
                         ->label('Review Admission')
-                        ->modalWidth('4xl')
-                        ->modalHeading(fn(Admission $record) => "Review Admission: {$record->full_name}")
-                        ->visible(
-                            fn(Admission $record): bool =>
-                            in_array($record->status?->name, ['pending', 'processing'])
-                        )
-                        ->modalContent(function (Admission $record): InfoList {
-                            return InfoList::make()
-                                ->record($record)
-                                ->schema([
-                                    InfolistSection::make('Personal Information')
-                                        ->columns(3)
-                                        ->schema([
-                                            ImageEntry::make('passport_photograph')
-                                                ->label('Photo')
-                                                ->circular()
-                                                ->columnSpan(1),
-
-                                            Group::make()
-                                                ->columnSpan(2)
-                                                ->columns(2)
-                                                ->schema([
-                                                    TextEntry::make('full_name')
-                                                        ->label('Full Name')
-                                                        ->weight('bold'),
-                                                    TextEntry::make('gender')
-                                                        ->badge()
-                                                        ->color(fn(string $state): string => match ($state) {
-                                                            'male' => 'info',
-                                                            'female' => 'danger',
-                                                            default => 'gray',
-                                                        }),
-                                                    TextEntry::make('date_of_birth')
-                                                        ->label('Date of Birth')
-                                                        ->date(),
-                                                    TextEntry::make('age')
-                                                        ->state(function (Admission $record): string {
-                                                            if (!$record->date_of_birth) {
-                                                                return 'N/A';
-                                                            }
-                                                            $birthDate = \Carbon\Carbon::parse($record->date_of_birth);
-                                                            $age = max(0, $birthDate->age);
-                                                            return $age . ' years';
-
-                                                            
-                                                        }),
-                                                ]),
-                                        ]),
-
-                                    InfolistSection::make('Contact & Location')
-                                        ->columns(2)
-                                        ->schema([
-                                            TextEntry::make('phone_number')
-                                                ->label('Phone')
-                                                ->icon('heroicon-m-phone'),
-                                            TextEntry::make('email')
-                                                ->icon('heroicon-m-envelope'),
-                                            TextEntry::make('address')
-                                                ->columnSpanFull(),
-                                            TextEntry::make('state.name')
-                                                ->label('State of Origin'),
-                                            TextEntry::make('lga.name')
-                                                ->label('LGA'),
-                                        ]),
-
-                                    InfolistSection::make('Academic Information')
-                                        ->columns(2)
-                                        ->schema([
-                                            TextEntry::make('academicSession.name')
-                                                ->label('Session'),
-                                            TextEntry::make('admission_number')
-                                                ->label('Admission Number')
-                                                ->copyable(),
-                                            TextEntry::make('previous_school_name')
-                                                ->label('Previous School'),
-                                            TextEntry::make('previous_class')
-                                                ->label('Previous Class'),
-                                            TextEntry::make('admitted_date')
-                                                ->label('Admission Date')
-                                                ->date(),
-                                        ]),
-
-                                    InfolistSection::make('Guardian Information')
-                                        ->columns(2)
-                                        ->schema([
-                                            TextEntry::make('guardian_name')
-                                                ->label('Guardian Name'),
-                                            TextEntry::make('guardian_relationship')
-                                                ->label('Relationship'),
-                                            TextEntry::make('guardian_phone_number')
-                                                ->label('Guardian Phone')
-                                                ->icon('heroicon-m-phone'),
-                                            TextEntry::make('guardian_email')
-                                                ->label('Guardian Email')
-                                                ->icon('heroicon-m-envelope'),
-                                            TextEntry::make('guardian_address')
-                                                ->label('Guardian Address')
-                                                ->columnSpanFull(),
-                                        ]),
-
-                                    InfolistSection::make('Emergency Contact')
-                                        ->columns(2)
-                                        ->schema([
-                                            TextEntry::make('emergency_contact_name')
-                                                ->label('Emergency Contact'),
-                                            TextEntry::make('emergency_contact_relationship')
-                                                ->label('Relationship'),
-                                            TextEntry::make('emergency_contact_phone_number')
-                                                ->label('Emergency Phone')
-                                                ->icon('heroicon-m-phone'),
-                                        ]),
-
-                                    InfolistSection::make('Additional Information')
-                                        ->columns(2)
-                                        ->schema([
-                                            TextEntry::make('religion'),
-                                            TextEntry::make('blood_group')
-                                                ->label('Blood Group'),
-                                            TextEntry::make('genotype'),
-                                            TextEntry::make('disability_type')
-                                                ->visible(fn($record) => !empty($record->disability_type)),
-                                            TextEntry::make('disability_description')
-                                                ->visible(fn($record) => !empty($record->disability_description))
-                                                ->columnSpanFull(),
-                                        ]),
-                                ]);
-                        })
-                        ->form([
-                            Section::make('Review Decision')
-                                ->description('Update admission status and provide feedback')
-                                ->schema([
-                                    Select::make('new_status_id')
-                                        ->label('Update Status')
-                                        ->options(fn() => Status::where('type', 'admission')
-                                            ->whereIn('name', ['approved', 'rejected', 'processing'])
-                                            ->pluck('name', 'id'))
-                                        ->required()
-                                        ->live()
-                                        ->native(false),
-
-                                    Textarea::make('review_notes')
-                                        ->label('Review Notes')
-                                        ->placeholder('Add any notes or feedback about this admission')
-                                        ->rows(3),
-
-                                    Grid::make(2)
-                                        ->schema([
-                                            Toggle::make('send_notification')
-                                                ->label('Send Email Notification')
-                                                ->default(true)
-                                                ->visible(
-                                                    fn(Get $get) =>
-                                                    Status::find($get('new_status_id'))?->name === 'approved'
-                                                ),
-
-                                            Toggle::make('enroll_immediately')
-                                                ->label('Enroll After Approval')
-                                                ->default(false)
-                                                ->visible(
-                                                    fn(Get $get) =>
-                                                    Status::find($get('new_status_id'))?->name === 'approved'
-                                                ),
-                                        ])
-                                ])
-                        ])
-                        ->closeModalByClickingAway(false)
-                        ->modalFooterActions([
-                            Action::make('approve_and_enroll')
-                                ->label('Approve & Enroll')
-                                ->color('success')
-                                ->icon('heroicon-o-academic-cap')
-                                ->visible(
-                                    fn(Admission $record) =>
-                                    in_array($record->status?->name, ['pending', 'processing'])
-                                )
-                                ->action(function (Admission $record) {
-                                    DB::beginTransaction();
-
-                                    try {
-                                        // Set status to approved
-                                        $approvedStatus = Status::where('type', 'admission')
-                                            ->where('name', 'approved')
-                                            ->first();
-
-                                        $record->update([
-                                            'status_id' => $approvedStatus->id,
-                                        ]);
-
-                                        // Auto-assign to first available class
-                                        $defaultClass = ClassRoom::where('school_id', Filament::getTenant()->id)
-                                            ->orderBy('name')
-                                            ->first();
-
-                                        // Create student record
-                                        $student = Student::create([
-                                            'school_id' => Filament::getTenant()->id,
-                                            'admission_id' => $record->id,
-                                            'class_room_id' => $defaultClass->id,
-                                            'status_id' => Status::where('type', 'student')
-                                                ->where('name', 'active')
-                                                ->first()?->id,
-                                            'first_name' => $record->first_name,
-                                            'last_name' => $record->last_name,
-                                            'middle_name' => $record->middle_name,
-                                            'date_of_birth' => $record->date_of_birth,
-                                            'phone_number' => $record->phone_number,
-                                            'profile_picture' => $record->passport_photograph,
-                                            'admission_number' => $record->admission_number,
-                                            'created_by' => Auth::id(),
-                                        ]);
-
-                                        DB::commit();
-
-                                        Notification::make()
-                                            ->success()
-                                            ->title('Admission Approved & Student Enrolled')
-                                            ->body("Successfully processed admission for {$record->full_name}")
-                                            ->persistent()
-                                            ->actions([
-                                                \Filament\Notifications\Actions\Action::make('view')
-                                                    ->button()
-                                                    ->url(fn() => StudentResource::getUrl('view', [
-                                                        'tenant' => Filament::getTenant()->slug,
-                                                        'record' => $student->id,
-                                                    ]))
-                                            ])
-                                            ->send();
-                                    } catch (\Exception $e) {
-                                        DB::rollBack();
-
-                                        Notification::make()
-                                            ->danger()
-                                            ->title('Error Processing Admission')
-                                            ->body('There was an error processing the admission. Please try again.')
-                                            ->send();
-
-                                        throw $e;
-                                    }
-                                }),
-
-                            Action::make('reject')
-                                ->label('Reject')
-                                ->color('danger')
-                                ->icon('heroicon-o-x-circle')
-                                ->requiresConfirmation()
-                                ->modalHeading('Reject Admission')
-                                ->modalDescription(fn(Admission $record) => "Are you sure you want to reject {$record->full_name}'s admission?")
-                                ->visible(
-                                    fn(Admission $record) =>
-                                    in_array($record->status?->name, ['pending', 'processing'])
-                                )
-                                ->action(function (Admission $record) {
-                                    $rejectedStatus = Status::where('type', 'admission')
-                                        ->where('name', 'rejected')
-                                        ->first();
-
-                                    $record->update([
-                                        'status_id' => $rejectedStatus->id
-                                    ]);
-
-                                    Notification::make()
-                                        ->warning()
-                                        ->title('Admission Rejected')
-                                        ->body("Admission for {$record->full_name} has been rejected")
-                                        ->send();
-                                }),
-
-                            Action::make('need_more_info')
-                                ->label('Need More Info')
-                                ->color('warning')
-                                ->icon('heroicon-o-clock')
-                                ->visible(
-                                    fn(Admission $record) =>
-                                    in_array($record->status?->name, ['pending', 'processing'])
-                                )
-                                ->action(function (Admission $record) {
-                                    $processingStatus = Status::where('type', 'admission')
-                                        ->where('name', 'processing')
-                                        ->first();
-
-                                    $record->update([
-                                        'status_id' => $processingStatus->id
-                                    ]);
-
-                                    Notification::make()
-                                        ->info()
-                                        ->title('Status Updated')
-                                        ->body("Admission marked as needing more information")
-                                        ->send();
-                                }),
-                        ])
-                        ->action(function (Admission $record, array $data): void {
-                            $record->update([
-                                'status_id' => $data['new_status_id'],
-                                'review_notes' => $data['review_notes'] ?? null,
-                            ]);
-
-                            if ($data['enroll_immediately'] ?? false) {
-                                // Trigger enrollment process
-                                // ... enrollment logic here
-                            }
-
-                            if ($data['send_notification'] ?? false) {
-                                // Send email notification
-                                // ... notification logic here 
-                            }
-
-                            Notification::make()
-                                ->success()
-                                ->title('Admission Reviewed')
-                                ->body("Successfully updated status for {$record->full_name}")
-                                ->send();
-                        }),
+                        ->url(
+                            fn(Admission $record) =>
+                            route('filament.sms.resources.admissions.view', [
+                                'record' => $record,
+                                'tenant' => Filament::getTenant()->slug
+                            ])
+                        ),
                     Tables\Actions\ViewAction::make()
                         ->label('View Admission Letter')
                         ->icon('heroicon-o-document-text')
@@ -862,8 +637,100 @@ class AdmissionResource extends Resource
                             fn(Admission $record): bool =>
                             $record->status?->name === 'approved'
                         ),
+                    Tables\Actions\ViewAction::make(),
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make(),
+                    Action::make('mail_letter')
+                        ->icon('heroicon-m-envelope')
+                        ->tooltip('Send Admission Letter')
+                        ->requiresConfirmation()
+                        ->modalDescription(fn(Admission $record) => "Send admission letter to {$record->full_name}'s email(s)")
+                        ->visible(fn(Admission $record) => $record->status?->name === 'approved')
+                        ->action(function (Admission $record): void {
+                            try {
+
+                                $school = Filament::getTenant();
+
+                                $pdfService = app(PdfGeneratorService::class);
+                                $template = Template::where('school_id', $school->id)
+                                    ->where('category', 'admission_letter')
+                                    ->where('is_active', true)
+                                    ->first();
+
+                                $renderer = new TemplateRenderService($template);
+                                $content = $renderer->renderForAdmission($record);
+
+                                $logoData = null;
+                                if ($school->logo) {
+                                    $logoPath = str_replace('public/', '', $school->logo);
+                        
+                                    if (Storage::disk('public')->exists($logoPath)) {
+                                        $fullLogoPath = Storage::disk('public')->path($logoPath);
+                                        $extension = pathinfo($fullLogoPath, PATHINFO_EXTENSION);
+                                        $logoData = 'data:image/' . $extension . ';base64,' . base64_encode(
+                                            Storage::disk('public')->get($logoPath)
+                                        );
+                                    }
+                                }
+                                
+                                // Generate PDF with properly formatted filename
+                                $pdfPath = $pdfService->generate(
+                                    view: 'pdfs.admission-letter',
+                                    data: [
+                                        'content' => $content,
+                                        'school' => $record->school,
+                                        'admission' => $record,
+                                        'logoData' => $logoData
+                                    ],
+                                    options: [
+                                        'directory' => "{$record->school->slug}/documents/admissions",
+                                        'filename' => "admission-letter-{$record->admission_number}-" . Str::slug($record->full_name) . '.pdf'
+                                    ],
+                                    save: true
+                                );
+
+                                // Collect valid emails
+                                $emails = collect([
+                                    $record->guardian_email => $record->guardian_name,
+                                    $record->email => $record->full_name
+                                ])
+                                    ->filter(fn($name, $email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+                                    ->map(fn($name, $email) => new \Illuminate\Mail\Mailables\Address($email, $name));
+
+                                if ($emails->isEmpty()) {
+                                    Notification::make()
+                                        ->warning()
+                                        ->title('No Valid Email')
+                                        ->body('No valid email address found for sending the letter.')
+                                        ->send();
+                                    return;
+                                }
+
+                                Mail::to($emails)
+                                    ->queue(new \App\Mail\ApplicationApprovedMail(
+                                        admission: $record,
+                                        pdfPath: $pdfPath,
+                                        pdfName: basename($pdfPath)
+                                    ));
+
+                                Notification::make()
+                                    ->success()
+                                    ->title('Letter Sent')
+                                    ->body('Admission letter has been queued for sending.')
+                                    ->send();
+                            } catch (\Exception $e) {
+                                Log::error('Failed to send admission letter', [
+                                    'error' => $e->getMessage(),
+                                    'admission_id' => $record->id
+                                ]);
+
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Error')
+                                    ->body('Failed to send admission letter. Please try again.')
+                                    ->send();
+                            }
+                        }),
                 ]),
 
 
@@ -910,9 +777,10 @@ class AdmissionResource extends Resource
         return [
             'index' => Pages\ListAdmissions::route('/'),
             'create' => Pages\CreateAdmission::route('/create'),
+            'view' => Pages\ViewAdmission::route('/{record}'),
             'edit' => Pages\EditAdmission::route('/{record}/edit'),
-            'view' => Pages\ViewAdmissionLetter::route('/{record}'),
             'newstudent' => Pages\NewStudent::route('{record}/new-student'),
+            'view-letter' => Pages\ViewAdmissionLetter::route('/{record}/letter'),
 
         ];
     }

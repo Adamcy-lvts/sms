@@ -2,9 +2,10 @@
 
 namespace App\Filament\Sms\Resources\StudentGradeResource\Pages;
 
-use App\Filament\Sms\Resources\StudentGradeResource;
 use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
+use App\Filament\Sms\Pages\BulkGradeStudents;
+use App\Filament\Sms\Resources\StudentGradeResource;
 
 class ListStudentGrades extends ListRecords
 {
@@ -13,7 +14,11 @@ class ListStudentGrades extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\Action::make('bulkGrade')
+                ->label('Grade Students')
+                ->url(BulkGradeStudents::getUrl())
+                ->icon('heroicon-o-check-circle')
+                ->color('primary'),
         ];
     }
 }

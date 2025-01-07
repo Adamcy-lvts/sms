@@ -19,132 +19,47 @@ class CreateStudentGrade extends CreateRecord
 {
     protected static string $resource = StudentGradeResource::class;
 
-    public function mount(): void
-    {
-        $this->authorizeAccess();
-
-        // Check if assessment ID is provided in the URL
-        if ($assessmentId = request()->query('assessment')) {
-            try {
-                $assessment = SubjectAssessment::findOrFail($assessmentId);
-                $this->form->fill(['subject_assessment_id' => $assessment->id]);
-            } catch (\Exception $e) {
-                Notification::make()
-                    ->danger()
-                    ->title('Invalid Assessment')
-                    ->body('The specified assessment could not be found.')
-                    ->send();
-            }
-        }
-    }
-
-    protected function authorizeAccess(): void
-    {
-        static::authorizeResourceAccess();
-
-        if (! auth()->user()) {
-            throw new AuthorizationException();
-        }
-    }
 
     protected function handleRecordCreation(array $data): Model
     {
-        try {
-            // Validate assessment exists and is not published
-            $assessment = SubjectAssessment::findOrFail($data['subject_assessment_id']);
+        return DB::transaction(function () use ($data) {
+            $createdGrades = [];
 
-            if ($assessment->is_published) {
-                throw ValidationException::withMessages([
-                    'subject_assessment_id' => 'Cannot add grades to a published assessment.',
-                ]);
-            }
-
-            // Check for duplicate student entries
-            $studentIds = collect($data['grades'])->pluck('student_id')->toArray();
-            if (count($studentIds) !== count(array_unique($studentIds))) {
-                throw ValidationException::withMessages([
-                    'grades' => 'Duplicate student entries detected.',
-                ]);
-            }
-
-            // Check for existing grades
-            $existingGrades = StudentGrade::where('subject_assessment_id', $assessment->id)
-                ->whereIn('student_id', $studentIds)
-                ->exists();
-
-            if ($existingGrades) {
-                throw ValidationException::withMessages([
-                    'grades' => 'Some students already have grades for this assessment.',
-                ]);
-            }
-
-            // Begin transaction
-            return DB::transaction(function () use ($data, $assessment) {
-                $gradesCreated = [];
-                $firstGrade = null;
-
-                foreach ($data['grades'] as $grade) {
-                    $studentGrade = StudentGrade::create([
-                        'subject_assessment_id' => $data['subject_assessment_id'],
-                        'student_id' => $grade['student_id'],
-                        'score' => $grade['score'],
-                        'remarks' => $grade['remarks'] ?? null,
-                        'school_id' => $assessment->school_id,
+            foreach ($data['grade_entries'] as $entry) {
+                foreach ($entry['scores'] as $score) {
+                    $grade = StudentGrade::create([
+                        'school_id' => $data['school_id'],
+                        'student_id' => $entry['student_id'],
+                        'subject_id' => $data['subject_id'],
+                        'class_room_id' => $data['class_room_id'],
+                        'assessment_type_id' => $score['assessment_type_id'],
+                        'academic_session_id' => $data['academic_session_id'],
+                        'term_id' => $data['term_id'],
+                        'score' => $score['score'],
+                        'remarks' => $entry['remarks'] ?? null,
                         'recorded_by' => auth()->id(),
+                        'assessment_date' => $data['assessment_date'],
                         'graded_at' => now(),
                     ]);
 
-                    $gradesCreated[] = $studentGrade;
-
-                    // Store the first grade to return
-                    if (!$firstGrade) {
-                        $firstGrade = $studentGrade;
-                    }
+                    $createdGrades[] = $grade;
                 }
+            }
 
-                // Send success notification with details
-                Notification::make()
-                    ->success()
-                    ->title('Grades Recorded Successfully')
-                    ->body(sprintf(
-                        'Recorded %d grades for %s - %s',
-                        count($gradesCreated),
-                        $assessment->subject->name,
-                        $assessment->title
-                    ))
-                    ->actions([
-                        Action::make('view_grades')
-                            ->label('View Grades')
-                            ->url(static::getResource()::getUrl('index', [
-                                'tableFilters' => [
-                                    'subject_assessment_id' => $assessment->id
-                                ]
-                            ]))
-                            ->button(),
-                    ])
-                    ->persistent()
-                    ->send();
+            if (empty($createdGrades)) {
+                throw ValidationException::withMessages([
+                    'grade_entries' => 'At least one grade must be entered.',
+                ]);
+            }
 
-                // Return the first grade instead of the assessment
-                return $firstGrade;
-            });
-        } catch (ValidationException $e) {
             Notification::make()
-                ->danger()
-                ->title('Validation Error')
-                ->body($e->getMessage())
-                ->send();
-            throw $e;
-        } catch (\Exception $e) {
-            Notification::make()
-                ->danger()
-                ->title('Error Recording Grades')
-                ->body('An unexpected error occurred while recording grades.')
+                ->success()
+                ->title('Grades Recorded Successfully')
+                ->body(count($createdGrades) . ' grades have been recorded.')
                 ->send();
 
-            report($e); // Log the error
-            throw $e;
-        }
+            return $createdGrades[0];
+        });
     }
 
     protected function getCreatedNotificationTitle(): ?string

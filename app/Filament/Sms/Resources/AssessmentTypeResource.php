@@ -49,7 +49,7 @@ class AssessmentTypeResource extends Resource
                         ->minValue(1)
                         ->maxValue(100)
                         ->default(100)
-                        ->suffix('points'),
+                        ->suffix('marks'),
 
                     TextInput::make('weight')
                         ->numeric()
@@ -87,7 +87,7 @@ class AssessmentTypeResource extends Resource
                 TextColumn::make('max_score')
                     ->numeric()
                     ->sortable()
-                    ->suffix(' points'),
+                    ->suffix(' marks'),
 
                 TextColumn::make('weight')
                     ->numeric()

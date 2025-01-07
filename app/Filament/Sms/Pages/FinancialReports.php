@@ -16,9 +16,11 @@ use Filament\Forms\Components\Select;
 use App\Services\FinancialReportService;
 use Filament\Notifications\Notification;
 use Filament\Forms\Components\DatePicker;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 
 class FinancialReports extends Page
 {
+    use HasPageShield;
     // Define view path
     protected static ?string $navigationGroup = 'Financial Management';
     protected static ?string $navigationLabel = 'Financial Reports';

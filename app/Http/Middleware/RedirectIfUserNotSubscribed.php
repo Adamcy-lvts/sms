@@ -21,25 +21,31 @@ class RedirectIfUserNotSubscribed
             // Redirect to login if the user is not authenticated
             return redirect()->route('login');
         }
-    
+
         $user = Auth::user();
         $school = $user->schools->first();
-    
+
         // Bypass for pricing page with matching tenant slug
         if ($request->route()->getName() === 'filament.sms.pages.pricing-page' && $request->route('tenant') === $school->slug) {
             return $next($request);
         }
-    
+
         // Bypass for billing page
         if ($request->routeIs('filament.sms.tenant.billing')) {
             return $next($request);
         }
-    
+
+        // Bypass for payment form page
+        if ($request->routeIs('filament.sms.pages.payment-form')) {
+            return $next($request);
+        }
+
+
         // Redirect to billing if no school or no active subscription
-        // if (!$school || !$school->subscriptions()->where('status', 'active')->exists()) {
-        //     return redirect()->route('filament.sms.tenant.billing', ['tenant' => $school->slug]);
-        // }
-    
+        if (!$school || !$school->subscriptions()->where('status', 'active')->exists()) {
+            return redirect()->route('filament.sms.tenant.billing', ['tenant' => $school->slug]);
+        }
+
         // Proceed with the request if none of the conditions above are met
         return $next($request);
     }

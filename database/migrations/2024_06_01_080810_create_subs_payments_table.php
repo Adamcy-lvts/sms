@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignId('school_id')->constrained('schools')->onDelete('cascade'); // ID of the school paying the subscription
             $table->foreignId('subscription_id')->nullable()->constrained('subscriptions')->onDelete('cascade');
             $table->foreignId('agent_id')->nullable()->constrained('agents')->onDelete('cascade');
+            $table->foreignId('plan_id')->nullable()->constrained('plans')->onDelete('cascade');
             $table->decimal('amount', 10, 2); // The amount of the payment
             $table->decimal('net_amount', 10, 2)->nullable();
             $table->decimal('split_amount_agent', 10, 2)->nullable();
@@ -24,6 +25,7 @@ return new class extends Migration
             $table->foreignId('payment_method_id')->nullable()->constrained('payment_methods')->onDelete('cascade'); // Method used for the payment (e.g., credit card, bank transfer)
             $table->string('reference')->nullable()->unique(); // A unique identifier provided by the payment gateway
             $table->dateTime('payment_date')->nullable();
+            $table->string('proof_of_payment')->nullable(); // Path to the proof of payment file
             $table->timestamps();
         });
     }

@@ -2,117 +2,194 @@
 
 namespace Database\Seeders;
 
+use App\Models\Plan;
 use App\Helpers\PaystackHelper;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Unicodeveloper\Paystack\Facades\Paystack;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
 class PlansTableSeeder extends Seeder
 {
     /**
+     * Base plans configuration
+     * This defines our plan tiers with all their features and pricing
+     */
+    protected $plans = [
+        [
+            'name' => "Basic",
+            'description' => "Essential features for small to medium schools",
+            'monthly_price' => 15000,
+            'yearly_discount' => 20, // 20% off for yearly
+            'max_students' => 500,
+            'max_staff' => 5,
+            'max_classes' => 15,
+            'trial_period' => 30,
+            'badge_color' => '#10B981', // Emerald-500
+            'features' => [
+                'Profile Management',
+                'Role-Based Access Control',
+                'Financial Management',
+                'Attendance Tracking',
+                'Report Card Generation',
+                'Basic Analytics',
+                '500 Students Limit',
+                '5 Staff Accounts',
+                'Email Support'
+            ],
+            'cto' => 'Start your subscription'
+        ],
+        [
+            'name' => "Standard",
+            'description' => "Advanced features for growing schools",
+            'monthly_price' => 25000,
+            'yearly_discount' => 25, // 25% off for yearly
+            'max_students' => 1000,
+            'max_staff' => 15,
+            'max_classes' => 30,
+            'trial_period' => 30,
+            'badge_color' => '#6366F1', // Indigo-500
+            'features' => [
+                'All Basic Features',
+                'Admission Management',
+                'SMS Notifications',
+                'Performance Analytics',
+                'Library Management',
+                'Bulk Data Import/Export',
+                '1000 Students Limit',
+                '15 Staff Accounts',
+                'Priority Email Support',
+                'Staff Management'
+            ],
+            'cto' => 'Start your subscription'
+        ],
+        [
+            'name' => "Premium",
+            'description' => "Complete solution for large institutions",
+            'monthly_price' => 50000,
+            'yearly_discount' => 30, // 30% off for yearly
+            'max_students' => null, // Unlimited
+            'max_staff' => null,  // Unlimited
+            'max_classes' => null, // Unlimited
+            'trial_period' => 30,
+            'badge_color' => '#EC4899', // Pink-500
+            'features' => [
+                'All Standard Features',
+                'CBT Integration',
+                'Parent & Student Portal',
+                'Advanced Reporting',
+                'API Access',
+                'Priority Support',
+                'Unlimited Students',
+                'Unlimited Staff',
+                'Dedicated Account Manager',
+                'Custom Integration Support',
+                '24/7 Phone Support'
+            ],
+            'cto' => 'Start your subscription'
+        ],
+    ];
+
+    /**
      * Run the database seeds.
      */
-
     public function run(): void
     {
-        // Define plans with features
 
-        $plans = [
-            [
-                'name' => "Basic",
-                'description' => "Access to essential school management features including student enrollment, admissions processing, payments management, classroom management, and basic school analytics.",
-                'amount' => 10000 * 100, // Convert to kobo
-                'interval' => "monthly",
-                'currency' => "NGN",
-                'features' => [
-                    'Student Management',
-                    
-                    'Session & Term Management',
-                    'Classroom Management',
-                    'Exam Management',
-                    'Student Profile',
-                    'Subjects Management',
-                    'Role-Based Access Control',
-                    'Teacher Profiles Management',
-                    'Staff Management',
-                    'Accounting Management',
-                    'Basic Analytics',
-                    'Send Email Noifications',
-                    '500 Students Limit',
-                    'Up to 5 Staff Accounts',
+        // Disable foreign key checks to allow truncation
+        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        Plan::truncate();
+        DB::statement('SET FOREIGN_KEY_CHECKS=1');
+        // Skip if plans already exist
+        if (Plan::count() > 0) {
+            Log::info('Plans already exist, skipping seeder.');
+            return;
+        }
 
-                ]
-            ],
-            [
-                'name' => "Standard",
-                'description' => "Includes all Basic features plus advanced analytics and reporting, staff and teacher management, role-based access control, library management, and student portal access.",
-                'amount' => 25000 * 100,
-                'interval' => "monthly",
-                'currency' => "NGN",
-                'features' => [
-                    'All Basic Features',
-                    'Admission Management',
-                    'Advanced Analytics & Reporting',
-                    'Import and Export Data from Excel',
-                    'Receipt & Invoice Generation',
-                    'Attendance Tracking',
-                    'Books Management',
-                    'Student Performance Metrics',
-                    'Up to 15 Staff Accounts',
-                    'Up to 1000 Students Limit',
+        DB::beginTransaction();
 
-                ]
-            ],
-            [
-                'name' => "Premium",
-                'description' => "Includes all Standard features plus computer-based test integration, real-time data analytics, custom feature requests, enhanced security protocols, and student and parent portal access.",
-                'amount' => 50000 * 100,
-                'interval' => "monthly",
-                'currency' => "NGN",
-                'features' => [
-                    'All Standard Features',
-                    'Computer-Based Test Integration',
-                    'Real-Time Advanced Data Analytics',
-                    'Custom Feature Requests',
-                    'Enhanced Security Protocols',
-                    'Student & Parent Dashboard Access',
-                    'Unlimited Staff Accounts',
-                    'Priority Support',
-                    'Unlimited Students Limit',
-                ]
-            ],
-        ];
-        // Log::info('Attempting to create Paystack plan:', $plans);
-        // Create each plan on Paystack and in the local database
-        // Check if plans already exist in the database
-        if (DB::table('plans')->count() === 0) {
-            // Create each plan on Paystack and in the local database
-            foreach ($plans as $plan) {
-                // Log::info('Attempting to create Paystack plan:', $plan);
-                $response = PaystackHelper::createPlan([
-                    'name' => $plan["name"],
-                    'description' => $plan["description"],
-                    'amount' => $plan["amount"],
-                    'interval' => $plan["interval"],
-                    'currency' => $plan["currency"],
-                ]);
-                // Log::info('Response from Paystack:', $response);
-                if ($response['status']) {
-                    // If Paystack plan creation was successful, save to local DB
-                    DB::table('plans')->insert([
-                        'name' => $plan['name'],
-                        'price' => $response['data']['amount'] / 100,
-                        'description' => $plan['description'],
-                        'duration' => 30, // Assume 30 days for monthly plans
-                        'features' => json_encode($plan['features']), // Convert features array to JSON string
-                        'plan_code' => $response['data']['plan_code'], // Store Paystack plan code
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ]);
+        try {
+            foreach ($this->plans as $planData) {
+                // Create monthly plan first
+                $monthlyPlan = $this->createPlanVariant($planData, 'monthly');
+                if (!$monthlyPlan) {
+                    throw new \Exception("Failed to create monthly plan for {$planData['name']}");
+                }
+
+                // Create yearly plan
+                $yearlyPlan = $this->createPlanVariant($planData, 'annually');
+                if (!$yearlyPlan) {
+                    throw new \Exception("Failed to create yearly plan for {$planData['name']}");
                 }
             }
+
+            DB::commit();
+            Log::info('Plans seeded successfully');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to seed plans: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Create a plan variant (monthly or yearly)
+     */
+    protected function createPlanVariant(array $planData, string $interval): ?Plan
+    {
+        try {
+            $isYearly = $interval === 'annually';
+
+            // Calculate prices
+            if ($isYearly) {
+                // For yearly plans
+                $basePrice = $planData['monthly_price'] * 12;
+                $discount = ($basePrice * ($planData['yearly_discount'] / 100));
+                $discountedPrice = $basePrice - $discount;
+            } else {
+                // For monthly plans
+                $basePrice = $planData['monthly_price'];
+                $discountedPrice = null;
+            }
+
+            // Create Paystack plan with appropriate price
+            $paystackPlan = PaystackHelper::createPlan([
+                'name' => $planData['name'],
+                'description' => $planData['description'],
+                'amount' => ($discountedPrice ?? $basePrice) * 100, // Convert to kobo
+                'interval' => $interval,
+                'currency' => 'NGN',
+            ]);
+
+            // Create local plan
+            $plan = Plan::create([
+                'name' => $planData['name'],
+                'description' => $planData['description'],
+                'price' => $basePrice,
+                'discounted_price' => $discountedPrice,
+                'interval' => $interval,
+                'duration' => $isYearly ? 365 : 30,
+                'features' => $planData['features'],
+                'plan_code' => $paystackPlan['data']['plan_code'],
+                'yearly_discount' => $isYearly ? $planData['yearly_discount'] : 0,
+                'max_students' => $planData['max_students'],
+                'max_staff' => $planData['max_staff'],
+                'max_classes' => $planData['max_classes'],
+                'trial_period' => $planData['trial_period'],
+                'has_trial' => $planData['trial_period'] > 0,
+                'badge_color' => $planData['badge_color'],
+                'cto' => $planData['cto'],
+                'status' => 'active'
+            ]);
+
+            return $plan;
+        } catch (\Exception $e) {
+            Log::error("Failed to create plan variant", [
+                'name' => $planData['name'] ?? $planData['name'],
+                'interval' => $interval,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return null;
         }
     }
 }

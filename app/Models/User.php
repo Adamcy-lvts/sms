@@ -6,9 +6,12 @@ namespace App\Models;
 use Filament\Panel;
 use App\Models\Agent;
 use App\Models\Staff;
+use Filament\Facades\Filament;
 use App\Models\AttendanceRecord;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Filament\Models\Contracts\HasName;
+use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Model;
 use Filament\Models\Contracts\HasAvatar;
 use Illuminate\Notifications\Notifiable;
@@ -20,7 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class User extends Authenticatable implements HasName, FilamentUser, HasTenants, HasAvatar
 {
-    use HasFactory, Notifiable;
+    use HasRoles, HasFactory, Notifiable;
 
     public function canAccessPanel(Panel $panel): bool
     {
@@ -32,6 +35,51 @@ class User extends Authenticatable implements HasName, FilamentUser, HasTenants,
         return true;
     }
 
+    // In User model
+    // public function canAccessPanel(Panel $panel): bool
+    // {
+    //     if ($panel->getId() === 'admin') {
+    //         // For admin panel, check only global super admin
+    //         return $this->roles()
+    //             ->where('roles.name', 'super_admin') // Specify table name
+    //             ->whereNull('roles.school_id')
+    //             ->exists();
+    //     }
+
+    //     // Debug logging
+    //     Log::info('Checking panel access', [
+    //         'panel' => $panel->getId(),
+    //         'user_id' => $this->id,
+    //         'roles' => $this->roles()->get()
+    //     ]);
+
+    //     if ($panel->getId() === 'sms') {
+    //         $schoolId = Filament::getTenant()?->id;
+    //         $schoolId = $this->schools->first()->id;
+    //         Log::info('User Schools:', [$schoolId]);
+    //         $hasAccess = $this->roles()
+    //             ->where(function ($query) use ($schoolId) {
+    //                 $query->where(function ($q) use ($schoolId) {
+    //                     $q->where('roles.name', 'super_admin')
+    //                         ->where('roles.school_id', $schoolId);
+    //                 })->orWhere(function ($q) {
+    //                     $q->where('roles.name', 'super_admin')
+    //                         ->whereNull('roles.school_id');
+    //                 });
+    //             })
+    //             ->exists();
+
+    //         Log::info('SMS panel access check', [
+    //             'school_id' => $schoolId,
+    //             'has_access' => $hasAccess
+    //         ]);
+
+    //         return $hasAccess;
+    //     }
+
+    //     return true;
+    // }
+
     /**
      * The attributes that are mass assignable.
      *
@@ -41,6 +89,7 @@ class User extends Authenticatable implements HasName, FilamentUser, HasTenants,
         'first_name',
         'middle_name',
         'last_name',
+        'user_type',
         'email',
         'status_id',
         'password',

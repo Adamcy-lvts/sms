@@ -13,7 +13,7 @@ class AcademicSession extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'start_date', 'end_date', 'is_current'];
+    protected $fillable = ['school_id','name', 'start_date', 'end_date', 'is_current'];
 
     protected $casts = [
         'start_date' => 'date',

@@ -21,7 +21,9 @@ use Filament\Resources\Resource;
 use App\Helpers\EmployeeIdFormats;
 use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use App\Services\EmployeeIdGenerator;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Database\Eloquent\Model;
@@ -33,8 +35,7 @@ class StaffResource extends Resource
 {
     protected static ?string $model = Staff::class;
     protected static ?string $navigationIcon = 'heroicon-o-users';
-    protected static ?string $navigationGroup = 'Staff Management';
-    protected static ?int $navigationSort = 1;
+    protected static ?string $navigationGroup = 'School Management';
     protected static ?string $recordTitleAttribute = 'full_name';
 
     public static function form(Form $form): Form
@@ -62,22 +63,22 @@ class StaffResource extends Resource
                                         ->label('Employee ID')
                                         ->default(function () {
                                             // Get the current tenant
-                                            // $tenant = Filament::getTenant();
+                                            $tenant = Filament::getTenant();
 
                                             // Get the tenant's settings
-                                            // $settings = $tenant->getSettingsAttribute();
+                                            $settings = $tenant->getSettingsAttribute();
 
                                             // Get current designation_id if exists
-                                            // $designationId = request()->get('designation_id');
+                                            $designationId = request()->get('designation_id');
 
                                             // Create generator instance with tenant settings
-                                            // $generator = new EmployeeIdGenerator($settings);
+                                            $generator = new EmployeeIdGenerator($settings);
 
                                             // Generate ID with proper format
-                                            // return $generator->generate([
-                                            //     'id_format' => $settings->employee_id_format_type,
-                                            //     'designation_id' => $designationId,
-                                            // ]);
+                                            return $generator->generate([
+                                                'id_format' => $settings->employee_id_format_type,
+                                                'designation_id' => $designationId,
+                                            ]);
                                         })
                                         ->disabled()
                                         ->dehydrated()
@@ -189,8 +190,7 @@ class StaffResource extends Resource
                                 Forms\Components\Select::make('bank_id')
                                     ->options(fn() => Bank::pluck('name', 'id'))
                                     ->searchable()
-                                    ->preload()
-                                    ->required(),
+                                    ->preload(),
 
                                 Forms\Components\TextInput::make('account_number')
                                     ->required()
@@ -314,11 +314,6 @@ class StaffResource extends Resource
                                     ->schema([
                                         Forms\Components\Grid::make(2)
                                             ->schema([
-                                                Forms\Components\Select::make('roles')
-                                                    ->multiple()
-                                                    ->options(fn() => \Spatie\Permission\Models\Role::pluck('name', 'id'))
-                                                    ->preload()
-                                                    ->searchable(),
 
                                                 Forms\Components\Select::make('default_password_type')
                                                     ->label('Default Password')
@@ -343,13 +338,6 @@ class StaffResource extends Resource
                                                     ->required(fn(Forms\Get $get) => $get('default_password_type') === 'custom'),
                                             ]),
 
-                                        Forms\Components\Select::make('permissions')
-                                            ->multiple()
-                                            ->options(fn() => \Spatie\Permission\Models\Permission::pluck('name', 'id'))
-                                            ->preload()
-                                            ->searchable()
-                                            ->columnSpanFull(),
-
                                         Forms\Components\Toggle::make('force_password_change')
                                             ->label('Force Password Change on First Login')
                                             ->default(true)
@@ -361,7 +349,7 @@ class StaffResource extends Resource
                                             ->default(true)
                                             ->inline(false),
                                     ])
-                                    ->visible(fn(Forms\Get $get): bool => $get('create_user_account')),
+                                    ->visible(fn(Forms\Get $get): bool => (bool) $get('create_user_account')),
                             ])
                             ->columns(1)
                             ->collapsible(),
@@ -372,13 +360,6 @@ class StaffResource extends Resource
                                     ->label('Login Email')
                                     ->content(fn(Forms\Get $get): string => $get('email') ?? 'Not set'),
 
-                                Forms\Components\Placeholder::make('assigned_roles')
-                                    ->label('Assigned Roles')
-                                    ->content(function (Forms\Get $get) {
-                                        $roleIds = $get('roles') ?? [];
-                                        $roleNames = \Spatie\Permission\Models\Role::whereIn('id', $roleIds)->pluck('name');
-                                        return $roleNames->join(', ') ?: 'No roles assigned';
-                                    }),
 
                                 Forms\Components\Placeholder::make('password_type')
                                     ->label('Password Type')
@@ -393,7 +374,7 @@ class StaffResource extends Resource
                                     }),
                             ])
                             ->columns(2)
-                            ->visible(fn(Forms\Get $get): bool => $get('create_user_account'))
+                            ->visible(fn(Forms\Get $get): bool => (bool) $get('create_user_account'))
                             ->collapsed(false),
                     ]),
             ])
@@ -417,10 +398,12 @@ class StaffResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\ImageColumn::make('profile_picture_url')
+                    ->label('Profile Photo')
                     ->circular()
                     ->defaultImageUrl(fn($record) => asset('images/default-avatar.png')),
 
                 Tables\Columns\TextColumn::make('employee_id')
+                    ->label('Employee ID')
                     ->searchable()
                     ->sortable()
                     ->copyable()
@@ -429,12 +412,29 @@ class StaffResource extends Resource
 
                 Tables\Columns\TextColumn::make('full_name')
                     ->searchable(['first_name', 'last_name', 'middle_name'])
+                    ->copyable()
                     ->sortable()
                     ->description(fn(Staff $record): string => $record->email),
 
                 Tables\Columns\TextColumn::make('designation.name')
                     ->badge()
                     ->sortable(),
+
+                // Add this new column
+                Tables\Columns\TextColumn::make('user.status.name')
+                    ->label('Account Status')
+                    ->badge()
+                    ->color(fn ($record) => match ($record?->user?->status?->name) {
+                        'active' => 'success',
+                        'inactive' => 'danger',
+                        'suspended' => 'warning',
+                        'blocked' => 'danger',
+                        default => 'gray'
+                    })
+                    ->formatStateUsing(fn ($record) => $record?->user?->status?->name ?? 'No Account')
+                    ->description(fn ($record) => $record?->user ? 'Has user account' : 'No user account')
+                    ->sortable()
+                    ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_teacher')
                     ->boolean()
@@ -490,18 +490,246 @@ class StaffResource extends Resource
                     ->preload()
                     ->multiple(),
 
-                Tables\Filters\SelectFilter::make('bank')
-                    ->relationship('bank', 'name')
-                    ->preload()
-                    ->multiple()
-                    ->searchable(),
+                // Tables\Filters\SelectFilter::make('bank')
+                //     ->relationship('bank', 'name')
+                //     ->preload()
+                //     ->multiple()
+                //     ->searchable(),
             ])
             ->actions([
-                Tables\Actions\Action::make('viewProfile')
-                    ->url(fn(Staff $record): string => route('filament.sms.resources.staff.view', ['record' => $record, 'tenant' => Filament::getTenant()]))
-                    ->icon('heroicon-m-eye'),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\Action::make('viewProfile')
+                        ->url(fn(Staff $record): string => route('filament.sms.resources.staff.view', ['record' => $record, 'tenant' => Filament::getTenant()]))
+                        ->icon('heroicon-m-eye'),
+
+                    Tables\Actions\Action::make('createUserAccount')
+                        ->icon('heroicon-o-user-plus')
+                        ->visible(fn(Staff $record): bool => !$record->user_id)
+                        ->tooltip('Create user account for staff member')
+                        ->modalWidth('md')
+                        ->color('primary')
+                        ->modalHeading('Create User Account')
+                        ->form([
+                            Forms\Components\Select::make('default_password_type')
+                                ->label('Default Password')
+                                ->options([
+                                    'email' => 'Use Email Address',
+                                    'phone' => 'Use Phone Number',
+                                    'custom' => 'Set Custom Password',
+                                ])
+                                ->default('phone')
+                                ->live()
+                                ->required(),
+
+                            Forms\Components\TextInput::make('custom_password')
+                                ->password()
+                                ->confirmed()
+                                ->visible(fn(Forms\Get $get) => $get('default_password_type') === 'custom')
+                                ->required(fn(Forms\Get $get) => $get('default_password_type') === 'custom'),
+
+                            Forms\Components\TextInput::make('custom_password_confirmation')
+                                ->password()
+                                ->visible(fn(Forms\Get $get) => $get('default_password_type') === 'custom')
+                                ->required(fn(Forms\Get $get) => $get('default_password_type') === 'custom'),
+
+
+                            Forms\Components\Toggle::make('force_password_change')
+                                ->label('Force Password Change on First Login')
+                                ->default(true),
+
+                            Forms\Components\Toggle::make('send_credentials')
+                                ->label('Send Login Credentials')
+                                ->helperText('Send login credentials via email')
+                                ->default(true),
+                        ])
+                        ->action(function (Staff $record, array $data): void {
+                            // Generate password based on selected type
+                            $password = match ($data['default_password_type']) {
+                                'email' => $record->email,
+                                'phone' => $record->phone_number,
+                                'custom' => $data['custom_password'],
+                            };
+                            
+                            $staffActiveStatus = Status::where('type', 'staff')->where('name', 'active')->first();
+                            
+                            // Create user account
+                            $user = $record->user()->create([
+                                'first_name' => $record->first_name,
+                                'last_name' => $record->last_name,
+                                'middle_name' => $record->middle_name ?? null,
+                                'user_type' => 'staff',
+                                'status_id' => $staffActiveStatus->id,
+                                'email' => $record->email,
+                                'password' => Hash::make($password),
+                                'force_password_change' => $data['force_password_change'],
+                            ]);
+
+                            // Update staff record with user_id
+                            $record->update(['user_id' => $user->id]);
+
+                            // Assign roles
+                            if (!empty($data['roles'])) {
+                                $user->roles()->sync($data['roles']);
+                            }
+
+                            // Attach user to school
+                            $user->schools()->attach(Filament::getTenant()->id);
+
+                            // Send credentials
+                            if ($data['send_credentials']) {
+                                try {
+                                    app(Pages\CreateStaff::class)->sendLoginCredentials(
+                                        staff: $record,
+                                        password: $password
+                                    );
+                                } catch (\Exception $e) {
+                                    Log::error('Failed to send credentials', [
+                                        'staff_id' => $record->id,
+                                        'error' => $e->getMessage()
+                                    ]);
+                                    Notification::make()
+                                        ->warning()
+                                        ->title('Could Not Send Credentials')
+                                        ->body("Login credentials could not be sent via email. Please provide them manually.")
+                                        ->send();
+                                }
+                            }
+
+                            Notification::make()
+                                ->success()
+                                ->title('User Account Created')
+                                ->body("User account has been created for {$record->full_name}")
+                                ->send();
+                        }),
+
+                    // Add new action for managing user account status
+                    Tables\Actions\Action::make('toggleUserStatus')
+                        ->icon('heroicon-o-user-minus')
+                        ->visible(fn(Staff $record): bool => (bool)$record->user_id)
+                        ->requiresConfirmation()
+                        ->modalWidth('md')
+                        ->color(fn(Staff $record) => $record->user?->status?->name === 'active' ? 'danger' : 'success')
+                        ->label(fn(Staff $record) => $record->user?->status?->name === 'active' ? 'Deactivate Account' : 'Activate Account')
+                        ->modalHeading(fn(Staff $record) => $record->user?->status?->name === 'active' ? 'Deactivate User Account' : 'Activate User Account')
+                        ->modalDescription(fn(Staff $record) => "Are you sure you want to " . 
+                            ($record->user?->status?->name === 'active' ? 'deactivate' : 'activate') . 
+                            " {$record->full_name}'s account?")
+                        ->form([
+                            Forms\Components\Textarea::make('reason')
+                                ->label('Reason for Status Change')
+                                ->required()
+                                ->maxLength(255),
+                        ])
+                        ->action(function (Staff $record, array $data): void {
+                            $currentStatus = $record->user?->status?->name;
+                            
+                            // Get the opposite status
+                            $newStatus = Status::where('type', 'staff')
+                                ->where('name', $currentStatus === 'active' ? 'inactive' : 'active')
+                                ->first();
+
+                            if (!$newStatus) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Error')
+                                    ->body('Could not find appropriate status.')
+                                    ->send();
+                                return;
+                            }
+
+                            // Update user status
+                            $record->user()->update([
+                                'status_id' => $newStatus->id
+                            ]);
+
+                            // Log the status change
+                            Log::info('User status changed', [
+                                'staff_id' => $record->id,
+                                'user_id' => $record->user_id,
+                                'old_status' => $currentStatus,
+                                'new_status' => $newStatus->name,
+                                'reason' => $data['reason'],
+                                'changed_by' => auth()->id()
+                            ]);
+
+                            Notification::make()
+                                ->success()
+                                ->title('Account Status Updated')
+                                ->body("User account has been " . ($newStatus->name === 'active' ? 'activated' : 'deactivated'))
+                                ->send();
+                        }),
+
+                    // Add this new action for managing roles
+                    Tables\Actions\Action::make('manageRoles')
+                        ->icon('heroicon-o-user-group')
+                        ->visible(fn(Staff $record): bool => (bool)$record->user_id)
+                        ->modalWidth('md')
+                        ->color('primary')
+                        ->label('Assign Roles')
+                        ->modalHeading(fn(Staff $record) => "Assign Roles to {$record->full_name}")
+                        ->form([
+                            Forms\Components\CheckboxList::make('roles')
+                                ->label('Assigned Roles')
+                                ->options(fn () => \Spatie\Permission\Models\Role::where('team_id', Filament::getTenant()->id)->pluck('name', 'id'))
+                                ->default(function (Staff $record) {
+                                    return $record->user?->roles()->pluck('id')->toArray() ?? [];
+                                })
+                                ->searchable()
+                                ->columns(2)
+                                ->gridDirection('row')
+                                ->helperText('Select the roles you want to assign to this staff member.')
+                        ])
+                        ->action(function (Staff $record, array $data): void {
+                            if (!$record->user) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Error')
+                                    ->body('Staff member must have a user account to assign roles.')
+                                    ->send();
+                                return;
+                            }
+
+                            try {
+                                // Get the team/tenant ID
+                                $teamId = Filament::getTenant()->id;
+                                
+                                // Create the pivot data with team_id
+                                $pivotData = array_fill(0, count($data['roles']), ['team_id' => $teamId]);
+                                $roleData = array_combine($data['roles'], $pivotData);
+                                
+                                // Sync roles with pivot data
+                                $record->user->roles()->sync($roleData);
+
+                                Log::info('Staff roles updated', [
+                                    'staff_id' => $record->id,
+                                    'user_id' => $record->user_id,
+                                    'roles' => $data['roles'],
+                                    'team_id' => $teamId,
+                                    'updated_by' => auth()->id()
+                                ]);
+
+                                Notification::make()
+                                    ->success()
+                                    ->title('Roles Updated')
+                                    ->body("Roles have been updated for {$record->full_name}")
+                                    ->send();
+                            } catch (\Exception $e) {
+                                Log::error('Failed to update staff roles', [
+                                    'staff_id' => $record->id,
+                                    'error' => $e->getMessage()
+                                ]);
+
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Error')
+                                    ->body('Failed to update roles. Please try again.')
+                                    ->send();
+                            }
+                        }),
+
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\DeleteAction::make(),
+                ]),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role; // Add this import
 
 class SchoolTableSeeder extends Seeder
 {
@@ -94,7 +95,7 @@ class SchoolTableSeeder extends Seeder
     public function run(): void
     {
         if (School::count() > 0) return;
-       
+
         $activeStatus = Status::where('name', 'active')->first();
 
         foreach ($this->schools as $schoolData) {
@@ -111,14 +112,13 @@ class SchoolTableSeeder extends Seeder
 
                 // Create designations for this school
                 $this->createDesignations($school);
-               
+
                 // Create principal first
                 $principal = $this->createPrincipalStaff($school, $schoolData, $activeStatus);
 
                 // Create other admin staff
                 // $this->createAdminStaff($school, $activeStatus);
             });
-            
         }
     }
 
@@ -172,7 +172,7 @@ class SchoolTableSeeder extends Seeder
             'date_of_birth' => now()->subYears(40),
             'hire_date' => now(),
             'address' => rand(1, 100) . ' Teachers Quarters, Maiduguri',
-    
+
         ]);
 
         $user = User::create([
@@ -198,4 +198,3 @@ class SchoolTableSeeder extends Seeder
         return 'EMP' . str_pad($school->id, 3, '0', STR_PAD_LEFT) . str_pad($number, 3, '0', STR_PAD_LEFT);
     }
 }
-

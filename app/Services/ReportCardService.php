@@ -27,8 +27,8 @@ class ReportCardService
         $this->gradeService = $gradeService;
 
         // Get current tenant (school)
-        // $tenant = Filament::getTenant();
-        $tenant = School::find(1);
+        $tenant = Filament::getTenant();
+        // $tenant = School::find(1);
 
         // Initialize cache with tenant-specific tag
         $this->cache = Cache::tags([
@@ -42,27 +42,43 @@ class ReportCardService
      */
     protected function generateCacheKey($studentId, int $termId, int $academicSessionId, ?string $templateId = null): string
     {
-
-        // Build cache key components
+        // Add more specificity to cache key
         return implode(':', [
             'report',
             $studentId,
             $termId,
             $academicSessionId,
-            $templateId ?? 'default'
+            $templateId ?? 'default',
+            // Add a version number or timestamp to force cache refresh
+            'v1'
         ]);
     }
 
-    public function generateReport(Student $student, int $termId, int $academicSessionId, ?string $templateId = null): array
-    {
-        // Generate cache key
+    /**
+     * Generate a complete report
+     */
+    public function generateReport(
+        Student $student,
+        int $termId,
+        int $academicSessionId,
+        ?string $templateId = null
+    ): array {
+        $tenant = Filament::getTenant() ?? School::find(1);
         $cacheKey = $this->generateCacheKey($student->id, $termId, $academicSessionId, $templateId);
 
+        // Use multiple tags for better cache control, including template tag
+        $cache = Cache::tags([
+            "school:{$tenant->slug}",
+            'report-cards',
+            "student:{$student->id}",
+            "class:{$student->class_room_id}",
+            "template:{$templateId}" // Add template tag
+        ]);
+
         // Try to get from cache first
-        $reportData = $this->cache->remember($cacheKey, self::CACHE_TTL, function () use ($student, $termId, $academicSessionId, $templateId) {
-            $school = Filament::getTenant();
+        return $cache->remember($cacheKey, self::CACHE_TTL, function () use ($student, $termId, $academicSessionId, $templateId) {
+            $school = $student->school;
             $template = $this->getTemplate($school, $templateId);
-            $this->template = $template;
 
             // Get assessment types
             $assessmentTypes = AssessmentType::where('school_id', $school->id)
@@ -70,33 +86,30 @@ class ReportCardService
                 ->get()
                 ->toArray();
 
-            // Get report data
+            // Get report data from GradeService
             $reportData = $this->gradeService->generateTermReport(
                 $student,
                 $termId,
-                $academicSessionId,
-                $assessmentTypes
+                $academicSessionId
             );
 
-            // Format report data
+            // Format report data with updated structure
             $formattedData = $this->formatReportData($reportData, $template, $assessmentTypes);
-            
+
             // Store the report card
             $this->storeReportCard($student, $termId, $academicSessionId, $templateId, $formattedData);
-
+            // dd($formattedData);
             return $formattedData;
         });
-
-        return $reportData;
     }
 
-    protected function storeReportCard(Student $student, int $termId, int $academicSessionId, ?string $templateId, array $formattedData): void 
+    protected function storeReportCard(Student $student, int $termId, int $academicSessionId, ?string $templateId, array $formattedData): void
     {
         try {
             $summary = $formattedData['term_summary'];
             $attendance = $formattedData['attendance'];
 
-            ReportCard::firstOrCreate(
+            $reportCard = ReportCard::updateOrCreate(
                 [
                     'school_id' => $student->school_id,
                     'student_id' => $student->id,
@@ -112,12 +125,20 @@ class ReportCardService
                     'total_subjects' => $summary['total_subjects'],
                     'total_score' => $summary['total_score'],
                     'subject_scores' => $formattedData['subjects'],
-                    'attendance_percentage' => $attendance['attendance_rate'] ?? 0,
+                    'attendance_percentage' => (float) str_replace('%', '', $summary['attendance_percentage'] ?? 0),
                     'monthly_attendance' => $attendance['monthly_breakdown'] ?? [],
                     'status' => 'final',
-                    'created_by' => auth()->id() ?? null,
+                    'updated_by' => auth()->id() ?? null,
                 ]
             );
+
+            if ($reportCard->wasChanged()) {
+                Log::info('Report card updated', [
+                    'student_id' => $student->id,
+                    'report_id' => $reportCard->id,
+                    'changes' => $reportCard->getChanges()
+                ]);
+            }
 
         } catch (\Exception $e) {
             Log::error('Failed to store report card', [
@@ -126,36 +147,81 @@ class ReportCardService
                 'term_id' => $termId,
                 'session_id' => $academicSessionId
             ]);
-            // Don't throw the exception - just log it
-            // We don't want to break report generation if storage fails
         }
     }
+
 
     /**
      * Invalidate cache for specific report or all tenant reports
      */
-    public function invalidateCache(Student $student, ?int $termId = null, ?int $academicSessionId = null): void
+    public function invalidateCache(?Student $student = null, ?int $termId = null, ?int $academicSessionId = null, ?int $classRoomId = null): void
     {
-        $tenant = Filament::getTenant();
-
-        if ($termId && $academicSessionId) {
-            // Invalidate specific report
-            $cacheKey = $this->generateCacheKey($student, $termId, $academicSessionId);
-            $this->cache->forget($cacheKey);
-
-            Log::info('Invalidated specific report cache', [
-                'student' => $student->admission_number,
-                'term' => $termId,
-                'session' => $academicSessionId
+        try {
+            $tenant = Filament::getTenant();
+            
+            if ($student && $termId && $academicSessionId) {
+                // Invalidate specific student's report
+                $cacheKey = $this->generateCacheKey($student->id, $termId, $academicSessionId);
+                $this->cache->tags([
+                    "school:{$tenant->slug}",
+                    'report-cards',
+                    "student:{$student->id}"
+                ])->forget($cacheKey);
+                
+                // Also clear the main cache tags
+                Cache::tags(["student:{$student->id}"])->flush();
+                
+                Log::info('Invalidated specific report cache', [
+                    'student' => $student->admission_number,
+                    'term' => $termId,
+                    'session' => $academicSessionId,
+                    'cache_key' => $cacheKey
+                ]);
+            } elseif ($classRoomId && $termId && $academicSessionId) {
+                // Invalidate all reports for a specific class
+                Cache::tags(["class:{$classRoomId}"])->flush();
+                $this->invalidateClassReports($classRoomId, $termId, $academicSessionId);
+            } else {
+                // Invalidate all reports for this tenant
+                Cache::tags([
+                    "school:{$tenant->slug}",
+                    'report-cards'
+                ])->flush();
+                
+                Log::info('Invalidated all report caches for school', [
+                    'school' => $tenant->slug
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Cache invalidation failed', [
+                'error' => $e->getMessage(),
+                'student_id' => $student?->id,
+                'term_id' => $termId,
+                'class_id' => $classRoomId
             ]);
-        } else {
-            // Invalidate all reports for this tenant
-            Cache::tags("school:{$tenant->slug}")->flush();
-
-            Log::info('Invalidated all report caches for school', [
-                'school' => $tenant->slug
-            ]);
+            
+            // Force clear all cache as fallback
+            Cache::tags(['report-cards'])->flush();
         }
+    }
+
+    /**
+     * Invalidate reports for all students in a class
+     */
+    protected function invalidateClassReports(int $classRoomId, int $termId, int $academicSessionId): void
+    {
+        Student::where('class_room_id', $classRoomId)->chunk(100, function ($students) use ($termId, $academicSessionId) {
+            foreach ($students as $student) {
+                $cacheKey = $this->generateCacheKey($student->id, $termId, $academicSessionId);
+                $this->cache->forget($cacheKey);
+            }
+        });
+
+        Log::info('Invalidated class reports cache', [
+            'class_id' => $classRoomId,
+            'term' => $termId,
+            'session' => $academicSessionId
+        ]);
     }
 
     protected function getTemplate(School $school, ?string $templateId): ReportTemplate
@@ -172,31 +238,31 @@ class ReportCardService
     }
 
 
+    /**
+     * Format the comprehensive report data
+     */
     protected function formatReportData(array $reportData, ReportTemplate $template, array $assessmentTypes): array
     {
+        // Update structure to match new GradeService output
         $formattedData = [
-            'basic_info' => $this->formatBasicInfo($reportData['student'], $template, $reportData['summary']),
-            'academic_info' => $this->formatAcademicInfo($reportData['academic_info']),
+            'basic_info' => $this->formatBasicInfo($reportData['basic_info'], $template),
+            'academic_info' => $reportData['academic_info'],
             'attendance' => $reportData['attendance'] ?? [],
-            'subjects' => $this->formatSubjects($reportData['subjects'], $template, $assessmentTypes),
-            'term_summary' => $this->formatSummary(
-                $reportData['summary'],
-                $reportData['attendance'] ?? [],
-                $reportData['academic_info']['session']['id'] ?? null // Pass the academic session ID here
-            ),
+            'subjects' => $this->formatSubjects($reportData['subjects'] ?? [], $template, $assessmentTypes),
+            'term_summary' => $reportData['summary'] ?? [],  // Updated to match new structure
             'comments' => $reportData['comments'] ?? [],
             'template' => $template,
-            'generated_at' => now(),
+            'generated_at' => now()
         ];
 
-        // Add behavioral assessments if configured
+        // Add behavioral assessments if available
         if (isset($reportData['behavioral_traits'])) {
             $formattedData['behavioral_traits'] = $this->formatBehavioralTraits(
                 $reportData['behavioral_traits']
             );
         }
 
-        // Add extra-curricular activities if configured
+        // Add activities if available
         if (isset($reportData['activities'])) {
             $formattedData['activities'] = $this->formatActivities(
                 $reportData['activities']
@@ -240,31 +306,32 @@ class ReportCardService
     }
 
 
-    protected function formatBasicInfo(array $studentData, ReportTemplate $template, $termSummaryData): array
+    /**
+     * Format report data to match template requirements
+     */
+    protected function formatBasicInfo(array $studentData, ReportTemplate $template): array
     {
+        // Update to match the new structure from GradeService
+        // StudentData now comes directly from the grade service
+        // Previously we expected a 'student' key, now we have direct data
         $admission = $studentData['admission'] ?? null;
         if (!$admission) {
             return $studentData;
         }
 
-        // dd($studentData['id']);
         $student = Student::find($studentData['id']);
-
         $sections = $template->student_info_config['sections'] ?? [];
 
-
         return collect($sections)
-            ->flatMap(function ($section) use ($admission, $student, $termSummaryData) {
+            ->flatMap(function ($section) use ($admission, $student) {
                 return collect($section['fields'] ?? [])
                     ->filter(fn($field) => $field['enabled'] ?? true)
-                    ->mapWithKeys(function ($field) use ($admission, $student, $termSummaryData) {
+                    ->mapWithKeys(function ($field) use ($admission, $student) {
                         $columnName = $field['admission_column'] ?? null;
-                        // $value = $columnName ? $this->getFieldValue($admission, $student, $columnName) : null;
-                        $value = $columnName ? $this->getFieldValue($admission, $student, $columnName, $termSummaryData) : null;
+                        $value = $columnName ? $this->getFieldValue($admission, $student, $columnName) : null;
 
                         if ($value && $columnName === 'date_of_birth') {
-                            // $value = Carbon::parse($value)->format('d/m/Y');
-                            $value = Carbon::parse($value)->format('jS F, Y'); // e.g. "15th January, 2010"
+                            $value = Carbon::parse($value)->format('jS F, Y');
                         }
 
                         return [$field['key'] => $value ?? '-'];
@@ -461,12 +528,5 @@ class ReportCardService
         return array_values($groupedActivities);
     }
 
-    public function renderReport(array $reportData): string
-    {
-        return View::make('report-cards.show', [
-            'data' => $reportData,
-            'template' => $reportData['template'],
-            'school' => Filament::getTenant(),
-        ])->render();
-    }
+
 }

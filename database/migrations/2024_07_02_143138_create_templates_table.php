@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+   
     /**
      * Run the migrations.
      */
@@ -16,7 +17,14 @@ return new class extends Migration
             $table->string('name')->nullable();
             $table->string('slug')->unique()->nullable();
             $table->foreignId('school_id')->nullable()->constrained('schools')->nullOnDelete();
-            $table->text('content');
+            $table->longText('content');
+            $table->string('category')->nullable();
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_default')->default(false);
+            $table->json('settings')->nullable();
+            $table->integer('version')->default(1);
+            $table->foreignId('last_edited_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
         });
     }

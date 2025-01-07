@@ -235,7 +235,15 @@ class AttendanceResource extends Resource
                 TextColumn::make('student.full_name')
                     ->label('Student')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('student', function (Builder $query) use ($search) {
+                            $query->where('first_name', 'like', "%{$search}%")
+                                ->orWhere('last_name', 'like', "%{$search}%")
+                                ->orWhere('middle_name', 'like', "%{$search}%")
+                                ->orWhere('admission_number', 'like', "%{$search}%");
+                        });
+                    })
+                    ->description(fn($record) => $record->student?->admission_number),
 
                 TextColumn::make('classRoom.name')
                     ->label('Class')

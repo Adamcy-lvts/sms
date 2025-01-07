@@ -55,160 +55,572 @@ class PaymentResource extends Resource
     protected static ?string $navigationGroup = 'Financial Management';
     protected static ?int $navigationSort = 3;
 
+    // public static function form(Form $form): Form
+    // {
+    //     return $form
+    //         ->schema([
+    //             Forms\Components\Section::make('Search Student')
+    //                 ->description('Search for a student by name or admission number')
+    //                 ->schema([
+    //                     Forms\Components\Select::make('student_id')
+    //                         ->label('Student')
+    //                         ->required()
+    //                         ->live(debounce: 500)
+    //                         ->preload()
+    //                         ->placeholder('Search student')
+    //                         ->searchable()
+    //                         ->getSearchResultsUsing(function (string $search): array {
+    //                             return Student::query()
+    //                                 ->select(['id', 'first_name', 'middle_name', 'last_name', 'class_room_id'])
+    //                                 ->with('classRoom')
+    //                                 ->where(function ($query) use ($search) {
+    //                                     $query->where('first_name', 'like', "%{$search}%")
+    //                                         ->orWhere('middle_name', 'like', "%{$search}%")
+    //                                         ->orWhere('last_name', 'like', "%{$search}%")
+    //                                         ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+    //                                         ->orWhereRaw("CONCAT(first_name, ' ', middle_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+    //                                         ->orWhereHas('admission', function ($query) use ($search) {
+    //                                             $query->where('admission_number', 'like', "%{$search}%");
+    //                                         });
+    //                                 })
+    //                                 ->limit(50)
+    //                                 ->get()
+    //                                 ->mapWithKeys(function ($student) {
+    //                                     return [
+    //                                         $student->id => sprintf(
+    //                                             "%s %s - %s",
+    //                                             $student->first_name ?? '',
+    //                                             $student->last_name ?? '',
+    //                                             $student->classRoom?->name ?? 'No Class'
+    //                                         )
+    //                                     ];
+    //                                 })
+    //                                 ->toArray() ?? [];
+    //                         })
+    //                         ->getOptionLabelUsing(function ($value): ?string {
+    //                             $student = Student::query()
+    //                                 ->select(['id', 'first_name', 'last_name', 'class_room_id'])
+    //                                 ->with('classRoom')
+    //                                 ->find($value);
+
+    //                             return $student ? sprintf(
+    //                                 "%s %s - %s",
+    //                                 $student->first_name ?? '',
+    //                                 $student->last_name ?? '',
+    //                                 $student->classRoom?->name ?? 'No Class'
+    //                             ) : '';
+    //                         })
+    //                         ->afterStateUpdated(function (Get $get, Set $set, ?string $state) {
+    //                             if ($state) {
+    //                                 $student = Student::find($state);
+    //                                 $set('class_room_id', $student?->class_room_id ?? null);
+    //                                 $set('payer_name', $student?->admission?->guardian_name ?? '');
+    //                                 $set('payer_phone_number', $student?->admission?->guardian_phone_number ?? '');
+    //                             }
+    //                         }),
+    //                 ])->columns(1),
+
+
+    //             Forms\Components\Section::make('Payment Information')
+    //                 ->schema([
+    //                     Forms\Components\Grid::make(2)
+    //                         ->schema([
+    //                             Forms\Components\Select::make('academic_session_id')
+    //                                 ->label('Academic Session')
+    //                                 ->options(fn() => AcademicSession::where('school_id', Filament::getTenant()?->id ?? 0)
+    //                                     ->pluck('name', 'id')
+    //                                     ->toArray() ?? [])
+    //                                 ->default(fn() => config('app.current_session')?->id ?? null)
+    //                                 ->required()
+    //                                 ->live(),
+
+    //                             Forms\Components\Select::make('term_id')
+    //                                 ->label('Term')
+    //                                 ->options(fn(Get $get) => Term::where('academic_session_id', $get('academic_session_id'))->pluck('name', 'id'))
+    //                                 ->default(fn() => config('app.current_term')->id ?? null)
+    //                                 ->required(),
+
+    //                             Forms\Components\Select::make('payment_method_id')
+    //                                 ->label('Payment Method')
+    //                                 ->options(fn() => PaymentMethod::where('school_id', Filament::getTenant()->id)->where('active', true)->pluck('name', 'id'))
+    //                                 ->required(),
+    //                         ]),
+
+
+    //                 ]),
+
+    //             Forms\Components\Section::make('Payment Details')
+    //                 ->description('Select payment types and enter amount details')
+    //                 ->schema([
+    //                     Forms\Components\Select::make('payment_type_ids')
+    //                         ->label('Payment Types')
+    //                         ->multiple()
+    //                         ->preload()
+    //                         ->options(fn() => PaymentType::where('school_id', Filament::getTenant()?->id ?? 0)
+    //                             ->where('active', true)
+    //                             ->pluck('name', 'id')
+    //                             ->toArray() ?? [])
+    //                         ->required()
+    //                         ->live(debounce: 500)
+    //                         ->afterStateUpdated(function (Get $get, Set $set, ?array $state) {
+    //                             $currentItems = collect($get('payment_items') ?? []);
+    //                             $selectedIds = collect($state ?? []);
+
+    //                             // Add new items
+    //                             $newIds = $selectedIds->diff($currentItems->pluck('payment_type_id') ?? collect());
+    //                             $newItems = PaymentType::whereIn('id', $newIds)->get()->map(fn($type) => [
+    //                                 'payment_type_id' => $type->id ?? 0,
+    //                                 'item_amount' => $type->amount ?? 0,
+    //                                 'item_deposit' => $type->amount ?? 0,
+    //                                 'item_balance' => 0,
+    //                             ])->toArray();
+
+    //                             // Remove deselected items
+    //                             $remainingItems = $currentItems->filter(
+    //                                 fn($item) =>
+    //                                 $selectedIds->contains($item['payment_type_id'])
+    //                             )->toArray();
+
+    //                             // Merge existing and new items
+    //                             $allItems = array_merge($remainingItems, $newItems);
+
+    //                             // Update items and totals
+    //                             $set('payment_items', $allItems);
+    //                             $set('total_amount', collect($allItems)->sum('item_amount'));
+    //                             $set('total_deposit', collect($allItems)->sum('item_deposit'));
+    //                             $set('total_balance', collect($allItems)->sum('item_balance'));
+    //                         }),
+
+    //                     Forms\Components\Toggle::make('enable_partial_payment')
+    //                         ->label('Enable Partial Payment')
+    //                         ->default(false)
+    //                         ->live()
+    //                         ->afterStateUpdated(function (Get $get, Set $set, $state) {
+    //                             if (!$state) {
+    //                                 // Reset to full payment when disabled
+    //                                 $items = $get('payment_items');
+    //                                 foreach ($items as $key => $item) {
+    //                                     $set("payment_items.{$key}.item_deposit", $item['item_amount']);
+    //                                     $set("payment_items.{$key}.item_balance", 0);
+    //                                 }
+
+    //                                 // Update totals
+    //                                 $totalAmount = collect($items)->sum('item_amount');
+    //                                 $set('total_deposit', $totalAmount);
+    //                                 $set('total_balance', 0);
+    //                             }
+    //                         }),
+
+    //                     Forms\Components\Repeater::make('payment_items')
+    //                         ->schema([
+    //                             Forms\Components\Select::make('payment_type_id')
+    //                                 ->afterStateUpdated(function (Get $get, Set $set, $state) {
+    //                                     if ($state) {
+    //                                         $paymentType = PaymentType::find($state);
+    //                                         if ($paymentType) {
+    //                                             $set('item_amount', $paymentType->amount);
+    //                                             $set('item_deposit', $paymentType->amount);
+    //                                             $set('item_balance', 0);
+
+    //                                             // Calculate totals from all items
+    //                                             $items = collect($get('../../payment_items') ?? []);
+    //                                             $totalAmount = $items->sum('item_amount');
+    //                                             $totalDeposit = $items->sum('item_deposit');
+    //                                             $totalBalance = $items->sum('item_balance');
+
+    //                                             // Set the totals
+    //                                             $set('../../total_amount', $totalAmount);
+    //                                             $set('../../total_deposit', $totalDeposit);
+    //                                             $set('../../total_balance', $totalBalance);
+    //                                         }
+    //                                     }
+    //                                 }),
+
+    //                             Forms\Components\TextInput::make('item_amount')
+    //                                 ->label('Amount')
+    //                                 ->numeric()
+    //                                 ->prefix('₦')
+    //                                 ->required()
+    //                                 ->disabled()
+    //                                 ->dehydrated(),
+
+    //                             Forms\Components\TextInput::make('item_deposit')
+    //                                 ->afterStateUpdated(function (Get $get, Set $set, $state) {
+    //                                     $amount = floatval($get('item_amount'));
+    //                                     $deposit = floatval($state ?? 0);
+
+    //                                     if ($deposit > $amount) {
+    //                                         $deposit = $amount;
+    //                                         $set('item_deposit', $amount);
+    //                                     }
+
+    //                                     $balance = max(0, $amount - $deposit);
+    //                                     $set('item_balance', $balance);
+
+    //                                     // Calculate totals from all items
+    //                                     $items = collect($get('../../payment_items') ?? []);
+    //                                     $totalAmount = $items->sum('item_amount');
+    //                                     $totalDeposit = $items->sum('item_deposit');
+    //                                     $totalBalance = $items->sum('item_balance');
+
+    //                                     // Set the totals
+    //                                     $set('../../total_amount', $totalAmount);
+    //                                     $set('../../total_deposit', $totalDeposit);
+    //                                     $set('../../total_balance', $totalBalance);
+    //                                 }),
+
+    //                             Forms\Components\TextInput::make('item_balance')
+    //                                 ->label('Balance')
+    //                                 ->numeric()
+    //                                 ->prefix('₦')
+    //                                 ->disabled()
+    //                                 ->dehydrated(),
+    //                         ])
+    //                         ->defaultItems(0)
+    //                         ->addable(true)
+    //                         ->deletable(true)
+    //                         ->reorderable(false)
+    //                         ->columns(4)
+    //                         ->columnSpanFull()
+    //                         ->live()
+    //                         ->afterStateUpdated(function ($state, Get $get, Set $set) {
+    //                             // Update payment_type_ids to match current items
+    //                             $currentTypeIds = collect($state ?? [])->pluck('payment_type_id')->filter()->values()->toArray();
+    //                             $set('payment_type_ids', $currentTypeIds);
+
+    //                             // Get all payment items
+    //                             $items = collect($state ?? []);
+
+    //                             // Calculate totals directly
+    //                             $totalAmount = $items->sum('item_amount');
+    //                             $totalDeposit = $items->sum('item_deposit');
+    //                             $totalBalance = $items->sum('item_balance');
+
+    //                             // Set the totals
+    //                             $set('total_amount', $totalAmount);
+    //                             $set('total_deposit', $totalDeposit);
+    //                             $set('total_balance', $totalBalance);
+    //                         })
+    //                         ->itemLabel(function (array $state): ?string {
+    //                             if (!isset($state['payment_type_id'])) return 'Payment Item';
+    //                             return PaymentType::find($state['payment_type_id'])?->name ?? 'Payment Item';
+    //                         }),
+    //                     Forms\Components\Grid::make(3)
+    //                         ->schema([
+    //                             Forms\Components\TextInput::make('total_amount')
+    //                                 ->label('Total Amount')
+    //                                 ->numeric()
+    //                                 ->prefix('₦')
+    //                                 ->disabled(),
+
+    //                             Forms\Components\TextInput::make('total_deposit')
+    //                                 ->label('Total Amount to Pay')
+    //                                 ->numeric()
+    //                                 ->prefix('₦')
+    //                                 ->disabled(),
+
+    //                             Forms\Components\TextInput::make('total_balance')
+    //                                 ->label('Total Balance')
+    //                                 ->numeric()
+    //                                 ->prefix('₦')
+    //                                 ->disabled(),
+    //                         ]),
+    //                 ])->columns(1),
+
+
+    //             Forms\Components\Section::make('Payer & Due Date Information')
+    //                 ->schema([
+    //                     Forms\Components\Grid::make(2)
+    //                         ->schema([
+    //                             Grid::make(4)
+    //                                 ->schema([
+    //                                     Forms\Components\TextInput::make('payer_name')
+    //                                         ->label('Payer Name')
+    //                                         ->required(),
+
+    //                                     Forms\Components\TextInput::make('payer_phone_number')
+    //                                         ->label('Payer Phone')
+    //                                         ->tel(),
+
+    //                                     Forms\Components\DateTimePicker::make('due_date')
+    //                                         ->label('Due Date')
+    //                                         ->native(false)
+    //                                         ->default(now()->addDays(7)),
+
+    //                                     Forms\Components\DateTimePicker::make('paid_at')
+    //                                         ->label('Payment Date')
+    //                                         ->required()
+    //                                         ->native(false)
+    //                                         ->default(now()),
+    //                                 ]),
+
+    //                         ]),
+
+    //                     Grid::make(2)
+    //                         ->schema([
+    //                             Forms\Components\TextInput::make('reference')
+    //                                 ->default(fn() => 'PAY-' . strtoupper(uniqid()))
+    //                                 ->readonly()
+    //                                 ->dehydrated(),
+
+    //                             Forms\Components\Select::make('status_id')
+    //                                 ->label('New Status')
+    //                                 ->native(false)
+    //                                 ->options(fn() => Status::where('type', 'payment')
+    //                                     ->pluck('name', 'id'))
+    //                                 ->default(fn() => Status::where('type', 'payment')
+    //                                     ->where('name', 'paid')
+    //                                     ->first()?->id)
+    //                                 ->required(),
+
+    //                         ]),
+
+
+    //                     Forms\Components\Textarea::make('remark')
+    //                         ->label('Payment Remark')
+    //                         ->rows(3)
+    //                         ->columnSpanFull(),
+
+
+    //                 ])
+
+    //         ]);
+    // }
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Search Student')
-                    ->description('Search for a student by name or admission number')
-                    ->schema([
-                        Forms\Components\Select::make('student_id')
-                            ->label('Student')
-                            ->required()
-                            ->live(debounce: 500)
-                            ->preload()
-                            ->placeholder('Search student')
-                            ->searchable()
-                            ->getSearchResultsUsing(function (string $search): array {
-                                return Student::query()
-                                    ->select(['id', 'first_name', 'last_name', 'class_room_id'])
-                                    ->with('classRoom')
-                                    ->where(function ($query) use ($search) {
-                                        $query->where('first_name', 'like', "%{$search}%")
-                                            ->orWhere('last_name', 'like', "%{$search}%")
-                                            ->orWhereHas('admission', function ($query) use ($search) {
-                                                $query->where('admission_number', 'like', "%{$search}%");
-                                            });
+                // Main Grid Layout - 1/3 : 2/3 split
+                Grid::make([
+                    'default' => 1,
+                    'sm' => 1,
+                    'lg' => 3,
+                ])->schema([
+                    // Left Column (1/3 width) - Primary Information
+                    Forms\Components\Group::make([
+                        // Student Search Section
+                        Forms\Components\Section::make('Search Student')
+                            ->description('Search for a student by name or admission number')
+                            ->schema([
+                                Forms\Components\Select::make('student_id')
+                                    ->label('Student')
+                                    ->required()
+                                    ->live(debounce: 500)
+                                    ->preload()
+                                    ->placeholder('Search student')
+                                    ->searchable()
+                                    ->getSearchResultsUsing(function (string $search): array {
+                                        return Student::query()
+                                            ->select(['id', 'first_name', 'middle_name', 'last_name', 'class_room_id'])
+                                            ->with('classRoom')
+                                            ->where(function ($query) use ($search) {
+                                                $query->where('first_name', 'like', "%{$search}%")
+                                                    ->orWhere('middle_name', 'like', "%{$search}%")
+                                                    ->orWhere('last_name', 'like', "%{$search}%")
+                                                    ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                                                    ->orWhereRaw("CONCAT(first_name, ' ', middle_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                                                    ->orWhereHas('admission', function ($query) use ($search) {
+                                                        $query->where('admission_number', 'like', "%{$search}%");
+                                                    });
+                                            })
+                                            ->limit(50)
+                                            ->get()
+                                            ->mapWithKeys(function ($student) {
+                                                return [
+                                                    $student->id => sprintf(
+                                                        "%s %s - %s",
+                                                        $student->first_name ?? '',
+                                                        $student->last_name ?? '',
+                                                        $student->classRoom?->name ?? 'No Class'
+                                                    )
+                                                ];
+                                            })
+                                            ->toArray() ?? [];
                                     })
-                                    ->limit(50)
-                                    ->get()
-                                    ->mapWithKeys(function ($student) {
-                                        return [
-                                            $student->id => "{$student->first_name} {$student->last_name} - {$student->classRoom->name}"
-                                        ];
+                                    ->getOptionLabelUsing(function ($value): ?string {
+                                        $student = Student::query()
+                                            ->select(['id', 'first_name', 'last_name', 'class_room_id'])
+                                            ->with('classRoom')
+                                            ->find($value);
+
+                                        return $student ? sprintf(
+                                            "%s %s - %s",
+                                            $student->first_name ?? '',
+                                            $student->last_name ?? '',
+                                            $student->classRoom?->name ?? 'No Class'
+                                        ) : '';
                                     })
-                                    ->toArray();
-                            })
-                            ->getOptionLabelUsing(function ($value): ?string {
-                                $student = Student::query()
-                                    ->select(['id', 'first_name', 'last_name', 'class_room_id'])
-                                    ->with('classRoom')
-                                    ->find($value);
+                                    ->afterStateUpdated(function (Get $get, Set $set, ?string $state) {
+                                        if ($state) {
+                                            $student = Student::find($state);
+                                            $set('class_room_id', $student?->class_room_id ?? null);
+                                            $set('payer_name', $student?->admission?->guardian_name ?? '');
+                                            $set('payer_phone_number', $student?->admission?->guardian_phone_number ?? '');
+                                        }
+                                    }),
+                            ])->columns(1),
 
-                                if (!$student) return null;
-
-                                return "{$student->first_name} {$student->last_name} - {$student->classRoom->name}";
-                            })
-                            ->afterStateUpdated(function (Get $get, Set $set, ?string $state) {
-                                if ($state) {
-                                    $student = Student::find($state);
-                                    if ($student) {
-                                        $set('class_room_id', $student->class_room_id);
-                                        $set('payer_name', $student->admission?->guardian_name);
-                                        $set('payer_phone_number', $student->admission?->guardian_phone_number);
-                                    }
-                                }
-                            }),
-                    ])->columns(1),
-
-
-                Forms\Components\Section::make('Payment Information')
-                    ->schema([
-                        Forms\Components\Grid::make(2)
+                        // Basic Payment Information
+                        Forms\Components\Section::make('Payment Information')
                             ->schema([
                                 Forms\Components\Select::make('academic_session_id')
                                     ->label('Academic Session')
-                                    ->options(fn() => AcademicSession::where('school_id', Filament::getTenant()->id)->pluck('name', 'id'))
-                                    ->default(fn() => config('app.current_session')->id)
+                                    ->options(fn() => AcademicSession::where('school_id', Filament::getTenant()?->id ?? 0)
+                                        ->pluck('name', 'id')
+                                        ->toArray() ?? [])
+                                    ->default(fn() => config('app.current_session')?->id ?? null)
                                     ->required()
                                     ->live(),
 
                                 Forms\Components\Select::make('term_id')
                                     ->label('Term')
                                     ->options(fn(Get $get) => Term::where('academic_session_id', $get('academic_session_id'))->pluck('name', 'id'))
-                                    ->default(fn() => config('app.current_term')->id)
+                                    ->default(fn() => config('app.current_term')->id ?? null)
                                     ->required(),
 
                                 Forms\Components\Select::make('payment_method_id')
                                     ->label('Payment Method')
-                                    ->options(fn() => PaymentMethod::where('school_id', Filament::getTenant()->id)->where('active', true)->pluck('name', 'id'))
-                                    ->required(),
-                            ]),
+                                    ->options(fn() => PaymentMethod::where('active', true)
+                                        ->pluck('name', 'id')),
 
-
-                    ]),
-
-                Forms\Components\Section::make('Payment Details')
-                    ->description('Select payment types and enter amount details')
-                    ->schema([
-                        Forms\Components\Select::make('payment_type_ids')
-                            ->label('Payment Types')
-                            ->multiple()
-                            ->preload()
-                            ->options(fn() => PaymentType::where('school_id', Filament::getTenant()->id)
-                                ->where('active', true)
-                                ->pluck('name', 'id'))
-                            ->required()
-                            ->live(debounce: 500)
-                            ->afterStateUpdated(function (Get $get, Set $set, ?array $state) {
-                                $currentItems = collect($get('payment_items') ?? []);
-                                $selectedIds = collect($state ?? []);
-
-                                // Add new items
-                                $newIds = $selectedIds->diff($currentItems->pluck('payment_type_id'));
-                                $newItems = PaymentType::whereIn('id', $newIds)->get()->map(fn($type) => [
-                                    'payment_type_id' => $type->id,
-                                    'item_amount' => $type->amount,
-                                    'item_deposit' => $type->amount,
-                                    'item_balance' => 0,
-                                ])->toArray();
-
-                                // Remove deselected items
-                                $remainingItems = $currentItems->filter(
-                                    fn($item) =>
-                                    $selectedIds->contains($item['payment_type_id'])
-                                )->toArray();
-
-                                // Merge existing and new items
-                                $allItems = array_merge($remainingItems, $newItems);
-
-                                // Update items and totals
-                                $set('payment_items', $allItems);
-                                $set('total_amount', collect($allItems)->sum('item_amount'));
-                                $set('total_deposit', collect($allItems)->sum('item_deposit'));
-                                $set('total_balance', collect($allItems)->sum('item_balance'));
-                            }),
-
-                        Forms\Components\Toggle::make('enable_partial_payment')
-                            ->label('Enable Partial Payment')
-                            ->default(false)
-                            ->live()
-                            ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                if (!$state) {
-                                    // Reset to full payment when disabled
-                                    $items = $get('payment_items');
-                                    foreach ($items as $key => $item) {
-                                        $set("payment_items.{$key}.item_deposit", $item['item_amount']);
-                                        $set("payment_items.{$key}.item_balance", 0);
-                                    }
-
-                                    // Update totals
-                                    $totalAmount = collect($items)->sum('item_amount');
-                                    $set('total_deposit', $totalAmount);
-                                    $set('total_balance', 0);
-                                }
-                            }),
-
-                        Forms\Components\Repeater::make('payment_items')
-                            ->schema([
-                                Forms\Components\Select::make('payment_type_id')
+                                Forms\Components\Toggle::make('enable_partial_payment')
+                                    ->label('Enable Partial Payment')
+                                    ->default(false)
+                                    ->live()
                                     ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                        if ($state) {
-                                            $paymentType = PaymentType::find($state);
-                                            if ($paymentType) {
-                                                $set('item_amount', $paymentType->amount);
-                                                $set('item_deposit', $paymentType->amount);
-                                                $set('item_balance', 0);
+                                        if (!$state) {
+                                            $items = $get('payment_items');
+                                            foreach ($items as $key => $item) {
+                                                $set("payment_items.{$key}.item_deposit", $item['item_amount']);
+                                                $set("payment_items.{$key}.item_balance", 0);
+                                            }
+                                            $totalAmount = collect($items)->sum('item_amount');
+                                            $set('total_deposit', $totalAmount);
+                                            $set('total_balance', 0);
+                                        }
+                                    }),
+                            ])->columns(1),
+
+                        // Payment Status Section
+                        Forms\Components\Section::make('Payment Status')
+                            ->schema([
+                                Forms\Components\TextInput::make('reference')
+                                    ->default(fn() => 'PAY-' . strtoupper(uniqid()))
+                                    ->readonly()
+                                    ->dehydrated(),
+
+                                Forms\Components\Select::make('status_id')
+                                    ->label('Payment Status')
+                                    ->options(fn() => Status::where('type', 'payment')->pluck('name', 'id'))
+                                    ->default(fn() => Status::where('type', 'payment')
+                                        ->where('name', 'paid')
+                                        ->first()?->id)
+                                    ->required(),
+
+                                Forms\Components\DateTimePicker::make('paid_at')
+                                    ->label('Payment Date')
+                                    ->required()
+                                    ->native(false)
+                                    ->default(now()),
+
+                                Forms\Components\DateTimePicker::make('due_date')
+                                    ->label('Due Date')
+                                    ->native(false)
+                                    ->default(now()->addDays(7)),
+                            ])->columns(1),
+                    ])->columnSpan(['lg' => 1]),
+
+                    // Right Column (2/3 width) - Payment Details and Calculations
+                    Forms\Components\Group::make([
+                        // Payment Details Section
+                        Forms\Components\Section::make('Payment Details')
+                            ->description('Select payment types and enter amount details')
+                            ->schema([
+                                Forms\Components\Select::make('payment_type_ids')
+                                    ->label('Payment Types')
+                                    ->multiple()
+                                    ->preload()
+                                    ->options(fn() => PaymentType::where('school_id', Filament::getTenant()?->id ?? 0)
+                                        ->where('active', true)
+                                        ->pluck('name', 'id')
+                                        ->toArray() ?? [])
+                                    ->required()
+                                    ->live(debounce: 500)
+                                    ->afterStateUpdated(function (Get $get, Set $set, ?array $state) {
+                                        $currentItems = collect($get('payment_items') ?? []);
+                                        $selectedIds = collect($state ?? []);
+
+                                        // Add new items
+                                        $newIds = $selectedIds->diff($currentItems->pluck('payment_type_id') ?? collect());
+                                        $newItems = PaymentType::whereIn('id', $newIds)->get()->map(fn($type) => [
+                                            'payment_type_id' => $type->id ?? 0,
+                                            'item_amount' => $type->amount ?? 0,
+                                            'item_deposit' => $type->amount ?? 0,
+                                            'item_balance' => 0,
+                                        ])->toArray();
+
+                                        // Remove deselected items
+                                        $remainingItems = $currentItems->filter(
+                                            fn($item) => $selectedIds->contains($item['payment_type_id'])
+                                        )->toArray();
+
+                                        // Merge existing and new items
+                                        $allItems = array_merge($remainingItems, $newItems);
+
+                                        // Update items and totals
+                                        $set('payment_items', $allItems);
+                                        $set('total_amount', collect($allItems)->sum('item_amount'));
+                                        $set('total_deposit', collect($allItems)->sum('item_deposit'));
+                                        $set('total_balance', collect($allItems)->sum('item_balance'));
+                                    }),
+
+                                // Payment Items Repeater
+                                Forms\Components\Repeater::make('payment_items')
+                                    ->schema([
+                                        Forms\Components\Select::make('payment_type_id')
+                                            ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                                if ($state) {
+                                                    $paymentType = PaymentType::find($state);
+                                                    if ($paymentType) {
+                                                        $set('item_amount', $paymentType->amount);
+                                                        $set('item_deposit', $paymentType->amount);
+                                                        $set('item_balance', 0);
+
+                                                        // Calculate totals from all items
+                                                        $items = collect($get('../../payment_items') ?? []);
+                                                        $totalAmount = $items->sum('item_amount');
+                                                        $totalDeposit = $items->sum('item_deposit');
+                                                        $totalBalance = $items->sum('item_balance');
+
+                                                        // Set the totals
+                                                        $set('../../total_amount', $totalAmount);
+                                                        $set('../../total_deposit', $totalDeposit);
+                                                        $set('../../total_balance', $totalBalance);
+                                                    }
+                                                }
+                                            }),
+
+                                        Forms\Components\TextInput::make('item_amount')
+                                            ->label('Amount')
+                                            ->numeric()
+                                            ->prefix('₦')
+                                            ->required()
+                                            ->disabled()
+                                            ->dehydrated(),
+
+                                        Forms\Components\TextInput::make('item_deposit')
+                                            ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                                $amount = floatval($get('item_amount'));
+                                                $deposit = floatval($state ?? 0);
+
+                                                if ($deposit > $amount) {
+                                                    $deposit = $amount;
+                                                    $set('item_deposit', $amount);
+                                                }
+
+                                                $balance = max(0, $amount - $deposit);
+                                                $set('item_balance', $balance);
 
                                                 // Calculate totals from all items
                                                 $items = collect($get('../../payment_items') ?? []);
@@ -220,149 +632,125 @@ class PaymentResource extends Resource
                                                 $set('../../total_amount', $totalAmount);
                                                 $set('../../total_deposit', $totalDeposit);
                                                 $set('../../total_balance', $totalBalance);
-                                            }
-                                        }
-                                    }),
+                                            }),
 
-                                Forms\Components\TextInput::make('item_amount')
-                                    ->label('Amount')
-                                    ->numeric()
-                                    ->prefix('₦')
-                                    ->required()
-                                    ->disabled()
-                                    ->dehydrated(),
+                                        Forms\Components\TextInput::make('item_balance')
+                                            ->label('Balance')
+                                            ->numeric()
+                                            ->prefix('₦')
+                                            ->disabled()
+                                            ->dehydrated(),
+                                    ])
+                                    ->defaultItems(0)
+                                    ->addable(true)
+                                    ->deletable(true)
+                                    ->reorderable(false)
+                                    ->columns(4)
+                                    ->columnSpanFull()
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                                        // Update payment_type_ids to match current items
+                                        $currentTypeIds = collect($state ?? [])->pluck('payment_type_id')->filter()->values()->toArray();
+                                        $set('payment_type_ids', $currentTypeIds);
 
-                                Forms\Components\TextInput::make('item_deposit')
-                                    ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                        $amount = floatval($get('item_amount'));
-                                        $deposit = floatval($state ?? 0);
+                                        // Get all payment items
+                                        $items = collect($state ?? []);
 
-                                        if ($deposit > $amount) {
-                                            $deposit = $amount;
-                                            $set('item_deposit', $amount);
-                                        }
-
-                                        $balance = max(0, $amount - $deposit);
-                                        $set('item_balance', $balance);
-
-                                        // Calculate totals from all items
-                                        $items = collect($get('../../payment_items') ?? []);
+                                        // Calculate totals directly
                                         $totalAmount = $items->sum('item_amount');
                                         $totalDeposit = $items->sum('item_deposit');
                                         $totalBalance = $items->sum('item_balance');
 
                                         // Set the totals
-                                        $set('../../total_amount', $totalAmount);
-                                        $set('../../total_deposit', $totalDeposit);
-                                        $set('../../total_balance', $totalBalance);
+                                        $set('total_amount', $totalAmount);
+                                        $set('total_deposit', $totalDeposit);
+                                        $set('total_balance', $totalBalance);
+                                    })
+                                    ->itemLabel(function (array $state): ?string {
+                                        if (!isset($state['payment_type_id'])) return 'Payment Item';
+                                        return PaymentType::find($state['payment_type_id'])?->name ?? 'Payment Item';
                                     }),
 
-                                Forms\Components\TextInput::make('item_balance')
-                                    ->label('Balance')
-                                    ->numeric()
-                                    ->prefix('₦')
-                                    ->disabled()
-                                    ->dehydrated(),
+                                // Totals Grid
+                                Forms\Components\Grid::make(3)
+                                    ->schema([
+                                        Forms\Components\TextInput::make('total_amount')
+                                            ->label('Total Amount')
+                                            ->numeric()
+                                            ->prefix('₦')
+                                            ->disabled(),
+
+                                        Forms\Components\TextInput::make('total_deposit')
+                                            ->label('Total Amount to Pay')
+                                            ->numeric()
+                                            ->prefix('₦')
+                                            ->disabled(),
+
+                                        Forms\Components\TextInput::make('total_balance')
+                                            ->label('Total Balance')
+                                            ->numeric()
+                                            ->prefix('₦')
+                                            ->disabled(),
+                                    ]),
+                            ])->columns(1),
+
+                        // Payer Information Section
+                        Forms\Components\Section::make('Payer Information')
+                            ->schema([
+                                Grid::make(2)->schema([
+                                    Forms\Components\TextInput::make('payer_name')
+                                        ->label('Payer Name')
+                                        ->required(),
+
+                                    Forms\Components\TextInput::make('payer_phone_number')
+                                        ->label('Payer Phone')
+                                        ->tel(),
+                                ]),
+
+                                Forms\Components\Textarea::make('remark')
+                                    ->label('Payment Remark')
+                                    ->rows(3)
+                                    ->columnSpanFull(),
+                            ]),
+
+                        // Add this inside the Payer Information Section
+                        Forms\Components\Section::make('Receipt Customization')
+                            ->description('Customize the terms and notes that appear on the receipt')
+                            ->collapsible()
+                            ->collapsed()
+                            ->schema([
+                                Forms\Components\KeyValue::make('meta_data.terms')
+                                    ->label('Receipt Terms')
+                                    ->addActionLabel('Add Term')
+                                    ->keyLabel('Order')
+                                    ->valueLabel('Term')
+                                    ->default([
+                                        '1' => 'Payment is non-refundable.',
+                                        '2' => 'Please keep this receipt for your records.'
+                                    ])
+                                    ->reorderable()
+                                    ->columnSpanFull()
+                                    ->rules(['array'])
+                                    ->afterStateHydrated(function (Forms\Components\KeyValue $component, $state) {
+                                        if (empty($state)) {
+                                            $component->state([
+                                                '1' => 'Payment is non-refundable.',
+                                                '2' => 'Please keep this receipt for your records.'
+                                            ]);
+                                        }
+                                    }),
+                                    
+                                Forms\Components\Toggle::make('meta_data.show_terms')
+                                    ->label('Show Terms on Receipt')
+                                    ->default(true)
+                                    ->inline(false),
                             ])
-                            ->defaultItems(0)
-                            ->addable(true)
-                            ->deletable(true)
-                            ->reorderable(false)
-                            ->columns(4)
-                            ->columnSpanFull()
-                            ->live()
-                            ->afterStateUpdated(function ($state, Get $get, Set $set) {
-                                // Update payment_type_ids to match current items
-                                $currentTypeIds = collect($state ?? [])->pluck('payment_type_id')->filter()->values()->toArray();
-                                $set('payment_type_ids', $currentTypeIds);
-
-                                // Get all payment items
-                                $items = collect($state ?? []);
-
-                                // Calculate totals directly
-                                $totalAmount = $items->sum('item_amount');
-                                $totalDeposit = $items->sum('item_deposit');
-                                $totalBalance = $items->sum('item_balance');
-
-                                // Set the totals
-                                $set('total_amount', $totalAmount);
-                                $set('total_deposit', $totalDeposit);
-                                $set('total_balance', $totalBalance);
-                            })
-                            ->itemLabel(function (array $state): ?string {
-                                if (!isset($state['payment_type_id'])) return 'Payment Item';
-                                return PaymentType::find($state['payment_type_id'])?->name ?? 'Payment Item';
-                            }),
-                        Forms\Components\Grid::make(3)
-                            ->schema([
-                                Forms\Components\TextInput::make('total_amount')
-                                    ->label('Total Amount')
-                                    ->numeric()
-                                    ->prefix('₦')
-                                    ->disabled(),
-
-                                Forms\Components\TextInput::make('total_deposit')
-                                    ->label('Total Amount to Pay')
-                                    ->numeric()
-                                    ->prefix('₦')
-                                    ->disabled(),
-
-                                Forms\Components\TextInput::make('total_balance')
-                                    ->label('Total Balance')
-                                    ->numeric()
-                                    ->prefix('₦')
-                                    ->disabled(),
-                            ]),
-                    ])->columns(1),
-
-
-                Forms\Components\Section::make('Payer & Due Date Information')
-                    ->schema([
-                        Forms\Components\Grid::make(2)
-                            ->schema([
-                                Forms\Components\TextInput::make('payer_name')
-                                    ->label('Payer Name')
-                                    ->required(),
-
-                                Forms\Components\TextInput::make('payer_phone_number')
-                                    ->label('Payer Phone')
-                                    ->tel(),
-
-                                Forms\Components\DateTimePicker::make('due_date')
-                                    ->label('Due Date')
-                                    ->required()
-                                    ->native(false)
-                                    ->default(now()->addDays(7)),
-
-                                Forms\Components\DateTimePicker::make('paid_at')
-                                    ->label('Payment Date')
-                                    ->required()
-                                    ->native(false)
-                                    ->default(now()),
-                            ]),
-
-                        Forms\Components\TextInput::make('reference')
-                            ->default(fn() => 'PAY-' . strtoupper(uniqid()))
-                            ->readonly()
-                            ->dehydrated(),
-
-                        Forms\Components\Textarea::make('remark')
-                            ->label('Payment Remark')
-                            ->rows(3)
-                            ->columnSpanFull(),
-                        Forms\Components\Select::make('status_id')
-                            ->label('New Status')
-                            ->native(false)
-                            ->options(fn() => Status::where('type', 'payment')
-                                ->whereNotIn('name', ['paid']) // Exclude 'Promoted' status
-                                ->pluck('name', 'id'))
-                            ->required(),
-
-                    ])
-
+                            ->icon('heroicon-o-document-text')
+                            ->columns(1),
+                    ])->columnSpan(['lg' => 2]),
+                ]),
             ]);
     }
-
 
     public static function table(Table $table): Table
     {
@@ -377,22 +765,25 @@ class PaymentResource extends Resource
                 Tables\Columns\TextColumn::make('student.full_name')
                     ->label('Student')
                     ->sortable()
-                    ->searchable(['first_name', 'last_name']),
-                Tables\Columns\TextColumn::make('student.classRoom.name')
+                    ->searchable(['first_name', 'last_name'])
+                    ->formatStateUsing(fn($record) => sprintf(
+                        "%s %s",
+                        $record?->student?->first_name ?? '',
+                        $record?->student?->last_name ?? ''
+                    ) ?: 'N/A'),
+
+                Tables\Columns\TextColumn::make('classRoom.name')
                     ->label('Class Room')
                     ->sortable()
+                    ->searchable()
                     ->badge()
                     ->color('info')
-                    ->searchable(['name']),
-                // Tables\Columns\TextColumn::make('classRoom.name')
-                //     ->label('Payment Class Room')
-                //     ->sortable()
-                //     ->searchable(['name']),
-
+                    ->formatStateUsing(fn($state) => $state ?? 'Unassigned'),
 
                 Tables\Columns\TextColumn::make('academicSession.name')
                     ->label('Session')
-                    ->sortable(),
+                    ->sortable()
+                    ->formatStateUsing(fn($state) => $state ?? '-'),
 
                 Tables\Columns\TextColumn::make('term.name')
                     ->label('Term')
@@ -401,9 +792,10 @@ class PaymentResource extends Resource
                 Tables\Columns\TextColumn::make('paymentItems.paymentType.name')
                     ->label('Payment Types')
                     ->formatStateUsing(function ($record) {
-                        return $record->paymentItems->map(function ($item) {
-                            return $item->paymentType->name;
-                        })->join(', ');
+                        return $record?->paymentItems
+                            ->map(fn($item) => $item->paymentType?->name ?? 'Unknown')
+                            ->filter()
+                            ->join(', ') ?: 'No Items';
                     })
                     ->wrap()
                     ->searchable()
@@ -419,15 +811,15 @@ class PaymentResource extends Resource
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('amount')
-                    ->formatStateUsing(fn($state) => formatNaira($state))
+                    ->formatStateUsing(fn($state) => formatNaira($state ?? 0))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('deposit')
-                    ->formatStateUsing(fn ($state) => formatNaira($state))
+                    ->formatStateUsing(fn($state) => formatNaira($state))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('balance')
-                    ->formatStateUsing(fn ($state) => formatNaira($state))
+                    ->formatStateUsing(fn($state) => formatNaira($state))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status.name')
@@ -453,7 +845,7 @@ class PaymentResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->defaultSort('created_at', 'desc')
+            ->defaultSort('paid_at', 'desc')
             ->filters([
 
                 // Student Filter - For filtering payments by student
@@ -855,8 +1247,7 @@ class PaymentResource extends Resource
                                 ->schema([
                                     Select::make('payment_method_id')
                                         ->label('Payment Method')
-                                        ->options(fn() => PaymentMethod::where('school_id', Filament::getTenant()->id)
-                                            ->where('active', true)
+                                        ->options(fn() => PaymentMethod::where('active', true)
                                             ->pluck('name', 'id'))
                                         ->required(),
 
@@ -1013,7 +1404,7 @@ class PaymentResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        return static::getModel()::where('created_at', '>=', now()->startOfDay())->count();
+        return static::getModel()::where('created_at', '>=', now()->startOfDay())->count() ?: null;
     }
 
     public static function getNairaFormatter(): RawJs

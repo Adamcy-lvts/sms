@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Cache;
 
 class ReportTemplate extends Model
 {
@@ -106,6 +107,22 @@ class ReportTemplate extends Model
                     ->where('id', '!=', $template->id)
                     ->update(['is_default' => false]);
             }
+
+            // Invalidate cache when template is modified
+            Cache::tags([
+                "school:{$template->school_id}",
+                'report-cards',
+                "template:{$template->id}"
+            ])->flush();
+        });
+
+        // Additional cache invalidation on delete
+        static::deleted(function ($template) {
+            Cache::tags([
+                "school:{$template->school_id}",
+                'report-cards',
+                "template:{$template->id}"
+            ])->flush();
         });
     }
 

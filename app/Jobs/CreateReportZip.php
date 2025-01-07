@@ -24,20 +24,41 @@ class CreateReportZip implements ShouldQueue
     use Batchable, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
 
+
+    // Increase retry attempts
+    public $tries = 5;
+
+    // Add exponential backoff
+    public $backoff = [10, 30, 60, 120, 300]; // 10s, 30s, 1m, 2m, 5m
+
+    // Add timeout
+    public $timeout = 300; // 5 minutes
+
     public function __construct(
         protected string $reportBatchId,
         protected string $tempDir,
         protected int $userId
-    ) {
-        $this->onQueue('pdf-generation');
-    }
+    ) {}
 
     public function handle()
     {
         try {
+
+
+            // Add delay to ensure all PDFs are written
+            sleep(5);
+
+            // Verify PDFs exist and are complete
+            if (!$this->verifyPDFs()) {
+                // Release back to queue with delay
+                $this->release(30);
+                return;
+            }
+
             Log::info('Starting ZIP creation', [
                 'batch_id' => $this->reportBatchId,
-                'temp_dir' => $this->tempDir
+                'temp_dir' => $this->tempDir,
+                'files_count' => count(File::files($this->tempDir))
             ]);
 
             // Ensure the bulk reports directory exists
@@ -150,5 +171,48 @@ class CreateReportZip implements ShouldQueue
 
             throw $e;
         }
+    }
+
+    protected function verifyPDFs(): bool
+    {
+        if (!File::exists($this->tempDir)) {
+            Log::warning('Temp directory not found, will retry', [
+                'dir' => $this->tempDir
+            ]);
+            return false;
+        }
+
+        $files = File::files($this->tempDir);
+
+        if (empty($files)) {
+            Log::warning('No PDF files found, will retry', [
+                'dir' => $this->tempDir
+            ]);
+            return false;
+        }
+
+        // Verify each file is a complete PDF
+        foreach ($files as $file) {
+            if (!$this->isCompletePDF($file->getPathname())) {
+                Log::warning('Incomplete PDF found, will retry', [
+                    'file' => $file->getFilename()
+                ]);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    protected function isCompletePDF(string $path): bool
+    {
+        // Check if file is still being written
+        if (filemtime($path) > time() - 5) {
+            return false;
+        }
+
+        // Basic PDF verification
+        $content = File::get($path);
+        return str_contains($content, '%PDF-') && str_contains($content, '%%EOF');
     }
 }

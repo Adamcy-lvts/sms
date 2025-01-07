@@ -20,7 +20,7 @@ class TermResource extends Resource
 {
     protected static ?string $model = Term::class;
     protected static ?string $navigationGroup = 'School Management';
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-calendar';
 
     public static function form(Form $form): Form
     {

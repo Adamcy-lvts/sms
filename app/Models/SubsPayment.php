@@ -15,6 +15,7 @@ use App\Mail\SubscriptionReceiptMail;
 use Illuminate\Database\Eloquent\Model;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SubsPayment extends Model
 {
@@ -22,7 +23,7 @@ class SubsPayment extends Model
 
     protected $fillable = [
         'school_id', 'agent_id', 'amount', 'net_amount', 'split_amount_agent',
-        'split_code', 'status', 'payment_method_id', 'reference', 'payment_date', 'subscription_id'
+        'split_code', 'status', 'payment_method_id', 'reference', 'payment_date', 'subscription_id', 'proof_of_payment', 'plan_id'
     ];
 
     protected static function boot()
@@ -30,35 +31,31 @@ class SubsPayment extends Model
         parent::boot();
 
         static::created(function ($payment) {
-            log::info($payment);
-            // Check for an active subscription at the moment of payment creation
-            $activeSubscription = $payment->school->subscriptions()
+            $school = $payment->school;
+            
+            // Check for an active subscription
+            $activeSubscription = $school->subscriptions()
                 ->where('status', 'active')
                 ->latest('created_at')
                 ->first();
 
             if ($activeSubscription) {
-                // Link the payment to the active subscription
                 $payment->subscription_id = $activeSubscription->id;
                 $payment->save();
             }
-
-            $school = $payment->school;
-
-            $plan = $payment->subscription->plan;
 
             $receipt = $payment->subscriptionReceipt()->create([
                 'payment_id' => $payment->id,
                 'school_id' => $school->id,
                 'payment_date' => $payment->payment_date,
-                'receipt_for' => 'subscription', // Assuming 'Subscription' is the type for subscription payments
-                'amount' => $plan->price, // Assuming $plan is defined
+                'receipt_for' => 'subscription',
+                'amount' => $payment->amount,
                 'receipt_number' => SubscriptionReceipt::generateReceiptNumber($payment->payment_date),
-                // 'remarks' and 'qr_code' can be set here if needed
             ]);
-            log::info('about to send receipt');
-            // Send the receipt to the school via email
-            $payment->sendReceiptByEmail($receipt, $payment, $activeSubscription);
+
+            if ($payment->status === 'paid') {
+                $payment->sendReceiptByEmail($receipt, $payment, $activeSubscription);
+            }
         });
     }
 
@@ -124,7 +121,7 @@ class SubsPayment extends Model
         return $this->hasOne(SubscriptionReceipt::class, 'payment_id');
     }
 
-    public function subscription()
+    public function subscription(): BelongsTo
     {
         return $this->belongsTo(Subscription::class, 'subscription_id');
     }
@@ -137,5 +134,16 @@ class SubsPayment extends Model
     public function agent()
     {
         return $this->belongsTo(Agent::class, 'agent_id');
+    }
+
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(Plan::class);
+    }
+
+    // Add an accessor for the plan name if the relationship is missing
+    public function getPlanNameAttribute(): ?string
+    {
+        return $this->plan?->name ?? $this->subscription?->plan?->name ?? 'N/A';
     }
 }

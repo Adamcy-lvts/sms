@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use Carbon\Carbon;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\Staff;
 use App\Models\School;
@@ -262,14 +263,17 @@ class StaffSeeder extends Seeder
         ]);
     }
 
+    // In StaffSeeder class
     protected function createTeacherRecord($school, $staff, $profile)
     {
-        return Teacher::create([
+        $teacher = Teacher::create([
             'school_id' => $school->id,
             'staff_id' => $staff->id,
             'specialization' => $profile['specialization'],
             'teaching_experience' => $profile['experience'],
         ]);
+
+        return $teacher;
     }
 
     protected function assignSubjectsAndClasses($teacher, $specialization, $allSubjects, $allClasses)

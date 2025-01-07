@@ -37,14 +37,98 @@ class School extends Model
     use HasFeatures;
 
     protected $fillable = [
+        // Basic Information
         'name',
-        'email',
+        'name_ar',
         'slug',
-        'address',
-        'agent_id',
+
+        // Contact Information
+        'email',
         'phone',
+        'address',
+        'website',
+
+        // Location Details
+        'state_id',
+        'lga_id',
+        'postal_code',
+
+        // School Details
+        'school_type',
+        'curriculum_types',
+        'student_capacity',
+        'established_year',
+        'motto',
+        'ownership_type',
+        'language_of_instruction',
+        'gender_type',
+
+        // Media
         'logo',
-        'settings'
+        'banner',
+
+        // Business Information
+        'registration_number',
+        'tax_id',
+        'customer_code',
+
+        // Subscription & Agent
+        'agent_id',
+        'current_plan_id',
+        'is_on_trial',
+        'trial_ends_at',
+
+        // Academic Configuration
+        'academic_period',
+        'term_structure',
+
+        // Features & Settings
+        'settings',
+        'features',
+        'configurations',
+        'theme_settings',
+
+        // Status & Verification
+        'is_verified',
+        'verified_at',
+        'verified_by',
+        'status',
+
+        // Social Media
+        'social_links',
+
+        // Contact Person
+        'contact_person_name',
+        'contact_person_phone',
+        'contact_person_email',
+        'contact_person_role',
+
+        // Meta Information
+        'meta_data',
+        'remarks',
+    ];
+
+    protected $casts = [
+        'curriculum_types' => 'array',
+        'settings' => 'array',
+        'features' => 'array',
+        'configurations' => 'array',
+        'theme_settings' => 'array',
+        'social_links' => 'array',
+        'meta_data' => 'array',
+        'is_verified' => 'boolean',
+        'is_on_trial' => 'boolean',
+        'verified_at' => 'datetime',
+        'trial_ends_at' => 'datetime',
+        'established_year' => 'integer',
+    ];
+
+    protected $dates = [
+        'verified_at',
+        'trial_ends_at',
+        'created_at',
+        'updated_at',
+        'deleted_at',
     ];
 
     public function agent()
@@ -57,9 +141,34 @@ class School extends Model
         return $this->belongsToMany(User::class, 'school_user');
     }
 
-    public function hasActiveSubscription($planId)
+    // public function hasActiveSubscription($planId)
+    // {
+    //     return $this->subscriptions()->active()->where('plan_id', $planId)->exists();
+    // }
+
+    public function hasActiveSubscription($planId): bool
     {
-        return $this->subscriptions()->active()->where('plan_id', $planId)->exists();
+        if (!$planId) {
+            return false;
+        }
+
+        try {
+            return $this->subscriptions()
+                ->where('plan_id', $planId)
+                ->where('status', 'active')
+                ->where(function ($query) {
+                    $query->whereNull('ends_at')
+                        ->orWhere('ends_at', '>', now());
+                })
+                ->exists();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error checking active subscription', [
+                'school_id' => $this->id,
+                'plan_id' => $planId,
+                'error' => $e->getMessage()
+            ]);
+            return false;
+        }
     }
 
     public function currentSubscription()
@@ -69,11 +178,6 @@ class School extends Model
             ->where('ends_at', '>', now())
             ->latest('starts_at')
             ->first();
-    }
-
-    public function settings(): HasOne
-    {
-        return $this->hasOne(SchoolSettings::class);
     }
 
 
@@ -101,6 +205,11 @@ class School extends Model
     {
         return $this->hasMany(Subscription::class, 'school_id');
     }
+
+    // public function hasHadTrial()
+    // {
+    //     return $this->subscriptions()->where('plan_id', 1)->exists();
+    // }
 
     public function canRenewSubscription()
     {
@@ -226,5 +335,73 @@ class School extends Model
     public function expenses()
     {
         return $this->hasMany(Expense::class);
+    }
+
+    public function admin()
+    {
+        return $this->belongsToMany(User::class)
+            ->whereHas('roles', function ($query) {
+                $query->where('name', 'school-admin');
+            })
+            ->first();
+    }
+
+    public function schoolSettings()
+    {
+        return $this->hasOne(SchoolSettings::class);
+    }
+
+    /** @return HasMany<\App\Models\ActivityType, self> */
+    public function activityTypes(): HasMany
+    {
+        return $this->hasMany(\App\Models\ActivityType::class);
+    }
+
+
+    /** @return HasMany<\App\Models\BehavioralTrait, self> */
+    public function behavioralTraits(): HasMany
+    {
+        return $this->hasMany(\App\Models\BehavioralTrait::class);
+    }
+
+
+    /** @return HasMany<\App\Models\Book, self> */
+    public function books(): HasMany
+    {
+        return $this->hasMany(\App\Models\Book::class);
+    }
+
+
+    /** @return HasMany<\App\Models\ExpenseItem, self> */
+    public function expenseItems(): HasMany
+    {
+        return $this->hasMany(\App\Models\ExpenseItem::class);
+    }
+
+
+
+    /** @return HasMany<\App\Models\SchoolCalendarEvent, self> */
+    public function schoolCalendarEvents(): HasMany
+    {
+        return $this->hasMany(\App\Models\SchoolCalendarEvent::class);
+    }
+
+    public function settings()
+    {
+        return $this->hasOne(SchoolSettings::class);
+    }
+
+    // Helper method to ensure settings exist
+    public function getSettingsAttribute()
+    {
+        return $this->settings()->firstOrCreate(
+            [],
+            SchoolSettings::getDefaultSettings()
+        );
+    }
+
+    public function templateVariables()
+    {
+        return $this->hasMany(TemplateVariable::class);
     }
 }

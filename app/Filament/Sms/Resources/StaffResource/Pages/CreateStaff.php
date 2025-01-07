@@ -4,6 +4,7 @@ namespace App\Filament\Sms\Resources\StaffResource\Pages;
 
 use App\Models\User;
 use App\Models\Staff;
+use App\Models\Status;
 use App\Models\Teacher;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\DB;
@@ -229,6 +230,8 @@ class CreateStaff extends CreateRecord
     {
         $userExist = User::where('email', $staff->email)->first();
 
+        $staffActiveStatus = Status::where('type', 'staff')->where('name', 'active')->first();
+
         if ($userExist) {
             return $userExist;
         }
@@ -236,8 +239,10 @@ class CreateStaff extends CreateRecord
             'first_name' => $staff->first_name,
             'last_name' => $staff->last_name,
             'email' => $staff->email,
+            'status_id' => $staffActiveStatus->id,
+            'user_type' => 'staff',
             'password' => Hash::make($password),
-            'status_id' => 1, // Assuming 1 is active status
+            
         ]);
 
         // Assign roles and permissions
@@ -255,7 +260,7 @@ class CreateStaff extends CreateRecord
         return $user;
     }
 
-    protected function sendLoginCredentials(Staff $staff, string $password): void
+    public function sendLoginCredentials(Staff $staff, string $password): void
     {
         try {
             Mail::to($staff->email)->send(new \App\Mail\StaffLoginCredentials(

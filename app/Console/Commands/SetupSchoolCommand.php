@@ -19,6 +19,7 @@ class SetupSchoolCommand extends Command
     protected $tablesToTruncate = [
         'statuses',
         'users',
+        'plans',         // Add this line
         'schools',
         'academic_sessions',
         'terms',
@@ -52,29 +53,37 @@ class SetupSchoolCommand extends Command
         'student_term_traits',   // Add these
         'student_term_activities', // activity-related
         'student_term_comments',   // tables
+        'roles',                   // Add this
+        'permissions',             // Add this
+        'role_has_permissions',    // Add this
+        'model_has_roles',         // Add this
+        'model_has_permissions',    // Add this
     ];
 
     protected $seeders = [
         'StatusTableSeeder',
         'UserTableSeeder',
-        'SchoolTableSeeder',
-        'SessionAndTermSeeder',
+        'PlansTableSeeder',    // Add this line
+        // 'SchoolTableSeeder',
+        // 'SessionAndTermSeeder',
         'StateTableSeeder',
         'LgaTableSeeder',
-        'ClassAndStudentSeeder',       // Make sure this runs first
-        'SubjectTableSeeder',
+        'ShieldSeeder',
+        // 'ClassAndStudentSeeder',       // Make sure this runs first
+        // 'SubjectTableSeeder',
         // 'SubjectTeacherSeeder',        // Then this
-        'StaffSeeder',
-        'StudentAssessmentSeeder',     // Then assessments
-        'GradeScaleSeeder',
-        'ReportTemplatesSeeder',
-        'AttendanceSeeder',      // Add this line
-        'PaymentMethodTableSeeder',   // Add this
-        'PaymentTypeSeeder',     // Add this
-        'PaymentSeeder',           // Add this
-        'ActivityTypeSeeder',          // Add this
-        'BehavioralTraitSeeder',   // Add these
-        'StudentTraitActivitySeeder', // Add this
+        // 'StaffSeeder',
+        // 'StudentAssessmentSeeder',     // Then assessments
+        // 'GradeScaleSeeder',
+        // 'ReportTemplatesSeeder',
+        // 'AttendanceSeeder',      // Add this line
+        // 'PaymentMethodTableSeeder',   // Add this
+        // 'PaymentTypeSeeder',     // Add this
+        // 'PaymentSeeder',           // Add this
+        // 'ActivityTypeSeeder',          // Add this
+        // 'BehavioralTraitSeeder',   // Add these
+        // 'StudentTraitActivitySeeder', // Add this
+        // 'SmsPanelRolesAndPermissionsSeeder',
     ];
 
     public function handle()
@@ -88,7 +97,7 @@ class SetupSchoolCommand extends Command
             }
 
             // Start database transaction
-            DB::beginTransaction();
+            // DB::beginTransaction();
             Log::info('Starting school setup process');
 
             foreach ($this->seeders as $seeder) {
@@ -105,7 +114,7 @@ class SetupSchoolCommand extends Command
             }
 
             // Commit transaction if all seeders run successfully
-            DB::commit();
+            // DB::commit();
             Log::info('School setup completed successfully');
             $this->info('School setup completed successfully!');
         } catch (\Exception $e) {

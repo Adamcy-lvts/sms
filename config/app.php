@@ -125,4 +125,8 @@ return [
 
     'chrome_path' => env('CHROME_PATH'),
 
+    // In config/app.php - Optional but recommended for clarity
+    'current_session' => null,
+    'current_term' => null,
+
 ];

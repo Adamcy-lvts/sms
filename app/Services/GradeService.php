@@ -14,7 +14,6 @@ use App\Services\StatusService;
 use App\Models\AttendanceRecord;
 use App\Models\StudentTermTrait;
 use App\Models\AttendanceSummary;
-use App\Models\SubjectAssessment;
 use App\Models\StudentTermComment;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -35,55 +34,63 @@ class GradeService
     }
 
 
+    /**
+     * Calculate a student's average grade for a specific subject
+     * 
+     * @param Student $student The student to calculate grades for
+     * @param int $subjectId The subject ID
+     * @param int $termId The academic term ID
+     * @param int $academicSessionId The academic session/year ID
+     * @return array Contains average, grade, remarks and assessment scores
+     */
+
     public function calculateSubjectAverage(
-        Student $student,      // The student whose grades we're calculating
-        int $subjectId,       // The subject's ID
-        int $termId,          // The academic term ID
-        int $academicSessionId // The academic session/year ID
+        Student $student,
+        int $subjectId,
+        int $termId,
+        int $academicSessionId
     ): array {
-        // Get all assessments for this subject in the specified term
-        $assessments = SubjectAssessment::where([
+        // Get all grades for this subject and student
+        $grades = StudentGrade::where([
+            'student_id' => $student->id,
             'subject_id' => $subjectId,
             'term_id' => $termId,
             'academic_session_id' => $academicSessionId,
-            'class_room_id' => $student->class_room_id,  // Student's class
+            'is_published' => true
         ])
-            ->with(['assessmentType', 'grades' => function ($query) use ($student) {
-                $query->where('student_id', $student->id);
-            }])
+            ->with('assessmentType')
             ->get();
 
-        // Initialize dynamic scores array
+        // Initialize assessment scores
         $assessmentTypes = AssessmentType::where('school_id', $student->school_id)
-            // ->orderBy('position')
+            ->where('is_active', true)
             ->get();
 
         $assessmentScores = [];
         $totalScore = 0;
-        $totalWeight = 0;
 
         // Initialize all assessment types with default '-'
         foreach ($assessmentTypes as $type) {
             $assessmentScores[strtolower($type->code)] = '-';
         }
 
-        // Fill in actual scores where they exist
-        foreach ($assessments as $assessment) {
-            $grade = $assessment->grades->first();
-            if ($grade) {
-                $code = strtolower($assessment->assessmentType->code);
+        // Calculate total directly from raw scores
+        foreach ($grades as $grade) {
+            $assessmentType = $grade->assessmentType;
+            if ($assessmentType) {
+                $code = strtolower($assessmentType->code);
                 $assessmentScores[$code] = number_format($grade->score, 1);
+
+                // Add raw score to total
                 $totalScore += $grade->score;
-                $totalWeight += $assessment->assessmentType->weight;
             }
         }
 
-        // Calculate final average and grade
-        $finalAverage = $totalWeight > 0 ? ($totalScore / $totalWeight) * 100 : 0;
-        $gradeScale = GradingScale::getGrade($finalAverage, $student->school_id);
+        // Get grade scale for the total score
+        $gradeScale = GradingScale::getGrade($totalScore, $student->school_id);
 
         return [
-            'average' => round($finalAverage, 2),
+            'average' => $totalScore, // Now returning the actual total
             'grade' => $gradeScale?->grade ?? 'N/A',
             'remark' => $gradeScale?->remark ?? 'Not Available',
             'assessment_columns' => $assessmentScores
@@ -93,15 +100,17 @@ class GradeService
 
 
     /**
-     * Generate comprehensive term report
+     * Generate comprehensive term report for a student
+     * 
+     * @param Student $student Student to generate report for
+     * @param int $termId Term period
+     * @param int $academicSessionId Academic session
+     * @return array Comprehensive report data
      */
     public function generateTermReport(Student $student, int $termId, int $academicSessionId): array
     {
-
-        // Get school days from calendar service
+        // Get school days and attendance
         $schoolDays = $this->calendarService->getSchoolDays($student->school, Term::find($termId));
-        // dd($schoolDays);
-        // Get or calculate attendance summary
         $attendanceSummary = AttendanceSummary::calculateForStudent(
             $student,
             $academicSessionId,
@@ -109,33 +118,36 @@ class GradeService
             $schoolDays['total_days']
         );
 
-        $subjectAssessments = SubjectAssessment::where([
-            'class_room_id' => $student->class_room_id,
+        // Get all subjects the student has grades for
+        $grades = StudentGrade::where([
+            'student_id' => $student->id,
             'term_id' => $termId,
             'academic_session_id' => $academicSessionId,
+            'is_published' => true
         ])
             ->select('subject_id')
             ->distinct()
             ->with('subject')
             ->get();
 
+        // Calculate results for each subject
         $subjectResults = [];
         $totalScore = 0;
         $validSubjectCount = 0;
         $totalPercentage = 0;
 
-        foreach ($subjectAssessments as $assessment) {
+        foreach ($grades as $grade) {
             $result = $this->calculateSubjectAverage(
                 $student,
-                $assessment->subject_id,
+                $grade->subject_id,
                 $termId,
                 $academicSessionId
             );
 
             if ($result['average'] > 0) {
                 $subjectResults[] = [
-                    'name' => $assessment->subject->name,
-                    'name_ar' => $assessment->subject->name_ar,
+                    'name' => $grade->subject->name,
+                    'name_ar' => $grade->subject->name_ar,
                     'assessment_columns' => $result['assessment_columns'],
                     'total' => $result['average'],
                     'grade' => $result['grade'],
@@ -147,11 +159,6 @@ class GradeService
                 $totalPercentage += $result['average'];
             }
         }
-        $activeStatusId = $this->statusService->getActiveStudentStatusId();
-        // Get class size - specifically counting active students
-        $classSize = Student::where('class_room_id', $student->class_room_id)
-            ->where('status_id', $activeStatusId) // Assuming 1 is active status
-            ->count();
 
         // Calculate class statistics
         $classStats = $this->calculateClassStatistics(
@@ -168,8 +175,7 @@ class GradeService
             $academicSessionId
         );
 
-        // Add activities from StudentTermActivity
-        // Modify the activities mapping to include the performance text
+        // Get activities and traits
         $activities = StudentTermActivity::where([
             'student_id' => $student->id,
             'academic_session_id' => $academicSessionId,
@@ -177,12 +183,10 @@ class GradeService
         ])->with('activityType')->get()->map(fn($activity) => [
             'name' => $activity->activityType->name,
             'rating' => $activity->rating,
-            'performance' => $this->getRatingPerformance($activity->rating), // Add this
+            'performance' => $this->getRatingPerformance($activity->rating),
             'remark' => $activity->remark
         ])->toArray();
 
-
-        // Add behavioral traits from StudentTermTrait
         $behavioralTraits = StudentTermTrait::where([
             'student_id' => $student->id,
             'academic_session_id' => $academicSessionId,
@@ -190,34 +194,43 @@ class GradeService
         ])->with('behavioralTrait')->get()->map(fn($trait) => [
             'name' => $trait->behavioralTrait->name,
             'rating' => $trait->rating,
+            'performance' => $this->getRatingPerformance($trait->rating),
             'remark' => $trait->remark
         ])->toArray();
 
-        $behavioralTraits = StudentTermTrait::where([
-            'student_id' => $student->id,
-            'academic_session_id' => $academicSessionId,
-            'term_id' => $termId,
-        ])->with('behavioralTrait')->get()->map(fn($trait) => [
-            'name' => $trait->behavioralTrait->name,
-            'rating' => $trait->rating,
-            'performance' => $this->getRatingPerformance($trait->rating), // Add this
-            'remark' => $trait->remark
-        ])->toArray();
-
+        // Calculate overall average
         $overallAverage = $validSubjectCount > 0 ? round($totalPercentage / $validSubjectCount, 2) : 0;
         $gradeScale = GradingScale::getGrade($overallAverage, $student->school_id);
 
+        // Get next term's start date (resumption date)
+        $nextTermDate = Term::where(function ($query) use ($termId, $academicSessionId) {
+            // Try to find next term in same session
+            $query->where('academic_session_id', $academicSessionId)
+                ->where('id', '>', $termId);
+        })
+        ->orWhere(function ($query) use ($academicSessionId) {
+            // Or find first term of next session
+            $query->whereHas('academicSession', function ($q) use ($academicSessionId) {
+                $q->where('id', '>', $academicSessionId)
+                    ->orderBy('start_date', 'asc');
+            });
+        })
+        ->orderBy('start_date', 'asc')
+        ->first();
+
         return [
-            'activities' => $activities,
-            'behavioral_traits' => $behavioralTraits,
-            'comments' => $this->formatComments($student, $termId, $academicSessionId),
-            'student' => [
-                'name' => $student->full_name,
-                'admission_number' => $student->admission?->admission_number,
+            'basic_info' => [
+                'admission' => $student->admission,
                 'class' => $student->classRoom->name,
-                'profile_picture' => $student->profile_picture_url,
-                'admission' => $student->admission,  // Add this for template field mapping
-                'id' => $student->id  // Add this for model lookup if needed
+                'id' => $student->id
+            ],
+            'attendance' => [
+                'school_days' => $schoolDays['total_days'],
+                'present' => $attendanceSummary->present_count,
+                'absent' => $attendanceSummary->absent_count,
+                'late' => $attendanceSummary->late_count,
+                'excused' => $attendanceSummary->excused_count,
+                'attendance_percentage' => $attendanceSummary->attendance_percentage
             ],
             'academic_info' => [
                 'session' => [
@@ -229,19 +242,6 @@ class GradeService
                     'name' => $student->school->terms->find($termId)->name
                 ]
             ],
-            'attendance' => [
-                'school_days' => $attendanceSummary->total_days,
-                'present' => $attendanceSummary->present_count,
-                'absent' => $attendanceSummary->absent_count,
-                'late' => $attendanceSummary->late_count,
-                'excused' => $attendanceSummary->excused_count,
-                'attendance_rate' => $attendanceSummary->attendance_percentage,
-                'monthly_breakdown' => $this->getMonthlyAttendance(
-                    $student,
-                    $academicSessionId,
-                    $termId
-                )
-            ],
             'subjects' => $subjectResults,
             'summary' => [
                 'total_subjects' => $validSubjectCount,
@@ -250,16 +250,23 @@ class GradeService
                 'grade' => $gradeScale?->grade ?? 'N/A',
                 'remark' => $gradeScale?->remark ?? 'Not Available',
                 'position' => $position,
-                'class_size' => $classSize,  // Add class size here
-                'class_stats' => [
-                    'class_average' => $classStats['class_average'],
-                    'highest_average' => $classStats['highest_average'],
-                    'lowest_average' => $classStats['lowest_average'],
-                    'total_students' => $classSize  // Ensure consistency with class size
-                ]
-            ]
+                'class_size' => $classStats['total_students'],
+                'class_average' => $classStats['class_average'],
+                'highest_average' => $classStats['highest_average'],
+                'lowest_average' => $classStats['lowest_average'],
+                'resumption_date' => $nextTermDate ? 
+                    $nextTermDate->start_date->format('jS F, Y') : 
+                    'To be announced',
+                'class_stats' => $classStats,
+                'attendance_percentage' => round($attendanceSummary->attendance_percentage) . '%',
+                'school_days' => $schoolDays['total_days'],
+            ],
+            'activities' => $activities,
+            'behavioral_traits' => $behavioralTraits,
+            'comments' => $this->formatComments($student, $termId, $academicSessionId)
         ];
     }
+
 
     protected function getMonthlyAttendance(Student $student, int $academicSessionId, int $termId): array
     {
@@ -340,8 +347,8 @@ class GradeService
                 'comment' => $termComment->class_teacher_comment,
                 'digital_signature' => [
                     'name' => $teacherStaff ? $teacherStaff->full_name : 'Class Teacher',
-                    'signature_url' => $teacherStaff && $teacherStaff->signature 
-                        ? Storage::disk('public')->url($teacherStaff->signature) 
+                    'signature_url' => $teacherStaff && $teacherStaff->signature
+                        ? Storage::disk('public')->url($teacherStaff->signature)
                         : null,
                     'date' => $termComment->created_at?->format('d/m/Y')
                 ],
@@ -355,8 +362,8 @@ class GradeService
                 'comment' => $termComment->principal_comment,
                 'digital_signature' => [
                     'name' => $principalStaff ? $principalStaff->full_name : 'Principal',
-                    'signature_url' => $principalStaff && $principalStaff->signature 
-                        ? Storage::disk('public')->url($principalStaff->signature) 
+                    'signature_url' => $principalStaff && $principalStaff->signature
+                        ? Storage::disk('public')->url($principalStaff->signature)
                         : null,
                     'date' => $termComment->created_at?->format('d/m/Y')
                 ],
@@ -369,18 +376,27 @@ class GradeService
         ];
     }
 
+    /**
+     * Calculate class-wide statistics
+     * 
+     * @param int $classRoomId Class room ID
+     * @param int $termId Term period
+     * @param int $academicSessionId Academic session
+     * @return array Class statistics
+     */
     protected function calculateClassStatistics(
         int $classRoomId,
         int $termId,
         int $academicSessionId
     ): array {
-
         $activeStatusId = $this->statusService->getActiveStudentStatusId();
-        // First, get the total number of active students in the class
-        $totalStudents = Student::where('class_room_id', $classRoomId)
-            ->where('status_id', $activeStatusId) // Assuming 1 is active status
-            ->count(); // Get actual count of students
 
+        // Get total number of active students
+        $totalStudents = Student::where('class_room_id', $classRoomId)
+            ->where('status_id', $activeStatusId)
+            ->count();
+
+        // Get all student grades in the class
         $students = Student::where('class_room_id', $classRoomId)
             ->where('status_id', $activeStatusId)
             ->get();
@@ -388,41 +404,40 @@ class GradeService
         $averages = collect();
 
         foreach ($students as $student) {
-            $totalScore = 0;
-            $subjectCount = 0;
-
-            $assessments = SubjectAssessment::where([
-                'class_room_id' => $classRoomId,
+            $grades = StudentGrade::where([
+                'student_id' => $student->id,
                 'term_id' => $termId,
                 'academic_session_id' => $academicSessionId,
-                'is_published' => true,
-            ])->get();
+                'is_published' => true
+            ])
+                ->with('assessmentType')
+                ->get();
 
-            foreach ($assessments as $assessment) {
-                $grade = StudentGrade::where([
-                    'student_id' => $student->id,
-                    'subject_assessment_id' => $assessment->id,
-                ])->first();
+            $totalScore = 0;
+            $totalWeight = 0;
 
-                if ($grade) {
-                    $totalScore += $grade->score;
-                    $subjectCount++;
-                }
+            foreach ($grades as $grade) {
+                $weight = $grade->assessmentType?->weight ?? 1;
+                $totalScore += ($grade->score * $weight);
+                $totalWeight += $weight;
             }
 
-            if ($subjectCount > 0) {
-                $averages->push($totalScore / $subjectCount);
+            if ($totalWeight > 0) {
+                $averages->push($totalScore / $totalWeight);
             }
         }
 
         return [
-            'total_students' => $totalStudents, // Use actual count
+            'total_students' => $totalStudents,
             'class_average' => $averages->isNotEmpty() ? round($averages->avg(), 2) : 0,
             'highest_average' => $averages->isNotEmpty() ? round($averages->max(), 2) : 0,
-            'lowest_average' => $averages->isNotEmpty() ? round($averages->min(), 2) : 0,
+            'lowest_average' => $averages->isNotEmpty() ? round($averages->min(), 2) : 0
         ];
     }
 
+    /**
+     * Calculate student's position in class
+     */
     protected function calculateStudentPosition(
         Student $student,
         float $studentAverage,
@@ -431,36 +446,37 @@ class GradeService
     ): string {
         // Get all students in the same class
         $students = Student::where('class_room_id', $student->class_room_id)
+            ->where('status_id', $this->statusService->getActiveStudentStatusId())
             ->get();
 
         // Calculate averages for all students
         $averages = collect();
         foreach ($students as $classStudent) {
-            $total = 0;
-            $count = 0;
+            $totalScore = 0;
+            $totalWeight = 0;
 
-            $assessments = SubjectAssessment::where([
-                'class_room_id' => $student->class_room_id,
+            // Get all published grades for the student
+            $grades = StudentGrade::where([
+                'student_id' => $classStudent->id,
                 'term_id' => $termId,
                 'academic_session_id' => $academicSessionId,
-            ])->get();
+                'class_room_id' => $student->class_room_id,
+                'is_published' => true
+            ])
+                ->with('assessmentType')
+                ->get();
 
-            foreach ($assessments as $assessment) {
-                $grade = StudentGrade::where([
-                    'student_id' => $classStudent->id,
-                    'subject_assessment_id' => $assessment->id,
-                ])->first();
-
-                if ($grade) {
-                    $total += $grade->score;
-                    $count++;
-                }
+            // Calculate weighted average
+            foreach ($grades as $grade) {
+                $weight = $grade->assessmentType?->weight ?? 1;
+                $totalScore += ($grade->score * $weight);
+                $totalWeight += $weight;
             }
 
-            if ($count > 0) {
+            if ($totalWeight > 0) {
                 $averages->push([
                     'student_id' => $classStudent->id,
-                    'average' => $total / $count
+                    'average' => $totalScore / $totalWeight
                 ]);
             }
         }

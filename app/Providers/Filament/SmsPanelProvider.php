@@ -6,16 +6,20 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\Widgets;
 use App\Models\School;
-
 use Filament\PanelProvider;
 use Filament\Facades\Filament;
+
 use App\Livewire\ReportProgress;
 use Filament\Navigation\MenuItem;
 use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Blade;
+use App\Filament\Sms\Pages\PaymentForm;
 use App\Filament\Sms\Pages\PricingPage;
 use App\Filament\Sms\Pages\Auth\Register;
+use App\Http\Middleware\SchoolPermission;
+use App\Filament\Sms\Pages\ManageSettings;
 use App\Http\Middleware\ApplyTenantScopes;
 use App\Http\Middleware\SetAcademicPeriod;
 use Filament\Http\Middleware\Authenticate;
@@ -23,16 +27,21 @@ use Filament\Support\Facades\FilamentView;
 use App\Filament\Sms\Pages\Tenancy\Billing;
 use App\Filament\Sms\Pages\Auth\EditProfile;
 use App\Filament\Sms\Billing\BillingProvider;
+use App\Filament\Sms\Widgets\RevenueBarChart;
 use Illuminate\Session\Middleware\StartSession;
 use App\Filament\Sms\Widgets\FilamentInfoWidget;
+use App\Filament\Sms\Widgets\RevenueByTypeChart;
 use Illuminate\Cookie\Middleware\EncryptCookies;
+use App\Filament\Sms\Widgets\SchoolStatsOverview;
 use App\Filament\Sms\Pages\Tenancy\EditSchoolProfile;
+use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use BezhanSalleh\FilamentShield\Middleware\SyncShieldTenant;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 
 class SmsPanelProvider extends PanelProvider
@@ -61,7 +70,26 @@ class SmsPanelProvider extends PanelProvider
                     })
                     ->icon('heroicon-o-currency-dollar'),
             ])
+            ->tenantMenu(fn() => auth()->user()->can('view_tenant_menu'))
+            ->userMenuItems([
+                MenuItem::make()
+                    ->label('Settings')
+                    ->url(function () {
+                        $tenant = Filament::getTenant();
+                        
+                        if (!$tenant) {
+                            return '#'; // or handle the no-tenant case differently
+                        }
+
+                        return ManageSettings::getUrl([
+                            'tenant' => $tenant->slug
+                        ]);
+                    })->visible(fn() => auth()->user()->can('view_tenant_menu'))
+                    ->icon('heroicon-o-cog-6-tooth'),
+
+            ])
             ->tenantMiddleware([
+                \BezhanSalleh\FilamentShield\Middleware\SyncShieldTenant::class,
                 ApplyTenantScopes::class,
                 SetAcademicPeriod::class,
             ], isPersistent: true)
@@ -79,6 +107,7 @@ class SmsPanelProvider extends PanelProvider
             ->discoverPages(in: app_path('Filament/Sms/Pages'), for: 'App\\Filament\\Sms\\Pages')
             ->pages([
                 Pages\Dashboard::class,
+                PaymentForm::class,
                 // ReportProgress::class,
                 // Pages\PreviewReportTemplate::class,
                 // Pages\ManageSettings::class,
@@ -88,6 +117,9 @@ class SmsPanelProvider extends PanelProvider
             ->widgets([
                 Widgets\AccountWidget::class,
                 FilamentInfoWidget::class,
+                RevenueBarChart::class,
+                RevenueByTypeChart::class,
+                SchoolStatsOverview::class,
             ])
             ->middleware([
                 EncryptCookies::class,
@@ -100,6 +132,10 @@ class SmsPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
                 // \App\Http\Middleware\SetAcademicPeriod::class,
+                \App\Http\Middleware\CheckUserStatus::class,
+            ])
+            ->plugins([
+                \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
             ])
             ->authMiddleware([
                 Authenticate::class,

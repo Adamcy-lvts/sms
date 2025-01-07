@@ -51,7 +51,8 @@ class StudentResource extends Resource
 {
     protected static ?string $model = Student::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-user-group';
+    protected static ?string $navigationGroup = 'School Management';
 
     public static function form(Form $form): Form
     {
@@ -84,7 +85,9 @@ class StudentResource extends Resource
                                         Forms\Components\TextInput::make('middle_name')
                                             ->maxLength(255),
                                         Forms\Components\DatePicker::make('date_of_birth')->native(false)
-                                            ->required(),
+                                            ->required()
+                                            ->maxDate(now()->subYears(3)),
+                                        
                                         Forms\Components\Select::make('gender')->options(Options::gender())
                                             ->required(),
                                         Forms\Components\TextInput::make('phone_number')
@@ -101,7 +104,7 @@ class StudentResource extends Resource
                                                 ->pluck('name', 'id'))->required()->label('Local Government Area'),
                                     ]),
                                 // Forms\Components\FileUpload::make('profile_picture')->label('Profile Picture')->disk('public')->directory('student_profile')->columnSpan(2),
-                                Forms\Components\FileUpload::make('profile_picture')->label('Profile Picture')->disk('public')->directory("{$school->slug}/student_profiles")->columnSpan(2)
+                                Forms\Components\FileUpload::make('profile_picture')->label('Profile Picture')->disk('public')->directory("{$school->slug}/student_profile_pictures")->columnSpan(2)
 
                             ]),
                         Wizard\Step::make('Personal Information 2')
@@ -439,7 +442,7 @@ class StudentResource extends Resource
 
                                     Forms\Components\Select::make('payment_method_id')
                                         ->label('Payment Method')
-                                        ->options(fn() => PaymentMethod::where('school_id', Filament::getTenant()->id)->where('active', true)->pluck('name', 'id'))
+                                        ->options(fn() => PaymentMethod::where('active', true)->pluck('name', 'id'))
                                         ->required(),
 
                                     Forms\Components\Select::make('payment_type_ids')

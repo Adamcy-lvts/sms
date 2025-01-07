@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\RedirectIfUserNotSubscribed;
+use App\Http\Middleware\SchoolPermission;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,6 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'webhook/paystack', // <-- exclude this route
         ]);
+       
+
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
