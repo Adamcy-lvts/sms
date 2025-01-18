@@ -11,6 +11,7 @@ class StatusChange extends Model
 {
     protected $fillable = [
         'school_id',
+        'student_id',
         'statusable_type',
         'statusable_id',
         'from_status_id',

@@ -25,6 +25,7 @@ class StudentReportCardHistoryTable extends BaseWidget
         return $table
             ->query(
                 ReportCard::query()
+                    ->where('school_id', Filament::getTenant()->id)
                     ->where('student_id', $this->student->id)
                     ->latest()
             )

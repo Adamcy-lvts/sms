@@ -4,6 +4,7 @@ namespace App\Filament\Sms\Pages;
 
 use App\Models\Plan;
 use App\Models\Agent;
+use App\Models\School;
 use Filament\Forms\Form;
 use Filament\Pages\Page;
 use App\Models\SubsPayment;
@@ -25,7 +26,7 @@ use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 class PaymentForm extends Page
 {
     use HasPageShield;
-    
+
     protected static ?string $navigationIcon = 'heroicon-o-credit-card';
     protected static string $view = 'filament.sms.pages.payment-form';
     protected static bool $shouldRegisterNavigation = false;
@@ -42,6 +43,7 @@ class PaymentForm extends Page
     public $proof_of_payment;
     public $payment_method = 'card'; // Default to 'card' payment method
     public $tenant;
+    public $school;
 
     /**
      * Convert string price to float/integer
@@ -58,6 +60,15 @@ class PaymentForm extends Page
     public function mount()
     {
         $this->plan = Plan::findOrFail(request()->query('id'));
+        $this->tenant = Filament::getTenant();
+        $this->user = auth()->user();
+        $this->school = $this->tenant; // Fix: Set school directly from tenant
+
+        // Check if user is eligible for trial
+        if ($this->isEligibleForTrial()) {
+            $this->activateTrialSubscription();
+            return redirect()->route('filament.sms.tenant', ['tenant' => $this->school->slug]);
+        }
 
         // Check if it's annual billing and has discounted price
         $isAnnual = request()->query('billing') === 'annual';
@@ -66,8 +77,6 @@ class PaymentForm extends Page
             $this->plan->price;
 
         $this->price = formatNaira($this->convertPrice($amount));
-        $this->tenant = Filament::getTenant();
-        $this->user = auth()->user();
 
         $this->form->fill([
             'school_name' => $this->tenant->name,
@@ -75,6 +84,83 @@ class PaymentForm extends Page
             'amount' => $this->price,
             'payment_method' => $this->payment_method,
         ]);
+    }
+
+    protected function isEligibleForTrial(): bool
+    {
+        // Check if plan offers trial
+        if (!$this->plan->offersTrial() || $this->plan->trial_period <= 0) {
+            return false;
+        }
+
+        // Check if school has any previous subscription records
+        $hasSubscriptionHistory = $this->school->subscriptions()
+            ->where(function ($query) {
+                $query->where('is_on_trial', true)  // Had a trial before
+                    ->orWhere('status', 'active')   // Or has/had an active subscription
+                    ->orWhere('status', 'expired'); // Or has an expired subscription
+            })
+            ->exists();
+
+        // Return true only if no subscription history exists
+        return !$hasSubscriptionHistory;
+    }
+
+    protected function activateTrialSubscription(): void
+    {
+        try {
+            // Check one more time before activation
+            if (!$this->isEligibleForTrial()) {
+                Log::warning('Trial activation attempted for ineligible school', [
+                    'school_id' => $this->school->id,
+                    'plan_id' => $this->plan->id
+                ]);
+                
+                Notification::make()
+                    ->title('Trial Not Available')
+                    ->body('Your school is not eligible for a trial subscription.')
+                    ->warning()
+                    ->send();
+                    
+                return;
+            }
+
+            $subscription = $this->school->subscriptions()->create([
+                'plan_id' => $this->plan->id,
+                'status' => 'active',
+                'starts_at' => now(),
+                'ends_at' => now()->addDays($this->plan->trial_period),
+                'is_on_trial' => true,
+                'trial_ends_at' => now()->addDays($this->plan->trial_period),
+                'billing_cycle' => request()->query('billing', 'monthly'),
+                'next_payment_date' => now()->addDays($this->plan->trial_period),
+                'is_recurring' => true,
+            ]);
+
+            Log::info('Trial subscription activated', [
+                'school_id' => $this->school->id,
+                'plan_id' => $this->plan->id,
+                'trial_period' => $this->plan->trial_period
+            ]);
+
+            Notification::make()
+                ->title('Trial Activated!')
+                ->body("Your {$this->plan->trial_period}-day free trial has been activated.")
+                ->success()
+                ->send();
+        } catch (\Exception $e) {
+            Log::error('Failed to activate trial subscription', [
+                'error' => $e->getMessage(),
+                'school_id' => $this->school->id,
+                'plan_id' => $this->plan->id
+            ]);
+
+            Notification::make()
+                ->title('Error')
+                ->body('Failed to activate trial subscription. Please try again.')
+                ->danger()
+                ->send();
+        }
     }
 
     public function form(Form $form): Form

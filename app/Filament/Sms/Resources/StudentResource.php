@@ -32,9 +32,11 @@ use Illuminate\Support\Facades\Auth;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Wizard;
 use Illuminate\Support\Facades\Blade;
+use App\Services\StudentStatusService;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Fieldset;
 use Filament\Forms\Components\Textarea;
+use Illuminate\Database\Eloquent\Model;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\ImageColumn;
@@ -87,7 +89,7 @@ class StudentResource extends Resource
                                         Forms\Components\DatePicker::make('date_of_birth')->native(false)
                                             ->required()
                                             ->maxDate(now()->subYears(3)),
-                                        
+
                                         Forms\Components\Select::make('gender')->options(Options::gender())
                                             ->required(),
                                         Forms\Components\TextInput::make('phone_number')
@@ -274,7 +276,9 @@ class StudentResource extends Resource
                     ->label('Status')
                     ->badge()
                     ->color(fn(string $state): string => match ($state) {
-                        'active' => 'success',
+                        'active' => 'primary',
+                        'inactive' => 'gray',
+                        'graduated' => 'success',
                         'suspended' => 'warning',
                         'expelled' => 'danger',
                         'transferred' => 'warning',
@@ -358,57 +362,6 @@ class StudentResource extends Resource
                 Tables\Actions\ActionGroup::make([
                     Tables\Actions\ViewAction::make(),
                     Tables\Actions\EditAction::make(),
-
-                    // Promote Student Action
-                    Tables\Actions\Action::make('promote')
-                        ->icon('heroicon-o-arrow-up-circle')
-                        ->color('info')
-                        ->form([
-                            Forms\Components\Select::make('class_room_id')
-                                ->label('New Class')
-                                ->options(ClassRoom::pluck('name', 'id'))
-                                ->required(),
-                            Forms\Components\Textarea::make('note')
-                                ->label('Promotion Note')
-                                ->maxLength(255),
-                        ])
-                        ->requiresConfirmation()
-                        ->modalHeading('Promote Student')
-                        ->modalDescription(fn(Student $record) => "Are you sure you want to promote {$record->admission->full_name}?")
-                        ->action(function (Student $record, array $data): void {
-                            DB::transaction(function () use ($record, $data) {
-                                $oldClassId = $record->class_room_id;
-                                $currentSession = config('app.current_session');
-                                $nextSession = AcademicSession::where('start_date', '>', $currentSession->end_date)
-                                    ->orderBy('start_date')
-                                    ->first();
-
-                                $record->update([
-                                    'class_room_id' => $data['class_room_id'],
-                                    'status_id' => Status::where('name', 'Promoted')->first()?->id,
-                                ]);
-
-                                StudentMovement::create([
-                                    'student_id' => $record->id,
-                                    'from_class_id' => $oldClassId,
-                                    'to_class_id' => $data['class_room_id'],
-                                    'from_session_id' => $currentSession->id,
-                                    'to_session_id' => $nextSession->id,
-                                    'movement_type' => 'promotion',
-                                    'movement_date' => now(),
-                                    'reason' => $data['note'] ?? 'Individual promotion to new class'
-                                ]);
-
-                                Notification::make()
-                                    ->success()
-                                    ->title('Student Promoted')
-                                    ->body('The student has been promoted successfully.')
-                                    ->send();
-                            });
-                        }),
-
-
-
                     Tables\Actions\Action::make('recordPayment')
                         ->icon('heroicon-o-banknotes')
                         ->color('success')
@@ -801,7 +754,53 @@ class StudentResource extends Resource
                                 ->persistent()
                                 ->send();
                         }),
+                    // Promote Student Action
+                    Tables\Actions\Action::make('promote')
+                        ->icon('heroicon-o-arrow-up-circle')
+                        ->color('info')
+                        ->form([
+                            Forms\Components\Select::make('class_room_id')
+                                ->label('New Class')
+                                ->options(ClassRoom::pluck('name', 'id'))
+                                ->required(),
+                            Forms\Components\Textarea::make('note')
+                                ->label('Promotion Note')
+                                ->maxLength(255),
+                        ])
+                        ->requiresConfirmation()
+                        ->modalHeading('Promote Student')
+                        ->modalDescription(fn(Student $record) => "Are you sure you want to promote {$record->admission->full_name}?")
+                        ->action(function (Student $record, array $data): void {
+                            DB::transaction(function () use ($record, $data) {
+                                $oldClassId = $record->class_room_id;
+                                $currentSession = config('app.current_session');
+                                $nextSession = AcademicSession::where('start_date', '>', $currentSession->end_date)
+                                    ->orderBy('start_date')
+                                    ->first();
 
+                                $record->update([
+                                    'class_room_id' => $data['class_room_id'],
+                                ]);
+
+                                StudentMovement::create([
+                                    'school_id' => Filament::getTenant()->id,
+                                    'student_id' => $record->id,
+                                    'from_class_id' => $oldClassId,
+                                    'to_class_id' => $data['class_room_id'],
+                                    'from_session_id' => $currentSession->id,
+                                    'to_session_id' => $nextSession->id ?? $currentSession->id,
+                                    'movement_type' => 'promotion',
+                                    'movement_date' => now(),
+                                    'reason' => $data['note'] ?? 'Individual promotion to new class'
+                                ]);
+
+                                Notification::make()
+                                    ->success()
+                                    ->title('Student Promoted')
+                                    ->body('The student has been promoted successfully.')
+                                    ->send();
+                            });
+                        }),
 
                     // Change Status Action
                     Tables\Actions\Action::make('changeStatus')
@@ -816,33 +815,34 @@ class StudentResource extends Resource
                                 ->required(),
                             Forms\Components\Textarea::make('reason')
                                 ->label('Reason for Status Change')
-                                ->maxLength(255)
-                                ->required(),
+                                ->maxLength(255),
                         ])
                         ->requiresConfirmation()
                         ->modalHeading('Change Student Status')
                         ->modalDescription(fn(Student $record) => "Change status for {$record->admission->full_name}")
                         ->action(function (Student $record, array $data): void {
                             DB::transaction(function () use ($record, $data) {
-                                // Create status change record
-                                $record->statusChanges()->create([
-                                    'from_status_id' => $record->status_id,
-                                    'to_status_id' => $data['status_id'],
-                                    'reason' => $data['reason'],
-                                    'changed_by' => auth()->id(),
-                                    'changed_at' => now(),
-                                ]);
+                                $statusService = new StudentStatusService();
 
-                                // Update student status
-                                $record->update([
-                                    'status_id' => $data['status_id'],
-                                ]);
+                                try {
+                                    $statusService->changeStatus(
+                                        student: $record,
+                                        newStatusId: $data['status_id'],
+                                        reason: $data['reason'] ?? 'No reason provided'
+                                    );
 
-                                Notification::make()
-                                    ->success()
-                                    ->title('Status Updated')
-                                    ->body('The student status has been updated successfully.')
-                                    ->send();
+                                    Notification::make()
+                                        ->success()
+                                        ->title('Status Updated')
+                                        ->body('The student status has been updated successfully.')
+                                        ->send();
+                                } catch (\Exception $e) {
+                                    Notification::make()
+                                        ->danger()
+                                        ->title('Error')
+                                        ->body('Failed to update student status: ' . $e->getMessage())
+                                        ->send();
+                                }
                             });
                         }),
 
@@ -877,15 +877,15 @@ class StudentResource extends Resource
 
                                     $record->update([
                                         'class_room_id' => $data['class_room_id'],
-                                        'status_id' => Status::where('name', 'Promoted')->first()?->id,
                                     ]);
 
                                     StudentMovement::create([
+                                        'school_id' => Filament::getTenant()->id,
                                         'student_id' => $record->id,
                                         'from_class_id' => $oldClassId,
                                         'to_class_id' => $data['class_room_id'],
                                         'from_session_id' => $currentSession->id,
-                                        'to_session_id' => $nextSession->id,
+                                        'to_session_id' => $nextSession->id ?? $currentSession->id,
                                         'movement_type' => 'promotion',
                                         'movement_date' => now(),
                                         'reason' => 'Bulk promotion to new class',
@@ -922,33 +922,43 @@ class StudentResource extends Resource
                         ->modalHeading('Change Status for Selected Students')
                         ->action(function (Collection $records, array $data): void {
                             DB::transaction(function () use ($records, $data) {
-                                $currentSession = config('app.current_session');
-                                $newStatus = Status::find($data['status_id'])->name;
+                                $statusService = new StudentStatusService();
+                                $failedStudents = [];
 
-                                $records->each(function ($record) use ($data, $currentSession, $newStatus) {
-                                    $oldStatus = $record->status->name;
-                                    $oldClassId = $record->class_room_id;
+                                foreach ($records as $record) {
+                                    try {
+                                        $statusService->changeStatus(
+                                            student: $record,
+                                            newStatusId: $data['status_id'],
+                                            reason: $data['reason'] ?? 'No reason provided'
+                                        );
+                                    } catch (\Exception $e) {
+                                        $failedStudents[] = [
+                                            'name' => $record->full_name,
+                                            'error' => $e->getMessage()
+                                        ];
+                                    }
+                                }
 
-                                    // Create status change record
-                                    $record->statusChanges()->create([
-                                        'from_status_id' => $record->status_id,
-                                        'to_status_id' => $data['status_id'],
-                                        'reason' => $data['reason'],
-                                        'changed_by' => auth()->id(),
-                                        'changed_at' => now(),
-                                    ]);
+                                if (empty($failedStudents)) {
+                                    Notification::make()
+                                        ->success()
+                                        ->title('Status Updated')
+                                        ->body('All selected students statuses have been updated successfully.')
+                                        ->send();
+                                } else {
+                                    $failureMessage = "Some students could not be updated:\n";
+                                    foreach ($failedStudents as $failure) {
+                                        $failureMessage .= "- {$failure['name']}: {$failure['error']}\n";
+                                    }
 
-                                    // Update student status
-                                    $record->update([
-                                        'status_id' => $data['status_id'],
-                                    ]);
-                                });
-
-                                Notification::make()
-                                    ->success()
-                                    ->title('Status Updated')
-                                    ->body('Selected students statuses have been updated successfully.')
-                                    ->send();
+                                    Notification::make()
+                                        ->warning()
+                                        ->title('Partial Update')
+                                        ->body($failureMessage)
+                                        ->persistent()
+                                        ->send();
+                                }
                             });
                         }),
                 ]),
@@ -967,6 +977,34 @@ class StudentResource extends Resource
         return [
             //
         ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [
+            'first_name',
+            'last_name',
+            'middle_name',
+            'admission.email',
+            'phone_number',
+            'admission_number',
+
+        ];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return [
+            'full_name' => $record->full_name,
+            'phone' => $record->phone,
+            'Status' => $record->status?->name,
+            'class' => $record->classRoom?->name,
+        ];
+    }
+
+    public static function getGlobalSearchResultUrl(Model $record): string
+    {
+        return StudentResource::getUrl('view', ['record' => $record]);
     }
 
     public static function getPages(): array

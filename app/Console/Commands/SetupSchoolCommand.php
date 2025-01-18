@@ -37,7 +37,6 @@ class SetupSchoolCommand extends Command
         'subject_teacher',            // Add this
         'class_room_teacher',         // Add this
         'student_grades',        // Add this
-        'subject_assessments',   // Add this
         'assessment_types',      // Add this
         'grading_scales',        // Add this
         'report_templates',      // Add this line
@@ -62,27 +61,27 @@ class SetupSchoolCommand extends Command
 
     protected $seeders = [
         'StatusTableSeeder',
+        'ShieldSeeder',
         'UserTableSeeder',
         'PlansTableSeeder',    // Add this line
-        // 'SchoolTableSeeder',
-        // 'SessionAndTermSeeder',
+        'SchoolTableSeeder',
+        'SessionAndTermSeeder',
         'StateTableSeeder',
         'LgaTableSeeder',
-        'ShieldSeeder',
-        // 'ClassAndStudentSeeder',       // Make sure this runs first
-        // 'SubjectTableSeeder',
-        // 'SubjectTeacherSeeder',        // Then this
-        // 'StaffSeeder',
-        // 'StudentAssessmentSeeder',     // Then assessments
-        // 'GradeScaleSeeder',
-        // 'ReportTemplatesSeeder',
-        // 'AttendanceSeeder',      // Add this line
-        // 'PaymentMethodTableSeeder',   // Add this
-        // 'PaymentTypeSeeder',     // Add this
-        // 'PaymentSeeder',           // Add this
-        // 'ActivityTypeSeeder',          // Add this
-        // 'BehavioralTraitSeeder',   // Add these
-        // 'StudentTraitActivitySeeder', // Add this
+        'ClassAndStudentSeeder',       // Make sure this runs first
+        'SubjectTableSeeder',
+        'SubjectTeacherSeeder',        // Then this
+        'StaffSeeder',
+        'StudentAssessmentSeeder',     // Then assessments
+        'GradeScaleSeeder',
+        'ReportTemplatesSeeder',
+        'AttendanceSeeder',      // Add this line
+        'PaymentMethodTableSeeder',   // Add this
+        'PaymentTypeSeeder',     // Add this
+        'PaymentSeeder',           // Add this
+        'ActivityTypeSeeder',          // Add this
+        'BehavioralTraitSeeder',   // Add these
+        'StudentTraitActivitySeeder', // Add this
         // 'SmsPanelRolesAndPermissionsSeeder',
     ];
 

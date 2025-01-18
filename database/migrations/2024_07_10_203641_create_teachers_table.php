@@ -26,7 +26,7 @@ return new class extends Migration
             $table->foreignId('subject_id')->constrained()->onDelete('cascade');
             $table->timestamps();
 
-            // Add a unique constraint to prevent duplicate entries
+            // Add a unique constraint to prevent duplicate entries for the same teacher and subject 
             $table->unique(['teacher_id', 'subject_id']);
         });
         

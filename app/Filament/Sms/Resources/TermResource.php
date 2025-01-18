@@ -54,12 +54,12 @@ class TermResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\IconColumn::make('is_current')
-                    ->boolean()
-                    ->trueIcon('heroicon-o-check-circle')
-                    ->falseIcon('heroicon-o-x-circle')
-                    ->label('Current')
-                    ->sortable(),
+                // Tables\Columns\IconColumn::make('is_current')
+                //     ->boolean()
+                //     ->trueIcon('heroicon-o-check-circle')
+                //     ->falseIcon('heroicon-o-x-circle')
+                //     ->label('Current')
+                //     ->sortable(),
                 Tables\Columns\TextColumn::make('academicSession.name')
                     ->numeric()
                     ->sortable(),
@@ -71,6 +71,12 @@ class TermResource extends Resource
                 Tables\Columns\TextColumn::make('end_date')
                     ->date()
                     ->sortable(),
+
+                // Add a toggle button to make term current or not
+                Tables\Columns\ToggleColumn::make('is_current')
+                    ->label('Current'),
+
+                
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

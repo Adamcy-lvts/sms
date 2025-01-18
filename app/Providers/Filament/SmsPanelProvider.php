@@ -52,10 +52,17 @@ class SmsPanelProvider extends PanelProvider
             ->id('sms')
             ->path('sms')
             ->login()
-            ->brandName(function () {
+            // ->brandName(function () {
+            //     $tenant = Filament::getTenant();
+            //     return $tenant ? "{$tenant->name}" : 'School SMS';
+            // })
+            ->brandLogo(function () {
                 $tenant = Filament::getTenant();
-                return $tenant ? "{$tenant->name}" : 'School SMS';
+                return $tenant && $tenant->logo
+                    ? asset('storage/' . $tenant->logo)  // Assuming logo is stored in storage
+                    : asset('img/default.jpg');  // Fallback logo
             })
+            ->brandLogoHeight('3rem')
             ->tenant(School::class, slugAttribute: 'slug')
             ->tenantProfile(EditSchoolProfile::class)
             ->tenantBillingProvider(new BillingProvider())
@@ -76,7 +83,7 @@ class SmsPanelProvider extends PanelProvider
                     ->label('Settings')
                     ->url(function () {
                         $tenant = Filament::getTenant();
-                        
+
                         if (!$tenant) {
                             return '#'; // or handle the no-tenant case differently
                         }
@@ -101,6 +108,11 @@ class SmsPanelProvider extends PanelProvider
                 'success' => Color::Green,
                 'warning' => Color::Amber,
                 'indigo' => Color::Indigo,
+                'purple' => Color::Purple,
+                'teal' => Color::Teal,
+                'cyan' => Color::Cyan,
+
+
             ])
             ->databaseNotifications()
             ->discoverResources(in: app_path('Filament/Sms/Resources'), for: 'App\\Filament\\Sms\\Resources')
@@ -147,9 +159,18 @@ class SmsPanelProvider extends PanelProvider
                 PanelsRenderHook::USER_MENU_BEFORE,
                 fn(): string => Blade::render('@livewire(\'current-academic-info\')')
             )
+            ->renderHook(
+                PanelsRenderHook::BODY_START, // This ensures it's at the very top
+                fn(): string => Blade::render('@livewire(\'system-announcement-banner\')')
+            )
+            ->renderHook(
+                // Using PanelsRenderHook for better type safety and IDE support
+                PanelsRenderHook::BODY_END,
+                fn(): string => Blade::render('@include("filament.sms.components.footer")')
+            )
             // ->renderHook(
-            //     PanelsRenderHook::BODY_START,
-            //     fn(): string => Blade::render('@livewire(\'report-progress\')')
+            //     PanelsRenderHook::BODY_END,
+            //     fn(): string => Blade::render('@livewire(\'feedback-modal\')')
             // )
             ->spa();
     }

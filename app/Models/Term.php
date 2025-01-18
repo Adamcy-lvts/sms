@@ -24,38 +24,25 @@ class Term extends Model
     protected static function booted()
     {
         static::saving(function ($term) {
-            // Step 1: Check if this term is being set as current
-            if ($term->is_current) {
-                // Step 2: Find all other terms in the same academic session
-                // that are currently set as current (excluding this one)
-                $otherCurrentTerms = static::where('academic_session_id', $term->academic_session_id)
+            // Only handle other terms if this term is being set as current
+            if ($term->isDirty('is_current') && $term->is_current) {
+                // Reset other current terms for the same school and academic session
+                static::query()
                     ->where('school_id', $term->school_id)
+                    ->where('academic_session_id', $term->academic_session_id)
                     ->where('id', '!=', $term->id)
-                    ->where('is_current', true);
-
-                // Step 3: If any found, update them to not be current
-                if ($otherCurrentTerms->exists()) {
-                    // Step 4: Perform the update
-                    $otherCurrentTerms->update(['is_current' => false]);
-
-                    // Step 5: Optional - Log this change
-                    // \Log::info("Unset previous current term(s) for academic session: {$term->academic_session_id}");
-                }
+                    ->update(['is_current' => false]);
             }
         });
-    }
-
-    protected static function boot()
-    {
-        parent::boot();
 
         static::saved(function ($term) {
-            if ($term->is_current) {
+            if ($term->wasChanged('is_current')) {
                 Cache::tags("school:{$term->school->slug}")
                     ->forget("academic_period:{$term->school_id}");
             }
         });
     }
+
 
     public function academicSession()
     {

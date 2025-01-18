@@ -37,7 +37,7 @@ class StudentStatusService
         'deceased',
     ];
 
-    public function changeStatus(Student $student, int $newStatusId, string $reason, ?array $additionalData = null): void
+    public function changeStatus(Student $student, int $newStatusId, string $reason = '', ?array $additionalData = null): void
     {
         $oldStatusId = $student->status_id;
         $newStatus = Status::findOrFail($newStatusId);
@@ -46,9 +46,10 @@ class StudentStatusService
             // Always record the status change
             $student->statusChanges()->create([
                 'school_id' => $student->school_id,
+                'student_id' => $student->id,
                 'from_status_id' => $oldStatusId,
                 'to_status_id' => $newStatusId,
-                'reason' => $reason,
+                'reason' => $reason ?? 'No reason provided',
                 'changed_by' => auth()->id(),
                 'changed_at' => now(),
                 'metadata' => $additionalData,
@@ -60,22 +61,28 @@ class StudentStatusService
                 
                 StudentMovement::create([
                     'student_id' => $student->id,
-                    'school_id' => $student->school_id,
+                    // 'school_id' => $student->school_id,
                     'from_class_id' => $student->class_room_id,
                     'to_class_id' => null,
                     'from_session_id' => config('app.current_session')->id,
                     'to_session_id' => null,
                     'movement_type' => $config['movement_type'],
                     'movement_date' => now(),
-                    'reason' => $reason,
+                    'reason' => $reason ?? 'No reason provided',
                     'status' => 'completed',
                     'processed_by' => auth()->id(),
-                    'destination_school' => $additionalData['destination_school'] ?? null,
                 ]);
             }
 
-            // Update the student status
-            $student->update(['status_id' => $newStatusId]);
+            // Update the student status and handle class room assignment
+            $updateData = ['status_id' => $newStatusId];
+            
+            // If student is graduated, set class_room_id to null
+            if ($newStatus->name === 'graduated') {
+                $updateData['class_room_id'] = null;
+            }
+            
+            $student->update($updateData);
         });
     }
 }

@@ -28,12 +28,14 @@ use App\Models\PaymentHistory;
 use App\Models\PaymentItem;
 use App\Models\PaymentMethod;
 use App\Models\PaymentType;
+use App\Models\Permission;
 use App\Models\Qualification;
 use App\Models\ReportAssessmentColumn;
 use App\Models\ReportCommentSection;
 use App\Models\ReportGradingScale;
 use App\Models\ReportSection;
 use App\Models\ReportTemplate;
+use App\Models\Role;
 use App\Models\SalaryPayment;
 use App\Models\SchoolSettings;
 use App\Models\Staff;
@@ -44,10 +46,11 @@ use App\Models\StudentTermComment;
 use App\Models\StudentTermTrait;
 use App\Models\Subject;
 use App\Models\SubjectAssessment;
-use App\Models\VariableTemplate;
 use App\Models\SubscriptionReceipt;
 use App\Models\Teacher;
 use App\Models\StatusChange;
+use App\Models\StudentMovement;
+use App\Models\TemplateVariable;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -88,7 +91,7 @@ class ApplyTenantScopes
             fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
         );
 
-        VariableTemplate::addGlobalScope(
+        TemplateVariable::addGlobalScope(
             fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
         );
 
@@ -144,9 +147,6 @@ class ApplyTenantScopes
             fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
         );
 
-        SubjectAssessment::addGlobalScope(
-            fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
-        );
 
         StudentGrade::addGlobalScope(
             fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
@@ -228,6 +228,16 @@ class ApplyTenantScopes
             fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
         );
 
+        StudentMovement::addGlobalScope(
+            fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
+        );
+
+        Role::addGlobalScope(
+            fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
+        );
+
+
+        
         return $next($request);
     }
 }

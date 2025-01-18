@@ -49,14 +49,5 @@ class TemplateVariableGenerator
             default => 'text'
         };
     }
-    // public static function mapDatabaseTypeToFieldType(string $dbType): string
-    // {
-    //     return match ($dbType) {
-    //         'date', 'datetime', 'timestamp' => 'date',
-    //         'integer', 'bigint', 'decimal', 'float' => 'number',
-    //         'boolean' => 'boolean',
-    //         'json', 'array' => 'json',
-    //         default => 'text'
-    //     };
-    // }
+
 }

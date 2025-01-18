@@ -237,11 +237,6 @@ class School extends Model
         return $this->hasMany(Template::class);
     }
 
-    public function variableTemplates()
-    {
-        return $this->hasMany(VariableTemplate::class);
-    }
-
     public function classRooms()
     {
         return $this->hasMany(ClassRoom::class);
@@ -337,6 +332,12 @@ class School extends Model
         return $this->hasMany(Expense::class);
     }
 
+    // student movement
+    public function studentMovements()
+    {
+        return $this->hasMany(StudentMovement::class);
+    }
+
     public function admin()
     {
         return $this->belongsToMany(User::class)
@@ -403,5 +404,55 @@ class School extends Model
     public function templateVariables()
     {
         return $this->hasMany(TemplateVariable::class);
+    }
+
+    /**
+     * Get all super admins for the school
+     * 
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function superAdmins()
+    {
+        return $this->members()
+            ->whereHas('roles', function ($query) {
+                $query->where('name', 'super_admin')
+                    ->where('roles.team_id', $this->id);
+            });
+    }
+
+    /**
+     * Get first super admin of the school
+     * 
+     * @return ?\App\Models\User
+     */
+    public function getSuperAdmin()
+    {
+        return $this->superAdmins()->first();
+    }
+
+    /**
+     * Check if a user is super admin of the school
+     * 
+     * @param \App\Models\User $user
+     * @return bool
+     */
+    public function isSuperAdmin(User $user): bool
+    {
+        return $this->superAdmins()
+            ->where('users.id', $user->id)
+            ->exists();
+    }
+
+    /**
+     * Get super admins with their notification preferences eager loaded
+     * Useful when sending notifications
+     * 
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function getSuperAdminsForNotifications()
+    {
+        return $this->superAdmins()
+            ->with('notificationPreferences')
+            ->get();
     }
 }

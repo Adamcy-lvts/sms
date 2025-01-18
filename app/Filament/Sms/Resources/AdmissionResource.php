@@ -483,6 +483,25 @@ class AdmissionResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ActionGroup::make([
+                    // Add this new action before existing actions
+                    Action::make('generate_admission_number')
+                        ->icon('heroicon-o-identification')
+                        ->color('gray')
+                        ->tooltip('Generate Admission Number')
+                        ->visible(fn (Admission $record) => empty($record->admission_number))
+                        ->requiresConfirmation()
+                        ->modalDescription('This will generate a new admission number for this applicant.')
+                        ->action(function (Admission $record) {
+                            $admissionNumber = (new \App\Services\AdmissionNumberGenerator())->generate();
+                            $record->update(['admission_number' => $admissionNumber]);
+
+                            Notification::make()
+                                ->success()
+                                ->title('Admission Number Generated')
+                                ->body("Generated admission number: {$admissionNumber}")
+                                ->send();
+                        }),
+
                     Action::make('enroll')
                         ->icon('heroicon-o-academic-cap')
                         ->color('success')
@@ -556,15 +575,13 @@ class AdmissionResource extends Resource
                                     'created_by' => Auth::id(),
                                 ]);
 
+                                //update admission number in admission table
+                                $record->update(['admission_number' => $data['identification_number']]);
+
                                 // Optional: Create user account if requested
                                 if ($data['create_user_account'] && $record->email) {
-                                    $user = \App\Models\User::create([
-                                        'first_name' => $record->first_name,
-                                        'last_name' => $record->last_name,
-                                        'email' => $record->email,
-                                        'password' => bcrypt('password'), // You might want to generate a random password
-                                    ]);
 
+                                    $user = $student->createUser();
                                     $student->update(['user_id' => $user->id]);
 
                                     // TODO: Send welcome email with credentials
@@ -572,7 +589,7 @@ class AdmissionResource extends Resource
 
                                 // Update admission status to enrolled
                                 $enrolledStatus = Status::where('type', 'admission')
-                                    ->where('name', 'enrolled')
+                                    ->where('name', 'approved')
                                     ->first();
 
                                 if ($enrolledStatus) {
@@ -663,7 +680,7 @@ class AdmissionResource extends Resource
                                 $logoData = null;
                                 if ($school->logo) {
                                     $logoPath = str_replace('public/', '', $school->logo);
-                        
+
                                     if (Storage::disk('public')->exists($logoPath)) {
                                         $fullLogoPath = Storage::disk('public')->path($logoPath);
                                         $extension = pathinfo($fullLogoPath, PATHINFO_EXTENSION);
@@ -672,7 +689,7 @@ class AdmissionResource extends Resource
                                         );
                                     }
                                 }
-                                
+
                                 // Generate PDF with properly formatted filename
                                 $pdfPath = $pdfService->generate(
                                     view: 'pdfs.admission-letter',
@@ -758,6 +775,31 @@ class AdmissionResource extends Resource
                             Notification::make()
                                 ->success()
                                 ->title('Selected Admissions Approved')
+                                ->send();
+                        }),
+
+                    // Add this new bulk action
+                    Tables\Actions\BulkAction::make('generate_admission_numbers')
+                        ->icon('heroicon-o-identification')
+                        ->color('gray')
+                        ->label('Generate Admission Numbers')
+                        ->requiresConfirmation()
+                        ->modalDescription('This will generate admission numbers for all selected applicants that don\'t have one.')
+                        ->action(function (Collection $records) {
+                            $generator = new \App\Services\AdmissionNumberGenerator();
+                            $count = 0;
+
+                            $records->each(function ($record) use ($generator, &$count) {
+                                if (empty($record->admission_number)) {
+                                    $record->update(['admission_number' => $generator->generate()]);
+                                    $count++;
+                                }
+                            });
+
+                            Notification::make()
+                                ->success()
+                                ->title('Admission Numbers Generated')
+                                ->body("Generated {$count} admission number(s)")
                                 ->send();
                         }),
                 ]),

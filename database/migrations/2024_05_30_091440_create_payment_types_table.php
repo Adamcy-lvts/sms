@@ -19,6 +19,10 @@ return new class extends Migration
             $table->boolean('active')->default(true);
             $table->text('description')->nullable();  // Additional details about the payment type
             $table->timestamps();
+
+            // $table->unique('school_id', 'name');
+            $table->unique(['school_id', 'name']);
+
         });
     }
 

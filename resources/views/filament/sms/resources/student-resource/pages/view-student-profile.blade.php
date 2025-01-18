@@ -70,7 +70,9 @@
                </div>
 
                <!-- Report card history table -->
-               @livewire(\App\Livewire\StudentReportCardHistoryTable::class)
+               @livewire(\App\Livewire\StudentReportCardHistoryTable::class, [
+                   'student' => $this->student,
+               ])
            </div>
        </div>
 

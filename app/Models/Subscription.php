@@ -106,4 +106,55 @@ class Subscription extends Model
     {
         return $this->payments()->latest('created_at')->first()->status;
     }
+
+    // Check if subscription is in trial period
+    public function isOnTrial(): bool
+    {
+        return $this->is_on_trial &&
+            $this->trial_ends_at &&
+            $this->trial_ends_at->isFuture();
+    }
+
+    // Check if trial has expired
+    public function trialHasExpired(): bool
+    {
+        return $this->is_on_trial &&
+            $this->trial_ends_at &&
+            $this->trial_ends_at->isPast();
+    }
+
+    // Start trial period
+    public function startTrial(int $days = null): self
+    {
+        $this->is_on_trial = true;
+        $this->trial_ends_at = now()->addDays($days ?? $this->plan->trial_period);
+        $this->save();
+
+        return $this;
+    }
+
+    public function getSuperAdmin()
+    {
+        return $this->school->members()
+            ->whereHas('roles', function ($query) {
+                $query->where('name', 'super_admin')
+                    ->where('team_id', $this->school_id);
+            })
+            ->first();
+    }
+
+    // Scope for trial subscriptions
+    public function scopeOnTrial($query)
+    {
+        return $query->where('is_on_trial', true)
+            ->where('status', 'active');
+    }
+
+    // Check if trial is ending soon
+    public function isTrialEndingSoon(int $days = 3): bool
+    {
+        return $this->is_on_trial
+            && $this->status === 'active'
+            && $this->trial_ends_at->isNextDays($days);
+    }
 }

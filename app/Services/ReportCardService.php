@@ -27,8 +27,9 @@ class ReportCardService
         $this->gradeService = $gradeService;
 
         // Get current tenant (school)
-        $tenant = Filament::getTenant();
-        // $tenant = School::find(1);
+        // $tenant = Filament::getTenant();
+        // Log::info('Current tenant', ['tenant' => $tenant]);
+        $tenant = School::find(2);
 
         // Initialize cache with tenant-specific tag
         $this->cache = Cache::tags([
@@ -97,7 +98,7 @@ class ReportCardService
             $formattedData = $this->formatReportData($reportData, $template, $assessmentTypes);
 
             // Store the report card
-            $this->storeReportCard($student, $termId, $academicSessionId, $templateId, $formattedData);
+            $this->storeReportCard($student, $termId, $academicSessionId, $template->id, $formattedData);
             // dd($formattedData);
             return $formattedData;
         });
@@ -128,7 +129,8 @@ class ReportCardService
                     'attendance_percentage' => (float) str_replace('%', '', $summary['attendance_percentage'] ?? 0),
                     'monthly_attendance' => $attendance['monthly_breakdown'] ?? [],
                     'status' => 'final',
-                    'updated_by' => auth()->id() ?? null,
+                    'created_by' => 3,
+                    'published_by' => null,
                 ]
             );
 

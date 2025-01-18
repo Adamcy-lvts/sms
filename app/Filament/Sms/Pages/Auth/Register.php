@@ -54,6 +54,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Filament\Pages\Auth\Register as AuthRegister;
 use Filament\Http\Responses\Auth\Contracts\RegistrationResponse;
 use DanHarrin\LivewireRateLimiting\Exceptions\TooManyRequestsException;
+use App\Models\Staff;
 
 class Register extends AuthRegister
 {
@@ -65,6 +66,8 @@ class Register extends AuthRegister
     public $referralCode;
 
     protected string $userModel;
+    public $planId;
+    public $billing;
 
     // Also update the mount method:
     public function mount(): void
@@ -75,6 +78,8 @@ class Register extends AuthRegister
 
         $this->callHook('beforeFill');
         $this->referralCode = request()->query('ref');
+        $this->planId = request()->query('plan');
+        $this->billing = request()->query('billing');
         $this->form->fill();
         $this->callHook('afterFill');
     }
@@ -337,6 +342,10 @@ class Register extends AuthRegister
             $data = $this->form->getState();
             $this->callHook('afterValidate');
 
+            // Add plan and billing data from URL
+            $data['plan_id'] = $this->planId;
+            $data['billing_type'] = $this->billing;
+
             DB::beginTransaction();
             try {
                 $this->callHook('beforeRegister');
@@ -350,7 +359,10 @@ class Register extends AuthRegister
 
                 // Setup school configurations using the service
                 $setupService = new SchoolSetupService();
-                $setupService->setup($school, $data);
+                
+                
+                // Continue
+                $setupService->setup($school, $data, $user);
 
                 // After school setup, run shield command programmatically
                 Artisan::call('shield:super-admin', [
@@ -358,9 +370,9 @@ class Register extends AuthRegister
                     '--tenant' => $school->id
                 ]);
 
-                $schoolRole = Role::where('team_id', $school->id)->where('name', 'super_admin')->first();
+                $superAdmin = $school->getSuperAdmin();;
 
-                $schoolRole->givePermissionTo(Permission::all());
+                $superAdmin->givePermissionTo(Permission::all());
 
                 // Handle referral if exists
                 if ($this->referralCode) {
@@ -458,5 +470,6 @@ class Register extends AuthRegister
         if ($agent) {
             $school->update(['agent_id' => $agent->id]);
         }
+
     }
 }

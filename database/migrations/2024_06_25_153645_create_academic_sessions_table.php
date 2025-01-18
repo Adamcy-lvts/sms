@@ -19,6 +19,8 @@ return new class extends Migration
             $table->date('end_date');
             $table->boolean('is_current')->default(0);
             $table->timestamps();
+
+            $table->unique(['school_id', 'name']);
         });
     }
 

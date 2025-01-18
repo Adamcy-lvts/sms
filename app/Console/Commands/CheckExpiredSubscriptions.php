@@ -14,45 +14,43 @@ class CheckExpiredSubscriptions extends Command
 
     public function handle()
     {
+        $this->info('Checking for expired subscriptions...');
+
         try {
-            $this->info('Checking for expired subscriptions...');
-            
-            // Get active or trial subscriptions that have expired
-            $expiredSubscriptions = Subscription::where(function($query) {
-                $query->where('status', 'active')
-                    ->orWhere('is_on_trial', true);
-            })
-            ->where(function($query) {
-                $query->where('ends_at', '<', now())
-                    ->orWhere('trial_ends_at', '<', now());
-            })
-            ->get();
+            // Check regular subscriptions that have ended
+            $expiredSubscriptions = Subscription::query()
+                ->where('status', 'active')
+                ->where('ends_at', '<=', now())
+                ->update(['status' => 'expired']);
 
-            if ($expiredSubscriptions->isEmpty()) {
-                $this->info('No expired subscriptions found.');
-                return;
-            }
+            $this->info("Updated {$expiredSubscriptions} expired regular subscriptions");
 
-            foreach ($expiredSubscriptions as $subscription) {
-                $subscription->update([
+            // Check trial subscriptions that have ended
+            $expiredTrials = Subscription::query()
+                ->where('status', 'active')
+                ->where('is_on_trial', true)
+                ->where('trial_ends_at', '<=', now())
+                ->update([
                     'status' => 'expired',
                     'is_on_trial' => false
                 ]);
 
-                Log::info('Subscription marked as expired', [
-                    'subscription_id' => $subscription->id,
-                    'school_id' => $subscription->school_id,
-                    'end_date' => $subscription->ends_at
-                ]);
-            }
+            $this->info("Updated {$expiredTrials} expired trial subscriptions");
 
-            $this->info("{$expiredSubscriptions->count()} expired subscriptions updated.");
+            // Log success
+            Log::info('Subscription check completed', [
+                'expired_subscriptions' => $expiredSubscriptions,
+                'expired_trials' => $expiredTrials
+            ]);
+
         } catch (\Exception $e) {
-            Log::error('Error checking expired subscriptions:', [
+            Log::error('Failed to check expired subscriptions', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            $this->error('Error checking expired subscriptions. Check logs for details.');
+
+            $this->error('Failed to check expired subscriptions. Check logs for details.');
+            return 1;
         }
     }
 }

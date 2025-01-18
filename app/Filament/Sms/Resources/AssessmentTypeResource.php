@@ -114,7 +114,7 @@ class AssessmentTypeResource extends Resource
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()
-                    ->hidden(fn(AssessmentType $record) => $record->assessments()->exists()),
+                    ->hidden(fn(AssessmentType $record) => $record->exists()),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

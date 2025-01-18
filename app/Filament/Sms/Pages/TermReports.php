@@ -24,6 +24,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Components\Textarea;
+use Illuminate\Support\Facades\Storage;
 use Filament\Notifications\Notification;
 use Filament\Forms\Concerns\InteractsWithForms;
 use App\Filament\Sms\Actions\BulkDownloadReportCards;
@@ -45,7 +46,7 @@ class TermReports extends Page implements HasForms
     public $school;
     private GradeService $gradeService;
     private ReportCardService $reportCardService;
-
+    public $logoData;
 
     public function boot(GradeService $gradeService, ReportCardService $reportCardService)
     {
@@ -57,6 +58,20 @@ class TermReports extends Page implements HasForms
     {
         $this->school = Filament::getTenant();
         $this->form->fill();
+
+        // Prepare logo data
+        $this->logoData = null;
+        if ($this->school->logo) {
+            $logoPath = str_replace('public/', '', $this->school->logo);
+
+            if (Storage::disk('public')->exists($logoPath)) {
+                $fullLogoPath = Storage::disk('public')->path($logoPath);
+                $extension = pathinfo($fullLogoPath, PATHINFO_EXTENSION);
+                $this->logoData = 'data:image/' . $extension . ';base64,' . base64_encode(
+                    Storage::disk('public')->get($logoPath)
+                );
+            }
+        }
     }
 
 
@@ -68,24 +83,9 @@ class TermReports extends Page implements HasForms
 
         return $form->schema([
             Section::make('Generate Term Report')
-                ->description('Select student and academic period to generate report')
+                ->description('Select class and student to generate report')
                 ->schema([
                     Grid::make(2)->schema([
-                        Select::make('student_id')
-                            ->label('Student')
-                            ->options(function () use ($tenant) {
-                                return Student::query()
-                                    ->where('school_id', $tenant->id)
-                                    ->with('classRoom')
-                                    ->get()
-                                    ->mapWithKeys(fn($student) => [
-                                        $student->id => "{$student->full_name} ({$student->classRoom->name})"
-                                    ]);
-                            })
-                            ->searchable()
-                            ->live()
-                            ->required(),
-
                         Select::make('class_room_id')
                             ->label('Class')
                             ->options(function () use ($tenant) {
@@ -93,11 +93,31 @@ class TermReports extends Page implements HasForms
                                     ->pluck('name', 'id');
                             })
                             ->searchable()
-                            ->required()
-                            ->disabled(fn(callable $get) => !$get('student_id')),
+                            ->live()
+                            ->required(),
+
+                        Select::make('student_id')
+                            ->label('Student')
+                            ->options(function (callable $get) use ($tenant) {
+                                $classId = $get('class_room_id');
+                                if (!$classId) return [];
+
+                                return Student::query()
+                                    ->where('school_id', $tenant->id)
+                                    ->where('class_room_id', $classId)
+                                    ->get()
+                                    ->mapWithKeys(fn($student) => [
+                                        $student->id => $student->full_name
+                                    ]);
+                            })
+                            ->searchable()
+                            ->live()
+                            ->disabled(fn(callable $get) => !$get('class_room_id'))
+                            ->required(),
 
                         Select::make('academic_session_id')
                             ->label('Academic Session')
+                            ->native(false)
                             ->options(function () use ($tenant) {
                                 return $tenant->academicSessions()
                                     ->orderByDesc('start_date')
@@ -109,6 +129,7 @@ class TermReports extends Page implements HasForms
 
                         Select::make('term_id')
                             ->label('Term')
+                            ->native(false)
                             ->options(function (callable $get) use ($tenant) {
                                 $sessionId = $get('academic_session_id');
                                 if (!$sessionId) return [];
@@ -119,7 +140,6 @@ class TermReports extends Page implements HasForms
                                     ->pluck('name', 'id');
                             })
                             ->default(function (callable $get) use ($currentSession, $currentTerm) {
-                                // Only set default if the selected session matches current session
                                 return $get('academic_session_id') === $currentSession?->id
                                     ? $currentTerm?->id
                                     : null;
@@ -272,117 +292,6 @@ class TermReports extends Page implements HasForms
         return $activitiesConfig;
     }
 
-    // public function generateReport(): void
-    // {
-    //     $startTime = microtime(true);
-    //     $data = $this->form->getState();
-
-    //     try {
-
-    //         $student = Student::with([
-    //             'classRoom',
-    //             'admission',
-    //             'grades' => function ($query) use ($data) {
-    //                 $query->whereHas('assessment', function ($query) use ($data) {
-    //                     $query->where('term_id', $data['term_id'])
-    //                         ->where('academic_session_id', $data['academic_session_id']);
-    //                 })->with(['assessment.assessmentType']);
-    //             },
-    //             'termActivities' => function ($query) use ($data) {
-    //                 $query->where('term_id', $data['term_id'])
-    //                     ->where('academic_session_id', $data['academic_session_id'])->with('activityType');
-    //             },
-    //             'termTraits' => function ($query) use ($data) {
-    //                 $query->where('term_id', $data['term_id'])
-    //                     ->where('academic_session_id', $data['academic_session_id'])->with('behavioralTrait');
-    //             }
-    //         ])->findOrFail($data['student_id']);
-
-
-
-    //         // Verify student belongs to current school
-    //         if ($student->school_id !== $this->school->id) {
-    //             throw new \Exception('Unauthorized access to student record');
-    //         }
-
-
-
-    //         $reportData = $this->reportCardService->generateReport(
-    //             $student,
-    //             $data['term_id'],
-    //             $data['academic_session_id'],
-    //             $data['template_id'] ?? null
-    //         );
-
-
-    //         // dd($reportData);
-    //         // Get template configuration
-    //         $template = $reportData['template'];
-    //         $templateConfig = $template->getActivitiesConfig();
-
-
-    //         // Generate organized activities and traits
-    //         $activitiesConfig = $this->organizeActivities($student, $templateConfig);
-
-    //         // Update template with new config
-    //         $template->update([
-    //             'activities_config' => $activitiesConfig
-    //         ]);
-
-
-    //         // dd($reportData);
-    //         $this->report = [
-    //             'template' => $reportData['template'],
-    //             'basic_info' => $reportData['basic_info'],
-    //             'attendance' => [
-    //                 'school_days' => $reportData['attendance']['school_days'],
-    //                 'days_present' => $reportData['attendance']['present'],
-    //                 'days_absent' => $reportData['attendance']['absent'],
-    //                 'days_late' => $reportData['attendance']['late'],
-    //                 'days_excused' => $reportData['attendance']['excused'],
-    //                 'attendance_percentage' => $reportData['attendance']['attendance_rate'],
-    //             ],
-
-    //             'academic_info' => $reportData['academic_info'],
-
-    //             'subjects' => $reportData['subjects'],
-    //             'term_summary' => $reportData['term_summary'],
-    //             'comments' => $reportData['comments'],
-    //             'activities' => $activitiesConfig['sections'],
-    //             // Add behavioral traits separately for the blade template
-    //             'generated_at' => now()
-    //         ];
-
-    //         $duration = microtime(true) - $startTime;
-    //         $fromCache = $duration < 0.1;
-
-    //         Notification::make()
-    //             ->success()
-    //             ->title('Report Generated')
-    //             ->body(sprintf(
-    //                 'Generated in %.2fs %s',
-    //                 $duration,
-    //                 $fromCache ? '(from cache)' : '(fresh)'
-    //             ))
-    //             ->send();
-    //         // dd($this->report);
-    //         // Notification::make()
-    //         //     ->success()
-    //         //     ->title('Report Generated')
-    //         //     ->body('Term report has been generated successfully.')
-    //         //     ->send();
-    //     } catch (\Exception $e) {
-    //         $this->report = [
-    //             'error' => 'Failed to generate report: ' . $e->getMessage()
-    //         ];
-
-    //         Notification::make()
-    //             ->danger()
-    //             ->title('Error')
-    //             ->body('Failed to generate report: ' . $e->getMessage())
-    //             ->send();
-    //     }
-    // }
 
     public function generateReport(): void
     {
@@ -438,7 +347,6 @@ class TermReports extends Page implements HasForms
                 'activities_config' => $activitiesConfig
             ]);
 
-            // dd($reportData['attendance']['attendance_percentage']);
 
             // Match the structure with what GradeService returns
             $this->report = [

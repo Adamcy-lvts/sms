@@ -16,20 +16,32 @@ use App\Helpers\CommentOptions;
 use App\Models\AcademicSession;
 use App\Models\BehavioralTrait;
 use App\Models\StudentTermTrait;
+use Filament\Infolists\Infolist;
+use Livewire\Attributes\Computed;
 use App\Models\StudentTermComment;
 use Illuminate\Support\Facades\DB;
 use App\Models\StudentTermActivity;
+use Filament\Forms\Components\Tabs;
+use Filament\Forms\Components\View;
+use Illuminate\Support\Facades\Log;
 use Filament\Forms\Components\Group;
 use Illuminate\Support\Facades\Auth;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Support\Enums\FontWeight;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Textarea;
+use Filament\Infolists\Components\Grid;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Forms\Components\Placeholder;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ImageEntry;
 use Filament\Forms\Concerns\InteractsWithForms;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
+use Filament\Infolists\Components\Group as infoListGroup;
+use Filament\Infolists\Components\Section as infoListSection;
 
 class StudentEvaluation extends Page implements HasForms
 {
@@ -42,13 +54,12 @@ class StudentEvaluation extends Page implements HasForms
 
     public ?array $data = [];
     public ?array $termSummary = null;
-    // protected GradeService $gradeService;
+    protected GradeService $gradeService;
 
-    // public function boot(GradeService $gradeService)
-    // {
-    //     // Initialize service in boot instead
-    //     $this->gradeService = $gradeService;
-    // }
+    public function boot(GradeService $gradeService)
+    {
+        $this->gradeService = $gradeService;
+    }
 
 
     public function mount(): void
@@ -57,12 +68,15 @@ class StudentEvaluation extends Page implements HasForms
         $this->form->fill();
     }
 
+
     public function form(Form $form): Form
     {
+        $student = Student::find($this->data['student_id'] ?? null);
         return $form
             ->schema([
-                Section::make('Student Information')
-                    ->description('Select student and academic period')
+                // Student Selection Section
+                Section::make('Select Student')
+                    ->description('Choose the student and academic period for evaluation')
                     ->schema([
                         Select::make('student_id')
                             ->label('Student')
@@ -82,7 +96,8 @@ class StudentEvaluation extends Page implements HasForms
                                 if ($state) {
                                     $this->loadTermSummary();
                                 }
-                            }),
+                            })
+                            ->columnSpan(2),
 
                         Select::make('academic_session_id')
                             ->label('Academic Session')
@@ -95,190 +110,200 @@ class StudentEvaluation extends Page implements HasForms
                         Select::make('term_id')
                             ->label('Term')
                             ->options(fn() => Term::where('school_id', Filament::getTenant()->id)->pluck('name', 'id'))
-                            ->default(fn() => config('app.current_term')->id ?? null)
+                            // ->default(fn() => config('app.current_term')->id ?? null)
                             ->required()
                             ->live()
                             ->afterStateUpdated(fn() => $this->loadTermSummary()),
                     ])
-                    ->columns(3),
+                    ->columns(4),
 
-                // Term Summary Section (if available)
-                Section::make('Term Summary')
-                    ->schema([
-                        Group::make()
-                            ->schema([
-                                TextInput::make('total_score')
-                                    ->disabled(),
-                                TextInput::make('average_score')
-                                    ->disabled(),
-                                TextInput::make('position')
-                                    ->disabled(),
-                                TextInput::make('class_size')
-                                    ->disabled(),
-                            ])
-                            ->columns(4),
-                    ])
-                    ->visible(fn() => filled($this->termSummary)),
+                // Student Info Display Section
 
-                Group::make()
-                    ->schema([
-                        Section::make('Activities & Performance')
+
+                // Student Info Display Section using a custom view
+                View::make('filament.forms.components.student-info-display')
+                    ->visible(fn() => filled($this->data['student_id']))
+                    ->columnSpan('full'),
+
+                // Main content in tabs
+                Tabs::make('Evaluation')
+                    ->tabs([
+                        // Tab 1: Activities & Performance
+                        Tabs\Tab::make('Activities')
+                            ->icon('heroicon-o-academic-cap')
                             ->schema([
-                                Repeater::make('activities')
+                                Section::make('Academic & Extra-Curricular Activities')
+                                    ->description('Rate student\'s performance in various activities')
                                     ->schema([
-                                        Select::make('activity_type_id')
-                                            ->label('Activity')
-                                            ->options(fn() => ActivityType::where('school_id', Filament::getTenant()->id)
-                                                ->get()
-                                                ->groupBy('category')
-                                                ->map(fn($group) => $group->pluck('name', 'id'))
-                                                ->toArray())
-                                            ->required()
-                                            ->searchable()
-                                            ->preload(),
+                                        Repeater::make('activities')
+                                            ->schema([
+                                                Select::make('activity_type_id')
+                                                    ->label('Activity')
+                                                    ->options(fn() => ActivityType::where('school_id', Filament::getTenant()->id)
+                                                        ->get()
+                                                        ->groupBy('category')
+                                                        ->map(fn($group) => $group->pluck('name', 'id'))
+                                                        ->toArray())
+                                                    ->required()
+                                                    ->searchable()
+                                                    ->preload()
+                                                    ->columnSpan(2),
 
-                                        Select::make('rating')
-                                            ->label('Performance Rating')
-                                            ->options([
-                                                1 => '★ Poor',
-                                                2 => '★★ Fair',
-                                                3 => '★★★ Good',
-                                                4 => '★★★★ Very Good',
-                                                5 => '★★★★★ Excellent'
+                                                Select::make('rating')
+                                                    ->label('Rating')
+                                                    ->options([
+                                                        1 => '★ Poor',
+                                                        2 => '★★ Fair',
+                                                        3 => '★★★ Good',
+                                                        4 => '★★★★ Very Good',
+                                                        5 => '★★★★★ Excellent'
+                                                    ])
+                                                    ->required()
+                                                    ->default(null),
+
+                                                TextInput::make('remark')
+                                                    ->label('Comments')
+                                                    ->maxLength(255),
                                             ])
-                                            ->required()
-                                            ->default(null), // Add default value to prevent undefined key
-
-                                        TextInput::make('remark')
-                                            ->label('Additional Comments')
-                                            ->maxLength(255),
-                                    ])
-                                    ->columns(3)
-                                    ->reorderableWithButtons()
-                                    ->collapsible()
-                                    ->itemLabel(
-                                        fn($state) =>
-                                        ActivityType::find($state['activity_type_id'])?->name ?? 'Activity'
-                                    )
-                                    ->defaultItems(0)
-                                    ->addActionLabel('Add Activity'),
+                                            ->columns(4)
+                                            ->collapsible()
+                                            ->collapsed()
+                                            ->itemLabel(
+                                                fn($state) =>
+                                                ActivityType::find($state['activity_type_id'])?->name ?? 'New Activity'
+                                            )
+                                            ->defaultItems(0)
+                                            ->addActionLabel('Add Activity')
+                                            ->reorderableWithButtons(),
+                                    ]),
                             ]),
 
-                        Section::make('Behavioral Assessment')
+                        // Tab 2: Behavioral Assessment
+                        Tabs\Tab::make('Behavior')
+                            ->icon('heroicon-o-user-group')
                             ->schema([
-                                Repeater::make('traits')
+                                Section::make('Behavioral Traits Assessment')
+                                    ->description('Evaluate student\'s behavioral characteristics')
                                     ->schema([
-                                        Select::make('behavioral_trait_id')
-                                            ->label('Trait')
-                                            ->options(fn() => BehavioralTrait::where('school_id', Filament::getTenant()->id)
-                                                ->get()
-                                                ->groupBy('category')
-                                                ->map(fn($group) => $group->pluck('name', 'id'))
-                                                ->toArray())
-                                            ->required()
-                                            ->searchable()
-                                            ->preload(),
+                                        Repeater::make('traits')
+                                            ->schema([
+                                                Select::make('behavioral_trait_id')
+                                                    ->label('Trait')
+                                                    ->options(fn() => BehavioralTrait::where('school_id', Filament::getTenant()->id)
+                                                        ->get()
+                                                        ->groupBy('category')
+                                                        ->map(fn($group) => $group->pluck('name', 'id'))
+                                                        ->toArray())
+                                                    ->required()
+                                                    ->searchable()
+                                                    ->preload()
+                                                    ->columnSpan(2),
 
-                                        Select::make('rating')
-                                            ->label('Rating')
-                                            ->options([
-                                                1 => '★ Poor',
-                                                2 => '★★ Fair',
-                                                3 => '★★★ Good',
-                                                4 => '★★★★ Very Good',
-                                                5 => '★★★★★ Excellent'
+                                                Select::make('rating')
+                                                    ->label('Rating')
+                                                    ->options([
+                                                        1 => '★ Poor',
+                                                        2 => '★★ Fair',
+                                                        3 => '★★★ Good',
+                                                        4 => '★★★★ Very Good',
+                                                        5 => '★★★★★ Excellent'
+                                                    ])
+                                                    ->required()
+                                                    ->default(null),
+
+                                                TextInput::make('remark')
+                                                    ->label('Comments')
+                                                    ->maxLength(255),
                                             ])
-                                            ->required()
-                                            ->default(null), // Add default value to prevent undefined key
+                                            ->columns(4)
+                                            ->collapsible()
+                                            ->collapsed()
+                                            ->itemLabel(
+                                                fn($state) =>
+                                                BehavioralTrait::find($state['behavioral_trait_id'])?->name ?? 'New Trait'
+                                            )
+                                            ->defaultItems(0)
+                                            ->addActionLabel('Add Behavioral Trait')
+                                            ->reorderableWithButtons(),
+                                    ]),
+                            ]),
 
-                                        TextInput::make('remark')
-                                            ->label('Comments')
-                                            ->maxLength(255),
+                        // Tab 3: Comments
+                        Tabs\Tab::make('Comments')
+                            ->icon('heroicon-o-chat-bubble-left-right')
+                            ->schema([
+                                Section::make("Class Teacher's Comment")
+                                    ->description('Provide your evaluation as the class teacher')
+                                    ->schema([
+                                        Select::make('class_teacher_comment_category')
+                                            ->label('Overall Performance Category')
+                                            ->options([
+                                                'excellent' => 'Excellent',
+                                                'very_good' => 'Very Good',
+                                                'good' => 'Good',
+                                                'average' => 'Average',
+                                                'needs_improvement' => 'Needs Improvement'
+                                            ])
+                                            ->live()
+                                            ->afterStateUpdated(fn(Set $set) => $set('class_teacher_comment', null)),
+
+                                        Select::make('class_teacher_comment')
+                                            ->label('Select Template Comment')
+                                            ->options(function (Get $get) {
+                                                $category = $get('class_teacher_comment_category');
+                                                if (!$category) return [];
+                                                return collect(CommentOptions::getTeacherCommentsByCategory($category))
+                                                    ->mapWithKeys(fn($comment) => [$comment => $comment]);
+                                            })
+                                            ->searchable()
+                                            ->visible(fn(Get $get) => filled($get('class_teacher_comment_category')))
+                                            ->live(),
+
+                                        Textarea::make('custom_class_teacher_comment')
+                                            ->label('Custom Comment')
+                                            ->rows(3)
+                                            ->maxLength(500),
                                     ])
-                                    ->columns(3)
-                                    ->reorderableWithButtons()
                                     ->collapsible()
-                                    ->itemLabel(
-                                        fn($state) =>
-                                        BehavioralTrait::find($state['behavioral_trait_id'])?->name ?? 'Trait'
-                                    )
-                                    ->defaultItems(0)
-                                    ->addActionLabel('Add Trait'),
+                                    ->collapsed(),
+
+                                Section::make("Principal's Comment")
+                                    ->description('Principal\'s evaluation and remarks')
+                                    ->schema([
+                                        Select::make('principal_comment_category')
+                                            ->label('Overall Assessment Category')
+                                            ->options([
+                                                'excellent' => 'Excellent',
+                                                'very_good' => 'Very Good',
+                                                'good' => 'Good',
+                                                'average' => 'Average',
+                                                'needs_improvement' => 'Needs Improvement'
+                                            ])
+                                            ->live()
+                                            ->afterStateUpdated(fn(Set $set) => $set('principal_comment', null)),
+
+                                        Select::make('principal_comment')
+                                            ->label('Select Template Comment')
+                                            ->options(function (Get $get) {
+                                                $category = $get('principal_comment_category');
+                                                if (!$category) return [];
+                                                return collect(CommentOptions::getPrincipalCommentsByCategory($category))
+                                                    ->mapWithKeys(fn($comment) => [$comment => $comment]);
+                                            })
+                                            ->searchable()
+                                            ->visible(fn(Get $get) => filled($get('principal_comment_category')))
+                                            ->live(),
+
+                                        Textarea::make('custom_principal_comment')
+                                            ->label('Custom Comment')
+                                            ->rows(3)
+                                            ->maxLength(500),
+                                    ])
+                                    ->collapsible()
+                                    ->collapsed(),
                             ]),
                     ])
-                    ->columnSpan(['lg' => 2]),
-
-                Group::make()
-                    ->schema([
-                        // Class Teacher's Comment Section
-                        Section::make("Class Teacher's Comment")
-                            ->description('Select from predefined comments or write a custom comment')
-                            ->schema([
-                                Select::make('class_teacher_comment_category')
-                                    ->label('Category')
-                                    ->options([
-                                        'excellent' => 'Excellent',
-                                        'very_good' => 'Very Good',
-                                        'good' => 'Good',
-                                        'average' => 'Average',
-                                        'needs_improvement' => 'Needs Improvement'
-                                    ])
-                                    ->live()
-                                    ->afterStateUpdated(fn(Set $set) => $set('class_teacher_comment', null)),
-
-                                Select::make('class_teacher_comment')
-                                    ->label('Select Predefined Comment')
-                                    ->options(function (Get $get) {
-                                        $category = $get('class_teacher_comment_category');
-                                        if (!$category) return [];
-                                        return collect(CommentOptions::getTeacherCommentsByCategory($category))
-                                            ->mapWithKeys(fn($comment) => [$comment => $comment]);
-                                    })
-                                    ->searchable()
-                                    ->visible(fn(Get $get) => filled($get('class_teacher_comment_category')))
-                                    ->live(),
-
-                                Textarea::make('custom_class_teacher_comment')
-                                    ->label('Custom Comment')
-                                    ->rows(3)
-                                    ->maxLength(500),
-                            ]),
-
-                        // Principal's Comment Section
-                        Section::make("Principal's Comment")
-                            ->description('Select from predefined comments or write a custom comment')
-                            ->schema([
-                                Select::make('principal_comment_category')
-                                    ->label('Category')
-                                    ->options([
-                                        'excellent' => 'Excellent',
-                                        'very_good' => 'Very Good',
-                                        'good' => 'Good',
-                                        'average' => 'Average',
-                                        'needs_improvement' => 'Needs Improvement'
-                                    ])
-                                    ->live()
-                                    ->afterStateUpdated(fn(Set $set) => $set('principal_comment', null)),
-
-                                Select::make('principal_comment')
-                                    ->label('Select Predefined Comment')
-                                    ->options(function (Get $get) {
-                                        $category = $get('principal_comment_category');
-                                        if (!$category) return [];
-                                        return collect(CommentOptions::getPrincipalCommentsByCategory($category))
-                                            ->mapWithKeys(fn($comment) => [$comment => $comment]);
-                                    })
-                                    ->searchable()
-                                    ->visible(fn(Get $get) => filled($get('principal_comment_category')))
-                                    ->live(),
-
-                                Textarea::make('custom_principal_comment')
-                                    ->label('Custom Comment')
-                                    ->rows(3)
-                                    ->maxLength(500),
-                            ])
-                    ])
-                    ->columnSpan(['lg' => 1]),
+                    ->columnSpan('full'),
             ])
             ->columns(3)
             ->statePath('data');
@@ -288,19 +313,158 @@ class StudentEvaluation extends Page implements HasForms
     {
         $data = $this->form->getState();
 
-        if (!($data['student_id'] ?? null) || !($data['academic_session_id'] ?? null) || !($data['term_id'] ?? null)) {
-            $this->termSummary = null;
-            return;
-        }
+        // Reset term summary when any required field is missing
+        // if (!($data['student_id'] ?? null) || !($data['academic_session_id'] ?? null) ) {
+        //     $this->termSummary = null;
+        //     $this->loadExistingEvaluation();
+        //     return;
+        // }
 
         $student = Student::find($data['student_id']);
-        if (!$student) {
-            $this->termSummary = null;
+        // if (!$student) {
+        //     $this->termSummary = null;
+        //     $this->loadExistingEvaluation();
+        //     return;
+        // }
+
+        try {
+            // Get fresh term data
+            $this->termSummary = $this->gradeService->generateTermReport(
+                $student,
+                $data['term_id'],
+                $data['academic_session_id']
+            );
+        } catch (\Exception $e) {
+            // Handle case where no data exists for selected term
+            $this->termSummary = [
+                'basic_info' => [
+                    'admission' => $student->admission_number,
+                    'class' => $student->classRoom->name,
+                    'id' => $student->id
+                ],
+                'academic_info' => [
+                    'session' => [
+                        'id' => $data['academic_session_id'],
+                        'name' => AcademicSession::find($data['academic_session_id'])?->name ?? 'Unknown'
+                    ],
+                    'term' => [
+                        'id' => $data['term_id'],
+                        'name' => Term::find($data['term_id'])?->name ?? 'Unknown'
+                    ]
+                ],
+                'summary' => [
+                    'average' => 0,
+                    'position' => 0,
+                    'class_size' => 0,
+                    'total_subjects' => 0
+                ],
+                'attendance' => [
+                    'school_days' => 0,
+                    'present' => 0
+                ]
+            ];
+        }
+
+        // Reload evaluation data for the new term
+        $this->loadExistingEvaluation();
+    }
+
+    protected function loadExistingEvaluation(): void
+    {
+        $data = $this->form->getState();
+
+        if (!filled($data['student_id']) || !filled($data['academic_session_id']) || !filled($data['term_id'])) {
             return;
         }
 
+        // Get existing activities
+        $existingActivities = StudentTermActivity::where([
+            'student_id' => $data['student_id'],
+            'academic_session_id' => $data['academic_session_id'],
+            'term_id' => $data['term_id'],
+        ])
+            ->with('activityType')
+            ->get()
+            ->map(function ($activity) {
+                return [
+                    'activity_type_id' => $activity->activity_type_id,
+                    'rating' => $activity->rating,
+                    'remark' => $activity->remark
+                ];
+            })
+            ->toArray();
 
-        $this->loadExistingEvaluation();
+        // Get existing traits
+        $existingTraits = StudentTermTrait::where([
+            'student_id' => $data['student_id'],
+            'academic_session_id' => $data['academic_session_id'],
+            'term_id' => $data['term_id'],
+        ])
+            ->with('behavioralTrait')
+            ->get()
+            ->map(function ($trait) {
+                return [
+                    'behavioral_trait_id' => $trait->behavioral_trait_id,
+                    'rating' => $trait->rating,
+                    'remark' => $trait->remark
+                ];
+            })
+            ->toArray();
+
+        // If no existing activities, load 5 default ones with preset ratings
+        if (empty($existingActivities)) {
+            $defaultRatings = [5, 4, 4, 3, 5]; // Preset ratings for default items
+
+            $existingActivities = ActivityType::where('school_id', Filament::getTenant()->id)
+                ->where('is_default', true)
+                ->orderBy('category')
+                ->orderBy('display_order')
+                ->limit(5)
+                ->get()
+                ->map(function ($type, $index) use ($defaultRatings) {
+                    return [
+                        'activity_type_id' => $type->id,
+                        'rating' => $defaultRatings[$index], // Assign preset rating
+                        'remark' => null
+                    ];
+                })
+                ->toArray();
+        }
+
+        // If no existing traits, provide 5 default traits
+        if (empty($existingTraits)) {
+            $defaultRatings = [5, 4, 4, 3, 5]; // Preset ratings for default items
+            $defaultTraits = BehavioralTrait::where('school_id', Filament::getTenant()->id)
+                ->where('is_default', true)
+                ->orderBy('category')
+                ->orderBy('name')
+                ->limit(5)
+                ->get()
+                ->map(function ($trait, $index) use ($defaultRatings) {
+                    return [
+                        'behavioral_trait_id' => $trait->id,
+                        'rating' => $defaultRatings[$index],
+                        'remark' => null
+                    ];
+                })
+                ->toArray();
+        }
+
+        // Get existing comments
+        $comment = StudentTermComment::where([
+            'student_id' => $data['student_id'],
+            'academic_session_id' => $data['academic_session_id'],
+            'term_id' => $data['term_id'],
+        ])->first();
+
+        // Fill form with the appropriate data
+        $this->form->fill([
+            ...$data,
+            'activities' => !empty($existingActivities) ? $existingActivities : ($defaultActivities ?? []),
+            'traits' => !empty($existingTraits) ? $existingTraits : ($defaultTraits ?? []),
+            'custom_class_teacher_comment' => $comment?->class_teacher_comment,
+            'custom_principal_comment' => $comment?->principal_comment,
+        ]);
     }
 
     public function save(): void
@@ -401,137 +565,6 @@ class StudentEvaluation extends Page implements HasForms
         }
     }
 
-    // protected function loadExistingEvaluation(): void
-    // {
-    //     $data = $this->form->getState();
-
-    //     if (!($data['student_id'] ?? null) || !($data['academic_session_id'] ?? null) || !($data['term_id'] ?? null)) {
-    //         return;
-    //     }
-
-    //     // Load activities
-    //     $activities = StudentTermActivity::where([
-    //         'student_id' => $data['student_id'],
-    //         'academic_session_id' => $data['academic_session_id'],
-    //         'term_id' => $data['term_id'],
-    //     ])->get()->map(fn($activity) => [
-    //         'activity_type_id' => $activity->activity_type_id,
-    //         'rating' => $activity->rating,
-    //         'remark' => $activity->remark,
-    //     ])->toArray();
-
-    //     // Load traits
-    //     $traits = StudentTermTrait::where([
-    //         'student_id' => $data['student_id'],
-    //         'academic_session_id' => $data['academic_session_id'],
-    //         'term_id' => $data['term_id'],
-    //     ])->get()->map(fn($trait) => [
-    //         'behavioral_trait_id' => $trait->behavioral_trait_id,
-    //         'rating' => $trait->rating,
-    //         'remark' => $trait->remark,
-    //     ])->toArray();
-
-    //     // Load existing comments
-    //     $comment = StudentTermComment::where([
-    //         'student_id' => $data['student_id'],
-    //         'academic_session_id' => $data['academic_session_id'],
-    //         'term_id' => $data['term_id'],
-    //     ])->first();
-
-    //     // Initialize comment data
-    //     $commentData = [
-    //         'activities' => $activities,
-    //         'traits' => $traits,
-    //         'class_teacher_comment_category' => null,
-    //         'principal_comment_category' => null,
-    //         'class_teacher_comment' => null,
-    //         'principal_comment' => null,
-    //         'custom_class_teacher_comment' => $comment?->class_teacher_comment ?? null,
-    //         'custom_principal_comment' => $comment?->principal_comment ?? null,
-    //     ];
-
-    //     // Fill the form with existing data
-    //     $this->form->fill([
-    //         ...$data,
-    //         ...$commentData,
-    //         'activities' => $activities,
-    //         'traits' => $traits,
-    //         'custom_class_teacher_comment' => $comment?->class_teacher_comment,
-    //         'custom_principal_comment' => $comment?->principal_comment,
-    //     ]);
-    // }
-
-    protected function loadExistingEvaluation(): void
-    {
-        $data = $this->form->getState();
-
-        if (!filled($data['student_id']) || !filled($data['academic_session_id']) || !filled($data['term_id'])) {
-            return;
-        }
-
-        // Get or create default activities
-        $defaultActivities = ActivityType::where('school_id', Filament::getTenant()->id)
-            ->where('is_default', true)
-            ->orderBy('category')
-            ->orderBy('display_order')
-            ->get()
-            ->map(function ($type) use ($data) {
-                // Find existing rating or create blank
-                $activity = StudentTermActivity::firstOrNew([
-                    'student_id' => $data['student_id'],
-                    'academic_session_id' => $data['academic_session_id'],
-                    'term_id' => $data['term_id'],
-                    'activity_type_id' => $type->id,
-                    'school_id' => Filament::getTenant()->id
-                ]);
-
-                return [
-                    'activity_type_id' => $type->id,
-                    'rating' => $activity->exists ? $activity->rating : null,
-                    'remark' => $activity->exists ? $activity->remark : null
-                ];
-            })
-            ->toArray();
-
-        // Do same for behavioral traits
-        $defaultTraits = BehavioralTrait::where('school_id', Filament::getTenant()->id)
-            ->where('is_default', true)
-            ->orderBy('category')
-            ->orderBy('name')
-            ->get()
-            ->map(function ($trait) use ($data) {
-                $rating = StudentTermTrait::firstOrNew([
-                    'student_id' => $data['student_id'],
-                    'academic_session_id' => $data['academic_session_id'],
-                    'term_id' => $data['term_id'],
-                    'behavioral_trait_id' => $trait->id,
-                    'school_id' => Filament::getTenant()->id
-                ]);
-
-                return [
-                    'behavioral_trait_id' => $trait->id,
-                    'rating' => $rating->exists ? $rating->rating : null,
-                    'remark' => $rating->exists ? $rating->remark : null
-                ];
-            })
-            ->toArray();
-
-        // Load comments
-        $comment = StudentTermComment::where([
-            'student_id' => $data['student_id'],
-            'academic_session_id' => $data['academic_session_id'],
-            'term_id' => $data['term_id'],
-        ])->first();
-
-        // Fill form with all data
-        $this->form->fill([
-            ...$data,
-            'activities' => $defaultActivities,
-            'traits' => $defaultTraits,
-            'custom_class_teacher_comment' => $comment?->class_teacher_comment,
-            'custom_principal_comment' => $comment?->principal_comment,
-        ]);
-    }
 
     protected function getHeaderActions(): array
     {

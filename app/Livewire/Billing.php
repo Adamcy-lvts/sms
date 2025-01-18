@@ -2,12 +2,14 @@
 
 namespace App\Livewire;
 
+use Carbon\Carbon;
 use Livewire\Component;
 use Filament\Pages\Page;
 use Filament\Tables\Table;
 use App\Models\SubsPayment;
 use App\Models\Subscription;
 use Filament\Tables\Actions\Action;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Filament\Forms\Contracts\HasForms;
@@ -17,7 +19,6 @@ use Filament\Notifications\Notification;
 use App\Filament\Sms\Pages\SubscriptionReceipt;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Tables\Concerns\InteractsWithTable;
-use Illuminate\Support\Facades\Log;
 
 class Billing extends Page implements HasForms, HasTable
 {
@@ -49,7 +50,7 @@ class Billing extends Page implements HasForms, HasTable
 
         if ($this->subscription) {
             $this->planName = $this->subscription->plan?->name;
-            $this->nextBillingDate = $this->subscription->next_payment_date;
+            $this->nextBillingDate = Carbon::parse($this->subscription->next_payment_date)->format('d F Y');
             $this->subscriptionCode = $this->subscription->subscription_code;
         }
     }
@@ -68,7 +69,10 @@ class Billing extends Page implements HasForms, HasTable
                     ->sortable(),
                 TextColumn::make('plan.price')
                     ->label('Amount')
-                    ->formatStateUsing(fn($state) => formatNaira($state))
+                    ->formatStateUsing(fn($record) => $record->is_on_trial ? 
+                        formatNaira(0) : 
+                        formatNaira($record->plan->price)
+                    )
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge()
@@ -78,6 +82,7 @@ class Billing extends Page implements HasForms, HasTable
                         'cancelled' => 'warning',
                         default => 'gray',
                     })
+                    ->formatStateUsing(fn($record) => $record->is_on_trial ? 'Trial' : $record->status)
                     ->sortable(),
                 TextColumn::make('starts_at')
                     ->label('Start Date')

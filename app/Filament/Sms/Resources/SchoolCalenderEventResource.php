@@ -95,8 +95,8 @@ class SchoolCalenderEventResource extends Resource
                 Tables\Columns\TextColumn::make('type')
                     ->badge()
                     ->color(fn(string $state): string => match ($state) {
-                        'holiday' => 'danger',
-                        'event' => 'success',
+                        'holiday' => 'success',
+                        'event' => 'info',
                         'break' => 'warning',
                     }),
 

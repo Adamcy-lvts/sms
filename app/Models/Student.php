@@ -8,8 +8,10 @@ use App\Models\Status;
 use App\Models\Payment;
 use App\Models\Admission;
 use App\Models\ClassRoom;
+use Illuminate\Support\Str;
 use App\Models\StudentGrade;
 use App\Models\AcademicSession;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -187,5 +189,49 @@ class Student extends Model
     public function statusChanges()
     {
         return $this->morphMany(StatusChange::class, 'statusable');
+    }
+
+    public function createUser(): User
+    {
+        // Generate a random password
+        $password = Str::random(10);
+
+        // get status from the status table status of type user and active
+        $status = Status::where('type', 'user')->where('name', 'active')->first();
+
+        // Create the user
+        $user = User::create([
+            'first_name' => $this->first_name,
+            'middle_name' => $this->middle_name,
+            'last_name' => $this->last_name,
+            'email' => $this->admission->email ?? $this->admission->guardian_email,
+            'password' => Hash::make($password),
+            'user_type' => 'student',
+            'status_id' => $status->id,
+        ]);
+
+        // Assign the student role
+        // $user->assignRole('student');
+
+        // Associate user with school
+        $user->schools()->attach($this->school_id);
+
+        // TODO: Send email with credentials to student/guardian
+
+        return $user;
+    }
+
+    protected function generateEmail(): string
+    {
+        $baseEmail = Str::slug($this->admission_number) . '@' . $this->school->domain;
+        $email = $baseEmail;
+        $counter = 1;
+
+        while (User::where('email', $email)->exists()) {
+            $email = Str::replaceLast('@', $counter . '@', $baseEmail);
+            $counter++;
+        }
+
+        return $email;
     }
 }

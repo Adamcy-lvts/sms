@@ -92,7 +92,7 @@ class StudentStats extends BaseWidget
 
         if ($termProgress < 25) {
             return Stat::make('Attendance Rate', 'Term Started')
-                ->description('Term recently started - attendance tracking in progress')
+                ->description('Begining of term - attendance tracking in progress')
                 ->color('info');
         }
 
@@ -105,7 +105,7 @@ class StudentStats extends BaseWidget
         // Create a more concise description based on the image example
         // Simplified status description
         $description = match (true) {
-            $isTermCompleted => 'Completed -Term attendance',
+            $isTermCompleted => 'Completed - Term attendance',
             $termProgress >= 90 => 'Term ending soon',
             $termProgress >= 50 => 'Mid-Term in progress',
             $termProgress >= 25 => 'Term in progress',
@@ -153,7 +153,7 @@ class StudentStats extends BaseWidget
 
             // Format the term information for previous report
             $termInfo = "{$previousReport->academicSession->name} - {$previousReport->term->name}";
-            
+
             return $this->formatRankingStat([
                 'rank' => (int) preg_replace('/[^0-9]/', '', $previousReport->position),
                 'total' => (int) $previousReport->class_size,
@@ -178,32 +178,52 @@ class StudentStats extends BaseWidget
             ->chart([0]);
     }
 
+
     protected function formatRankingStat(array $data, string $type): Stat
     {
+        // Calculate percentile ranking
         $percentile = (($data['total'] - $data['rank'] + 1) / $data['total']) * 100;
 
+        // Performance level based on percentile
         $performance = match (true) {
-            $percentile >= 75 => 'Excellent - Top Quarter',
-            $percentile >= 50 => 'Above Average - Top Half',
-            $percentile >= 25 => 'Below Average',
-            default => 'Needs Improvement'
+            $percentile >= 75 => 'Top Quarter',
+            $percentile >= 50 => 'Top Half',
+            $percentile >= 25 => 'Below Avg',
+            default => 'Needs Imp.'
         };
 
-        $color = match(true) {
-            str_contains($type, 'Previous') => 'info',
-            $percentile >= 75 => 'success',
-            $percentile >= 50 => 'warning',
-            default => 'danger'
+        // Color based solely on performance percentile
+        $color = match (true) {
+            $percentile >= 75 => 'success',   // Consistently green for top performers
+            $percentile >= 50 => 'info',      // Blue for above average
+            $percentile >= 25 => 'warning',   // Yellow for below average
+            default => 'danger'               // Red for bottom performers
         };
+
+        // Format the term type to be more concise
+        $termInfo = str_contains($type, 'Previous')
+            ? $this->formatTermInfo($type)
+            : $type;
 
         return Stat::make(
             'Class Ranking',
             $this->getOrdinal($data['rank']) . ' of ' . $data['total']
         )
-            ->description("$type - $performance")
+            ->description("$termInfo - $performance")
             ->descriptionIcon('heroicon-m-academic-cap')
+            ->extraAttributes([
+                'class' => 'overflow-hidden',
+                'style' => '
+                    max-width: 100%;
+                    min-width: 0;
+                    white-space: nowrap;
+                    text-overflow: ellipsis;
+                    font-size: 0.875rem;
+                '
+            ])
             ->color($color);
     }
+
 
     protected function getBestSubjectStat(): Stat
     {
@@ -297,20 +317,80 @@ class StudentStats extends BaseWidget
         );
     }
 
+
     protected function formatSubjectStat(string $label, array $subject, string $term, bool $isPrevious): Stat
     {
+        // Format subject name, handling Arabic if present
         $subjectName = $subject['name_ar']
             ? "{$subject['name']} ({$subject['name_ar']})"
             : $subject['name'];
 
-        $color = $isPrevious 
-            ? 'info' 
-            : $this->getPerformanceColor($subject['total']);
+        // Format term info using shortened format
+        $termInfo = $isPrevious
+            ? $this->formatTermInfo($term)
+            : $term;
+
+        // Create description with concise term info and performance
+        $description = "{$termInfo} - {$subject['total']}% - {$subject['remark']}";
+
+        // Consistent color coding based on performance score
+        $color = match (true) {
+            $subject['total'] >= 70 => 'success',  // Excellent performance
+            $subject['total'] >= 60 => 'info',     // Good performance
+            $subject['total'] >= 50 => 'warning',  // Fair performance
+            default => 'danger'                    // Poor performance
+        };
 
         return Stat::make($label, $subjectName)
-            ->description("$term - {$subject['total']}% - {$subject['remark']}")
+            ->description($description)
             ->descriptionIcon('heroicon-m-academic-cap')
+            ->extraAttributes([
+                'class' => 'overflow-hidden',
+                'style' => '
+                    max-width: 100%;
+                    min-width: 0;
+                    white-space: nowrap;
+                    text-overflow: ellipsis;
+                    font-size: 0.875rem;
+                '
+            ])
             ->color($color);
+    }
+
+    // Helper method to determine text size based on content length
+    protected function getTextSizeClass(string $content): string
+    {
+        $length = mb_strlen($content);
+
+        return match (true) {
+            $length > 30 => 'text-xs', // Very long text
+            $length > 14 => 'text-sm', // Moderately long text
+            default => '' // Default text size for short text
+        };
+    }
+
+    protected function formatTermInfo(string $term): string
+    {
+        // Extract year and term from format like "Previous (2024/2025 - First Term)"
+        if (preg_match('/(\d{4})\/(\d{4})\s*-\s*(.*?)\s*Term/', $term, $matches)) {
+            $startYear = substr($matches[1], -2); // Get last 2 digits of first year
+            $endYear = substr($matches[2], -2);   // Get last 2 digits of second year
+            $termName = $this->shortenTermName($matches[3]);  // Convert "First" to "1st"
+
+            return "{$startYear}/{$endYear} {$termName} Term"; // More explicit with "Term"
+        }
+
+        return $term; // Return original if no match
+    }
+
+    protected function shortenTermName(string $term): string
+    {
+        return match (strtolower($term)) {
+            'first' => '1st',
+            'second' => '2nd',
+            'third' => '3rd',
+            default => $term
+        };
     }
 
     protected function getPerformanceColor(float $score): string

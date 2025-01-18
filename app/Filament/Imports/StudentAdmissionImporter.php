@@ -2,6 +2,7 @@
 
 namespace App\Filament\Imports;
 
+use Carbon\Carbon;
 use App\Models\Lga;
 use App\Models\State;
 use App\Models\Status;
@@ -84,7 +85,7 @@ class StudentAdmissionImporter extends Importer
                 'first_name' => $this->data['first_name'],
                 'last_name' => $this->data['last_name'],
                 'middle_name' => $this->data['middle_name'] ?? null,
-                'date_of_birth' => $this->data['date_of_birth'],
+                'date_of_birth' =>  $this->data['date_of_birth'],
                 'gender' => $this->data['gender'] ?? 'Not Specified',
                 'phone_number' => $this->data['phone_number'] ?? null,
                 'email' => $this->data['email'] ?? null,
@@ -180,8 +181,7 @@ class StudentAdmissionImporter extends Importer
 
             ImportColumn::make('date_of_birth')
                 ->requiredMapping()
-                ->rules(['required', 'date'])
-                ->guess(['dob', 'birth_date', 'birthdate']),
+                ->rules(['required', 'date']),
 
             ImportColumn::make('phone_number')
                 ->rules(['nullable', 'string'])
@@ -194,21 +194,20 @@ class StudentAdmissionImporter extends Importer
                 ->guess(['class', 'classroom', 'class_name']),
 
             // Status
-            ImportColumn::make('status')
-                ->label('Status')
-                ->relationship(
-                    resolveUsing: function (string $state): ?Status {
-                        return Status::query()
-                            ->where('type', 'student')
-                            ->where(function ($query) use ($state) {
-                                $query->where('name', $state)
-                                    ->orWhere('id', $state);
-                            })
-                            ->first();
-                    }
-                )
-                ->requiredMapping()
-                ->rules(['required']),
+            // ImportColumn::make('status')
+            //     ->label('Status')
+            //     ->relationship(
+            //         resolveUsing: function (string $state): ?Status {
+            //             return Status::query()
+            //                 ->where('type', 'student')
+            //                 ->where(function ($query) use ($state) {
+            //                     $query->where('name', $state)
+            //                         ->orWhere('id', $state);
+            //                 })
+            //                 ->first();
+            //         }
+            //     )
+            //     ->requiredMapping(),
 
             // Admission-specific Information
             ImportColumn::make('email')
@@ -330,7 +329,7 @@ class StudentAdmissionImporter extends Importer
                 $this->sendWarningNotification(
                     "Duplicate Student",
                     "Student already exists with name: {$this->data['first_name']} {$this->data['last_name']}, " .
-                    "DOB: {$this->data['date_of_birth']}"
+                        "DOB: {$this->data['date_of_birth']}"
                 );
                 throw new RowImportFailedException($message);
             }
@@ -396,8 +395,12 @@ class StudentAdmissionImporter extends Importer
                 'classroom_name' => $classroom->name
             ]);
 
+            $status = Status::where('type', 'student')
+                ->where('name', 'active')
+                ->first();
+
             // Use transaction to ensure both admission and student are created or neither
-            $student = DB::transaction(function () use ($classroom) {
+            $student = DB::transaction(function () use ($classroom, $status) {
                 // Create admission first
                 Log::info('Creating admission record...');
                 $admission = $this->createAdmission();
@@ -409,7 +412,7 @@ class StudentAdmissionImporter extends Importer
                     'admission_id' => $admission->id,
                     'admission_number' => $admission->admission_number,
                     'class_room_id' => $classroom->id,
-                    'status_id' => $this->data['status'],
+                    'status_id' => $status->id,
                     'first_name' => $this->data['first_name'],
                     'last_name' => $this->data['last_name'],
                     'middle_name' => $this->data['middle_name'] ?? null,
@@ -536,7 +539,7 @@ class StudentAdmissionImporter extends Importer
         return 'Import completed successfully!';
     }
 
-    public static function getFailedNotificationBody(Import $import): string 
+    public static function getFailedNotificationBody(Import $import): string
     {
         return 'Some records failed to import. Please check the error report.';
     }
@@ -553,20 +556,20 @@ class StudentAdmissionImporter extends Importer
             ],
             'progress' => [
                 'title' => 'Import in progress...',
-                'body' => fn(Import $import) => 
-                    "Processed {$import->processed_rows} of {$import->total_rows} rows.",
+                'body' => fn(Import $import) =>
+                "Processed {$import->processed_rows} of {$import->total_rows} rows.",
             ],
             'completed' => [
                 'title' => 'Import completed',
-                'body' => fn(Import $import) => 
-                    "Successfully imported {$import->successful_rows} students." . 
+                'body' => fn(Import $import) =>
+                "Successfully imported {$import->successful_rows} students." .
                     ($import->failed_rows ? " {$import->failed_rows} rows failed." : ''),
                 'duration' => 10000,
             ],
             'failed' => [
                 'title' => 'Import failed',
-                'body' => fn(Import $import) => 
-                    "Import failed with {$import->failed_rows} errors. " .
+                'body' => fn(Import $import) =>
+                "Import failed with {$import->failed_rows} errors. " .
                     "Please check the error report for details.",
                 'duration' => 15000,
             ],
@@ -584,7 +587,7 @@ class StudentAdmissionImporter extends Importer
                 'error' => 'Error Message',
                 'student' => 'Student Name',
             ],
-            'rows' => $import->failures->map(fn ($failure) => [
+            'rows' => $import->failures->map(fn($failure) => [
                 'row' => $failure->row_number,
                 'error' => $failure->message,
                 'student' => $failure->values['first_name'] ?? '' . ' ' . $failure->values['last_name'] ?? '',

@@ -29,8 +29,8 @@ return new class extends Migration
             $table->timestamp('graded_at')->nullable();
             $table->timestamps();
 
-            // Prevent duplicate grades for same student and assessment
-            $table->unique(['student_id', 'subject_id', 'assessment_type_id', 'academic_session_id', 'term_id'], 'unique_student_grade');
+            // Prevent duplicate grades for same student and assessment in same school
+            $table->unique(['student_id', 'subject_id', 'assessment_type_id', 'academic_session_id', 'term_id', 'school_id'], 'unique_student_grade');
         });
     }
 

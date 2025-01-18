@@ -30,7 +30,7 @@ class AcademicSessionResource extends Resource
                 Forms\Components\TextInput::make('name')
                     ->required()
                     ->maxLength(255),
-           
+
                 Forms\Components\DatePicker::make('start_date')
                     ->native(false)
                     ->required()
@@ -52,12 +52,15 @@ class AcademicSessionResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->searchable(),
-                Tables\Columns\IconColumn::make('is_current')
-                    ->boolean()
-                    ->trueIcon('heroicon-o-check-circle')
-                    ->falseIcon('heroicon-o-x-circle')
-                    ->label('Current')
-                    ->sortable(),
+                // Tables\Columns\IconColumn::make('is_current')
+                //     ->boolean()
+                //     ->trueIcon('heroicon-o-check-circle')
+                //     ->falseIcon('heroicon-o-x-circle')
+                //     ->label('Current')
+                //     ->sortable(),
+                // Add a toggle button to make term current or not
+                Tables\Columns\ToggleColumn::make('is_current')
+                    ->label('Current'),
                 Tables\Columns\TextColumn::make('start_date')
                     ->date()
                     ->sortable(),

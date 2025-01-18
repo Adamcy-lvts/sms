@@ -426,15 +426,15 @@ class StudentsRelationManager extends RelationManager
                                 $newStatus = Status::find($data['status_id'])->name;
                                 $record->update([
                                     'class_room_id' => $data['class_room_id'],
-                                    'status_id' => Status::where('name', 'Promoted')->first()?->id,
                                 ]);
 
                                 StudentMovement::create([
+                                    'school_id' => Filament::getTenant()->id,
                                     'student_id' => $record->id,
                                     'from_class_id' => $oldClassId,
                                     'to_class_id' => $data['class_room_id'],
                                     'from_session_id' => $currentSession->id,
-                                    'to_session_id' => $nextSession->id,
+                                    'to_session_id' => $nextSession->id ?? $currentSession->id,
                                     'movement_type' => 'promotion',
                                     'movement_date' => now(),
                                     'reason' => $data['note'] ?? 'Individual promotion to new class',
@@ -477,7 +477,7 @@ class StudentsRelationManager extends RelationManager
                                 $statusService->changeStatus(
                                     student: $record,
                                     newStatusId: $data['status_id'],
-                                    reason: $data['reason']
+                                    reason: $data['reason'] ?? 'No reason provided'
                                 );
 
                                 Notification::make()
@@ -553,10 +553,29 @@ class StudentsRelationManager extends RelationManager
                         ])
                         ->requiresConfirmation()
                         ->action(function (Collection $records, array $data): void {
+                            $currentSession = config('app.current_session');
+                            $nextSession = AcademicSession::where('start_date', '>', $currentSession->end_date)
+                                ->orderBy('start_date')
+                                ->first();
+                         
                             foreach ($records as $record) {
+                                $oldClassId = $records->first()->class_room_id;
                                 $record->update([
                                     'class_room_id' => $data['class_room_id'],
-                                    'status_id' => Status::where('name', 'Promoted')->first()?->id,
+                                ]);
+
+                                StudentMovement::create([
+                                    'school_id' => Filament::getTenant()->id,
+                                    'student_id' => $record->id,
+                                    'from_class_id' => $oldClassId,
+                                    'to_class_id' => $data['class_room_id'],
+                                    'from_session_id' => $currentSession->id,
+                                    'to_session_id' => $nextSession->id ?? $currentSession->id,
+                                    'movement_type' => 'promotion',
+                                    'movement_date' => now(),
+                                    'reason' => 'Bulk promotion to new class',
+                                    'status' => 'completed',  // Add this
+                                    'processed_by' => auth()->id() // Add this
                                 ]);
                             }
 
@@ -593,7 +612,7 @@ class StudentsRelationManager extends RelationManager
                                     $statusService->changeStatus(
                                         student: $record,
                                         newStatusId: $data['status_id'],
-                                        reason: $data['reason']
+                                        reason: $data['reason'] ?? 'No reason provided'
                                     );
                                 });
 

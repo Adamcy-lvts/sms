@@ -353,22 +353,31 @@ class ViewAdmission extends ViewRecord
                                     'admission_number' => $this->record->admission_number,
                                     'created_by' => Auth::id(),
                                 ]);
+
+                                // admission class room
+                                $this->record->update(['class_room_id' => $data['class_room_id']]);
+
+                                Notification::make()
+                                    ->success()
+                                    ->title('Admission Approved & Student Enrolled')
+                                    ->body("Successfully processed admission for {$this->record->full_name}")
+                                    ->persistent()
+                                    ->actions([
+                                        \Filament\Notifications\Actions\Action::make('view')
+                                            ->button()
+                                            ->url(fn() => StudentResource::getUrl('view', [
+                                                'tenant' => Filament::getTenant()->slug,
+                                                'record' => $student->id,
+                                            ]))
+                                    ])
+                                    ->send();
                             }
 
                             DB::commit();
                             Notification::make()
                                 ->success()
-                                ->title('Admission Approved & Student Enrolled')
+                                ->title('Admission Approved & Acceptance Letter Sent')
                                 ->body("Successfully processed admission for {$this->record->full_name}")
-                                ->persistent()
-                                ->actions([
-                                    \Filament\Notifications\Actions\Action::make('view')
-                                        ->button()
-                                        ->url(fn() => StudentResource::getUrl('view', [
-                                            'tenant' => Filament::getTenant()->slug,
-                                            'record' => $student->id,
-                                        ]))
-                                ])
                                 ->send();
                         } catch (\Exception $e) {
                             DB::rollBack();
@@ -439,6 +448,49 @@ class ViewAdmission extends ViewRecord
                             'admission_number' => $this->record->admission_number,
                             'created_by' => Auth::id(),
                         ]);
+
+                        if ($data['create_user']) {
+                            // Create user account
+                            $user = $student->createUser();
+                            $student->update(['user_id' => $user->id]);
+                        }
+
+                        //Update admission class room
+                        $this->record->update(['class_room_id' => $data['class_room_id']]);
+
+                        //diff notification message if user is created 
+                        if ($data['create_user']) {
+                            Notification::make()
+                                ->success()
+                                ->title('Admission Approved & Student Enrolled')
+                                ->body("Successfully processed admission for {$this->record->full_name} and created user account")
+                                ->persistent()
+                                ->actions([
+                                    \Filament\Notifications\Actions\Action::make('view')
+                                        ->button()
+                                        ->url(fn() => StudentResource::getUrl('view', [
+                                            'tenant' => Filament::getTenant()->slug,
+                                            'record' => $student->id,
+                                        ]))
+                                ])
+                                ->send();
+                        } else {
+                            Notification::make()
+                                ->success()
+                                ->title('Admission Approved & Student Enrolled')
+                                ->body("Successfully processed admission for {$this->record->full_name}")
+                                ->persistent()
+                                ->actions([
+                                    \Filament\Notifications\Actions\Action::make('view')
+                                        ->button()
+                                        ->url(fn() => StudentResource::getUrl('view', [
+                                            'tenant' => Filament::getTenant()->slug,
+                                            'record' => $student->id,
+                                        ]))
+                                ])
+                                ->send();
+                        }
+
                     })
                     ->visible(fn() => $this->record->status->name === 'approved' && !$this->record->student()->exists()),
 

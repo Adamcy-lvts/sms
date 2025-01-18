@@ -57,6 +57,26 @@ services:
     networks:
       - smsnet 
 
+  reverb:
+    build:
+      context: .
+      dockerfile: Dockerfile.reverb  # New Dockerfile for Reverb
+    container_name: sms_reverb
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/var/www
+    environment:
+      - APP_ID=${REVERB_APP_ID}
+      - APP_KEY=${REVERB_APP_KEY}
+      - APP_SECRET=${REVERB_APP_SECRET}
+      - REVERB_HOST=0.0.0.0
+      - REVERB_PORT=8080
+    networks:
+      - smsnet
+    depends_on:
+      - app
+
 networks:
   smsnet:
 

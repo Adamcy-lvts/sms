@@ -13,7 +13,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('school_id')->constrained()->onDelete('cascade');
             $table->string('name');
-            $table->string('slug')->unique();
+            $table->string('slug');
             $table->string('description')->nullable();
             $table->json('header_config')->nullable(); // School name, logo, address format
             $table->json('student_info_config')->nullable(); // Which student fields to display
@@ -29,6 +29,7 @@ return new class extends Migration
 
             // Ensure unique template names per school
             $table->unique(['school_id', 'name']);
+            $table->unique(['school_id', 'slug']);
         });
 
         // Sections for organizing template content

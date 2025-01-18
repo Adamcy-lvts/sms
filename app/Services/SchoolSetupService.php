@@ -2,29 +2,37 @@
 
 namespace App\Services;
 
+use App\Models\Plan;
 use App\Models\Term;
+use App\Models\Staff;
 use App\Models\School;
+use App\Models\Status;
 use App\Models\Subject;
 use App\Models\Template;
 use App\Models\ClassRoom;
 use App\Models\Designation;
 use App\Models\PaymentType;
 use Illuminate\Support\Str;
+use App\Models\ActivityType;
 use App\Models\GradingScale;
 use App\Models\PaymentMethod;
 use App\Models\AssessmentType;
 use App\Models\SchoolSettings;
 use App\Models\AcademicSession;
+use App\Models\BehavioralTrait;
 use App\Models\TemplateVariable;
 use Illuminate\Support\Facades\DB;
 use App\Models\SchoolCalendarEvent;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Contracts\Auth\Authenticatable;
+use App\Notifications\TrialExpirationNotification;
 
 class SchoolSetupService
 {
-    public function setup(School $school, array $data): void
+    public function setup(School $school, array $data, Authenticatable $user): void
     {
         try {
+
             // Create academic session and terms
             $this->setupAcademicPeriod($school);
 
@@ -34,8 +42,20 @@ class SchoolSetupService
             // Create grading scales
             $this->createGradingScales($school);
 
+            // Create assessment types
+            $this->createAssessmentTypes($school);
+
+            // Create activity types
+            $this->createActivityTypes($school);
+
+            // Create behavioral traits (add this line)
+            $this->createBehavioralTraits($school);
+
             // Create designations  
             $this->createDesignations($school);
+
+            // Create staff
+            $this->createStaff($data, $school, $user);
 
             // Set up payment methods
             $this->setupPaymentMethods($school);
@@ -43,7 +63,7 @@ class SchoolSetupService
             // Set up report templates
             $this->setupReportTemplates($school);
 
-            // Create default templates and variables
+            // Create default admission letter templates and variables
             $this->createDefaultAdmissionTemplate($school);
 
             // Create subjects based on toggles
@@ -62,9 +82,86 @@ class SchoolSetupService
                     $data['class_capacity'] ?? 40
                 );
             }
+
+            // Set up trial subscription only if plan_id is provided
+            if (!empty($data['plan_id'])) {
+                $plan = Plan::find($data['plan_id']);
+                if ($plan) {
+                    $this->setupTrialSubscription($school, $plan, $data['billing_type'] ?? 'monthly');
+                }
+            }
         } catch (\Exception $e) {
             Log::error('School setup error: ' . $e->getMessage());
             throw $e;
+        }
+    }
+
+    protected function setupTrialSubscription(School $school, Plan $plan, string $billingType): void
+    {
+        if (!$plan) {
+            return;
+        }
+
+        // Create subscription with billing type consideration
+        if ($plan->offersTrial()) {
+            $subscription = $school->subscriptions()->create([
+                'plan_id' => $plan->id,
+                'status' => 'active',
+                'starts_at' => now(),
+                'ends_at' => now()->addDays($plan->trial_period),
+                'is_on_trial' => true,
+                'trial_ends_at' => now()->addDays($plan->trial_period),
+                'billing_cycle' => $billingType,
+                'next_payment_date' => now()->addDays($plan->trial_period),
+                'is_recurring' => true,
+            ]);
+        }
+    }
+
+    protected function createAssessmentTypes(School $school): void
+    {
+        // Define default assessment types configuration
+        $assessmentTypes = [
+            [
+                'name' => 'First CA',
+                'code' => 'CA1',
+                'max_score' => 10,
+                'weight' => 10,
+                'description' => 'First Continuous Assessment',
+                'is_active' => true
+            ],
+            [
+                'name' => 'Second CA',
+                'code' => 'CA2',
+                'max_score' => 10,
+                'weight' => 10,
+                'description' => 'Second Continuous Assessment',
+                'is_active' => true
+            ],
+            [
+                'name' => 'Third CA',
+                'code' => 'CA3',
+                'max_score' => 10,
+                'weight' => 10,
+                'description' => 'Third Continuous Assessment',
+                'is_active' => true
+            ],
+            [
+                'name' => 'Examination',
+                'code' => 'EXAM',
+                'max_score' => 70,
+                'weight' => 70,
+                'description' => 'End of Term Examination',
+                'is_active' => true
+            ]
+        ];
+
+        // Add assessment types
+        foreach ($assessmentTypes as $type) {
+            AssessmentType::create([
+                'school_id' => $school->id,
+                ...$type
+            ]);
         }
     }
 
@@ -445,6 +542,7 @@ class SchoolSetupService
     protected function createDesignations(School $school): void
     {
         $designations = [
+            ['name' => 'Administrator', 'description' => 'The school administrator'],
             ['name' => 'Principal', 'description' => 'The head of the school'],
             ['name' => 'Vice Principal', 'description' => 'The deputy head of the school'],
             ['name' => 'Head Teacher', 'description' => 'The head of the primary section'],
@@ -515,7 +613,7 @@ class SchoolSetupService
     {
         // Create default variables first
         $this->createDefaultTemplateVariables($school);
-        
+
         // Then create the template
         Template::create([
             'name' => 'Standard Admission Letter',
@@ -533,7 +631,7 @@ class SchoolSetupService
     {
         $defaultVariables = [
             [
-                'name' => 'full_name',
+                'name' => 'admission_full_name',
                 'display_name' => 'Full Name',
                 'description' => 'Student full name',
                 'category' => 'admission',
@@ -573,7 +671,7 @@ class SchoolSetupService
                 'is_active' => true,
             ],
             [
-                'name' => 'principal_name',
+                'name' => 'staff_principal_name',
                 'display_name' => 'Principal Name',
                 'description' => 'School principal name',
                 'category' => 'admission',
@@ -620,7 +718,7 @@ class SchoolSetupService
                         ],
                         [
                             "type" => "mergeTag",
-                            "attrs" => ["id" => "full_name"],
+                            "attrs" => ["id" => "admission_full_name"],
                             "marks" => [
                                 ["type" => "bold"],
                                 ["type" => "small"]
@@ -728,5 +826,163 @@ class SchoolSetupService
                 ]
             ]
         ];
+    }
+
+    public function createStaff(array $data, School $school, Authenticatable $user): Staff
+    {
+        // Get admin designation
+        $designation = Designation::where('school_id', $school->id)->where('name', 'Administrator')->first();
+
+        // Get active status for staff
+        $activeStatus = Status::where('type', 'staff')->where('name', 'active')->first();
+
+        return Staff::create([
+            'school_id' => $school->id,
+            'user_id' => $user->id,
+            'designation_id' => $designation->id,
+            'status_id' => $activeStatus->id,
+            'first_name' => $data['first_name'],
+            'last_name' => $data['last_name'],
+            'email' => $data['admin_email'],
+            'hire_date' => now(),
+        ]);
+    }
+
+    protected function createActivityTypes(School $school): void
+    {
+        // Define default activity codes for quick lookup
+        $defaultActivityCodes = ['FB', 'BB', 'DR', 'SC', 'DB', 'CHS', 'STD', 'CS'];
+
+        // Define all activities in a more compact format
+        $activities = [
+            'Sports & Athletics' => [
+                ['name' => 'Football', 'code' => 'FB', 'description' => 'Football/Soccer participation and performance', 'icon' => 'futbol', 'color' => '#15803d'],
+                ['name' => 'Basketball', 'code' => 'BB', 'description' => 'Basketball team participation', 'icon' => 'basketball', 'color' => '#b91c1c'],
+                ['name' => 'Track & Field', 'code' => 'TF', 'description' => 'Athletics and track events', 'icon' => 'running', 'color' => '#0369a1'],
+                ['name' => 'Swimming', 'code' => 'SW', 'description' => 'Swimming and water sports', 'icon' => 'person-swimming', 'color' => '#0891b2'],
+                ['name' => 'Volleyball', 'code' => 'VB', 'description' => 'Volleyball team participation', 'icon' => 'volleyball', 'color' => '#ea580c'],
+                ['name' => 'Table Tennis', 'code' => 'TT', 'description' => 'Table tennis participation', 'icon' => 'table-tennis-paddle-ball', 'color' => '#4f46e5'],
+                ['name' => 'Badminton', 'code' => 'BM', 'description' => 'Badminton team activities', 'icon' => 'shuttlecock', 'color' => '#7c3aed'],
+                ['name' => 'Cricket', 'code' => 'CK', 'description' => 'Cricket team participation', 'icon' => 'baseball-bat-ball', 'color' => '#2563eb'],
+                ['name' => 'Hockey', 'code' => 'HK', 'description' => 'Hockey team participation', 'icon' => 'hockey-puck', 'color' => '#dc2626']
+            ],
+            'Arts & Culture' => [
+                ['name' => 'Drama Club', 'code' => 'DR', 'description' => 'Theater and dramatic performances', 'icon' => 'masks-theater', 'color' => '#7c2d12'],
+                ['name' => 'Art Club', 'code' => 'ART', 'description' => 'Visual arts and creative activities', 'icon' => 'palette', 'color' => '#be185d'],
+                ['name' => 'Music Band', 'code' => 'MB', 'description' => 'School band participation', 'icon' => 'music', 'color' => '#6d28d9'],
+                ['name' => 'Dance Club', 'code' => 'DC', 'description' => 'Dance and choreography', 'icon' => 'person-dancing', 'color' => '#db2777'],
+                ['name' => 'Photography Club', 'code' => 'PH', 'description' => 'Photography and visual storytelling', 'icon' => 'camera', 'color' => '#0d9488'],
+                ['name' => 'Creative Writing', 'code' => 'CW', 'description' => 'Creative writing and literature', 'icon' => 'pen-fancy', 'color' => '#0369a1'],
+                ['name' => 'Cultural Dance', 'code' => 'CD', 'description' => 'Traditional and cultural dance', 'icon' => 'person-dancing', 'color' => '#ca8a04'],
+                ['name' => 'Film Making', 'code' => 'FM', 'description' => 'Video production and editing', 'icon' => 'film', 'color' => '#be123c']
+            ],
+            'Academic Clubs' => [
+                ['name' => 'Science Club', 'code' => 'SC', 'description' => 'Science experiments and research', 'icon' => 'flask', 'color' => '#059669'],
+                ['name' => 'Mathematics Club', 'code' => 'MC', 'description' => 'Advanced mathematics and problem solving', 'icon' => 'calculator', 'color' => '#0891b2'],
+                ['name' => 'Debate Club', 'code' => 'DB', 'description' => 'Debating and public speaking', 'icon' => 'comments', 'color' => '#4338ca'],
+                ['name' => 'Robotics Club', 'code' => 'RC', 'description' => 'Robotics and programming', 'icon' => 'robot', 'color' => '#7c3aed'],
+                ['name' => 'Computer Club', 'code' => 'CC', 'description' => 'Computer programming and technology', 'icon' => 'computer', 'color' => '#0284c7'],
+                ['name' => 'Book Club', 'code' => 'BC', 'description' => 'Reading and literature discussion', 'icon' => 'book-open', 'color' => '#9333ea'],
+                ['name' => 'Language Club', 'code' => 'LC', 'description' => 'Foreign language learning', 'icon' => 'language', 'color' => '#2563eb'],
+                ['name' => 'Chess Club', 'code' => 'CHS', 'description' => 'Chess strategy and tournaments', 'icon' => 'chess', 'color' => '#4b5563'],
+                ['name' => 'Electronics Club', 'code' => 'EC', 'description' => 'Electronics and circuitry', 'icon' => 'microchip', 'color' => '#b91c1c']
+            ],
+            'Leadership & Service' => [
+                ['name' => 'Student Council', 'code' => 'SC', 'description' => 'Student leadership and governance', 'icon' => 'users', 'color' => '#1d4ed8'],
+                ['name' => 'Community Service', 'code' => 'CS', 'description' => 'Community outreach activities', 'icon' => 'handshake', 'color' => '#166534'],
+                ['name' => 'Environmental Club', 'code' => 'EC', 'description' => 'Environmental conservation', 'icon' => 'leaf', 'color' => '#15803d'],
+                ['name' => 'Peer Mentoring', 'code' => 'PM', 'description' => 'Peer support and mentoring', 'icon' => 'user-group', 'color' => '#0f766e'],
+                ['name' => 'Red Cross Society', 'code' => 'RCS', 'description' => 'First aid and humanitarian services', 'icon' => 'kit-medical', 'color' => '#dc2626'],
+                ['name' => 'School Newsletter', 'code' => 'NL', 'description' => 'School publication and journalism', 'icon' => 'newspaper', 'color' => '#0369a1'],
+                ['name' => 'Career Club', 'code' => 'CC', 'description' => 'Career guidance and development', 'icon' => 'briefcase', 'color' => '#6d28d9'],
+                ['name' => 'Library Assistants', 'code' => 'LA', 'description' => 'Library management and assistance', 'icon' => 'book', 'color' => '#a21caf']
+            ]
+        ];
+
+        // Create activities in order
+        $order = 0;
+        foreach ($activities as $category => $categoryActivities) {
+            foreach ($categoryActivities as $activity) {
+                ActivityType::create([
+                    'school_id' => $school->id,
+                    'name' => $activity['name'],
+                    'code' => $activity['code'],
+                    'description' => $activity['description'],
+                    'category' => $category,
+                    'icon' => $activity['icon'],
+                    'color' => $activity['color'],
+                    'display_order' => $order++,
+                    'is_default' => in_array($activity['code'], $defaultActivityCodes)
+                ]);
+            }
+        }
+    }
+
+    protected function createBehavioralTraits(School $school): void
+    {
+        // Define default behavioral trait codes for important traits
+        $defaultTraitCodes = ['ATT', 'CP', 'PUNC', 'NEAT', 'SC', 'RESP', 'COMM', 'TW', 'EFF', 'INT'];
+
+        // Define all behavioral traits with categories
+        $traits = [
+            'Learning Skills' => [
+                ['name' => 'Attentiveness', 'code' => 'ATT', 'description' => 'Ability to focus and pay attention in class', 'weight' => 1.0],
+                ['name' => 'Class Participation', 'code' => 'CP', 'description' => 'Level of active participation in class', 'weight' => 1.0],
+                ['name' => 'Homework Completion', 'code' => 'HW', 'description' => 'Consistency in completing homework', 'weight' => 1.0],
+                ['name' => 'Organization', 'code' => 'ORG', 'description' => 'Ability to organize work and materials', 'weight' => 1.0],
+                ['name' => 'Study Skills', 'code' => 'SS', 'description' => 'Effective study habits and techniques', 'weight' => 1.0],
+                ['name' => 'Critical Thinking', 'code' => 'CT', 'description' => 'Ability to analyze and solve problems', 'weight' => 1.0],
+                ['name' => 'Research Skills', 'code' => 'RS', 'description' => 'Ability to gather and analyze information', 'weight' => 1.0],
+                ['name' => 'Note Taking', 'code' => 'NT', 'description' => 'Ability to take and organize notes effectively', 'weight' => 1.0]
+            ],
+            'Social Skills' => [
+                ['name' => 'Cooperation', 'code' => 'COOP', 'description' => 'Works well with others', 'weight' => 1.0],
+                ['name' => 'Respect', 'code' => 'RESP', 'description' => 'Shows respect for teachers and peers', 'weight' => 1.0],
+                ['name' => 'Communication', 'code' => 'COMM', 'description' => 'Communicates effectively', 'weight' => 1.0],
+                ['name' => 'Team Work', 'code' => 'TW', 'description' => 'Works effectively in groups', 'weight' => 1.0],
+                ['name' => 'Leadership', 'code' => 'LEAD', 'description' => 'Shows leadership qualities', 'weight' => 1.0],
+                ['name' => 'Conflict Resolution', 'code' => 'CR', 'description' => 'Handles conflicts appropriately', 'weight' => 1.0],
+                ['name' => 'Empathy', 'code' => 'EMP', 'description' => 'Shows understanding and care for others', 'weight' => 1.0],
+                ['name' => 'Cultural Awareness', 'code' => 'CA', 'description' => 'Respects cultural differences', 'weight' => 1.0]
+            ],
+            'Personal Development' => [
+                ['name' => 'Punctuality', 'code' => 'PUNC', 'description' => 'Arrives to class on time', 'weight' => 1.0],
+                ['name' => 'Neatness', 'code' => 'NEAT', 'description' => 'Maintains neat appearance and work', 'weight' => 1.0],
+                ['name' => 'Self-Control', 'code' => 'SC', 'description' => 'Shows appropriate self-control', 'weight' => 1.0],
+                ['name' => 'Initiative', 'code' => 'INIT', 'description' => 'Shows initiative in learning', 'weight' => 1.0],
+                ['name' => 'Self-Confidence', 'code' => 'CONF', 'description' => 'Displays self-confidence', 'weight' => 1.0],
+                ['name' => 'Resilience', 'code' => 'RES', 'description' => 'Bounces back from setbacks', 'weight' => 1.0],
+                ['name' => 'Goal Setting', 'code' => 'GS', 'description' => 'Sets and works towards goals', 'weight' => 1.0],
+                ['name' => 'Personal Hygiene', 'code' => 'PH', 'description' => 'Maintains good personal hygiene', 'weight' => 1.0],
+                ['name' => 'Integrity', 'code' => 'INT', 'description' => 'Demonstrates honesty and ethical behavior', 'weight' => 1.0]
+            ],
+            'Work Habits' => [
+                ['name' => 'Time Management', 'code' => 'TM', 'description' => 'Uses time effectively', 'weight' => 1.0],
+                ['name' => 'Task Completion', 'code' => 'TC', 'description' => 'Completes tasks on time', 'weight' => 1.0],
+                ['name' => 'Effort', 'code' => 'EFF', 'description' => 'Shows consistent effort', 'weight' => 1.0],
+                ['name' => 'Independence', 'code' => 'IND', 'description' => 'Works independently', 'weight' => 1.0],
+                ['name' => 'Following Instructions', 'code' => 'FI', 'description' => 'Follows directions accurately', 'weight' => 1.0],
+                ['name' => 'Materials Management', 'code' => 'MM', 'description' => 'Manages learning materials well', 'weight' => 1.0],
+                ['name' => 'Perseverance', 'code' => 'PER', 'description' => 'Persists in challenging tasks', 'weight' => 1.0],
+                ['name' => 'Work Quality', 'code' => 'WQ', 'description' => 'Maintains high quality of work', 'weight' => 1.0]
+            ]
+        ];
+
+        // Create traits with proper ordering
+        $order = 0;
+        foreach ($traits as $category => $categoryTraits) {
+            foreach ($categoryTraits as $trait) {
+                BehavioralTrait::create([
+                    'school_id' => $school->id,
+                    'name' => $trait['name'],
+                    'code' => $trait['code'],
+                    'description' => $trait['description'],
+                    'category' => $category,
+                    'weight' => $trait['weight'],
+                    'display_order' => $order++,
+                    'is_default' => in_array($trait['code'], $defaultTraitCodes)
+                ]);
+            }
+        }
     }
 }

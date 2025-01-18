@@ -71,6 +71,12 @@ class Plan extends Model
         'yearly_discount' => 0
     ];
 
+      // Helper method to check if plan offers trial
+      public function offersTrial(): bool 
+      {
+          return $this->has_trial && $this->trial_period > 0;
+      }
+
     /**
      * Get the display price (discounted if available)
      */

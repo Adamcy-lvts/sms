@@ -11,6 +11,7 @@ return new class extends Migration
         Schema::create('status_changes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
             $table->morphs('statusable'); // This allows the table to track status changes for any model
             $table->foreignId('from_status_id')->nullable()->constrained('statuses');
             $table->foreignId('to_status_id')->constrained('statuses');

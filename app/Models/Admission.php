@@ -53,6 +53,8 @@ class Admission extends Model
         'passport_photograph',
     ];
 
+  
+
     protected $casts = [
         'date_of_birth' => 'date',
         'application_date' => 'date',

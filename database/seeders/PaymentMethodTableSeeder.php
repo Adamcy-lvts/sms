@@ -15,6 +15,7 @@ class PaymentMethodTableSeeder extends Seeder
 
         $paymentMethods = [
             [
+               
                 'name' => 'Bank Transfer',
                 'slug' => 'bank-transfer',
                 'description' => 'Payment made through bank transfer',
@@ -22,6 +23,7 @@ class PaymentMethodTableSeeder extends Seeder
                 'active' => true
             ],
             [
+               
                 'name' => 'POS',
                 'slug' => 'pos',
                 'description' => 'Payment made through POS',
@@ -29,6 +31,7 @@ class PaymentMethodTableSeeder extends Seeder
                 'active' => true
             ],
             [
+               
                 'name' => 'Cash',
                 'slug' => 'cash',
                 'description' => 'Payment made with cash',
@@ -36,6 +39,7 @@ class PaymentMethodTableSeeder extends Seeder
                 'active' => true
             ],
             [
+               
                 'name' => 'Cheque',
                 'slug' => 'cheque',
                 'description' => 'Payment made with cheque',
@@ -47,8 +51,13 @@ class PaymentMethodTableSeeder extends Seeder
         if (\App\Models\PaymentMethod::count() > 0) {
             return;
         }
-        foreach ($paymentMethods as $paymentMethod) {
-            \App\Models\PaymentMethod::create($paymentMethod);
+        // All schools
+        $schools = \App\Models\School::all();
+        foreach ($schools as $school) {
+            foreach ($paymentMethods as $paymentMethod) {
+                $paymentMethod['school_id'] = $school->id;
+                \App\Models\PaymentMethod::create($paymentMethod);
+            }
         }
     }
 }

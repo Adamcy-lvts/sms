@@ -27,6 +27,9 @@ class StudentAssessmentSeeder extends Seeder
     public function run(): void
     {
         try {
+            // Disable model events temporarily
+            \Illuminate\Database\Eloquent\Model::unsetEventDispatcher();
+            
             DB::beginTransaction();
 
             $school = School::where('slug', 'khalil-integrated-academy')->firstOrFail();
@@ -112,6 +115,10 @@ class StudentAssessmentSeeder extends Seeder
             }
 
             DB::commit();
+            
+            // Re-enable model events
+            \Illuminate\Database\Eloquent\Model::setEventDispatcher(app('events'));
+            
             Log::info('Successfully seeded student grades');
         } catch (\Exception $e) {
             DB::rollBack();

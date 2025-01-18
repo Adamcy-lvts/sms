@@ -9,6 +9,8 @@ use App\Models\Staff;
 use App\Models\Status;
 use App\Models\Subject;
 use App\Models\Teacher;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
 use App\Helpers\Options;
 use Filament\Forms\Form;
 use App\Models\ClassRoom;
@@ -424,21 +426,16 @@ class StaffResource extends Resource
                 Tables\Columns\TextColumn::make('user.status.name')
                     ->label('Account Status')
                     ->badge()
-                    ->color(fn ($record) => match ($record?->user?->status?->name) {
+                    ->color(fn($record) => match ($record?->user?->status?->name) {
                         'active' => 'success',
                         'inactive' => 'danger',
                         'suspended' => 'warning',
                         'blocked' => 'danger',
                         default => 'gray'
                     })
-                    ->formatStateUsing(fn ($record) => $record?->user?->status?->name ?? 'No Account')
-                    ->description(fn ($record) => $record?->user ? 'Has user account' : 'No user account')
+                    ->formatStateUsing(fn($record) => $record?->user?->status?->name ?? 'No Account')
+                    ->description(fn($record) => $record?->user ? 'Has user account' : 'No user account')
                     ->sortable()
-                    ->toggleable(),
-
-                Tables\Columns\IconColumn::make('is_teacher')
-                    ->boolean()
-                    ->label('Teacher')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('phone_number')
@@ -463,10 +460,7 @@ class StaffResource extends Resource
                     ->sortable()
                     ->toggleable(),
 
-                Tables\Columns\TextColumn::make('salary')
-                    ->money('NGN')
-                    ->sortable()
-                    ->toggleable(),
+
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_teacher')
@@ -498,6 +492,133 @@ class StaffResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ActionGroup::make([
+                    // Add this new action before other actions
+                    Tables\Actions\Action::make('generateEmployeeId')
+                        ->icon('heroicon-o-identification')
+                        ->visible(fn(Staff $record): bool => empty($record->employee_id))
+                        ->modalHeading('Generate Employee ID')
+                        ->form(function (Staff $record) {
+                            // Check if there are any existing employee IDs
+                            $hasExistingFormat = Staff::where('school_id', Filament::getTenant()->id)
+                                ->whereNotNull('employee_id')
+                                ->exists();
+
+                            if ($hasExistingFormat) {
+                                return [
+                                    Forms\Components\Placeholder::make('format_info')
+                                        ->content('Employee ID will be generated using the existing format.'),
+                                ];
+                            }
+
+                            return [
+                                Forms\Components\Select::make('format_type')
+                                    ->label('ID Format Type')
+                                    ->options([
+                                        'basic' => 'Basic (EMP001)',
+                                        'with_year' => 'With Year (EMP23001)',
+                                        'department' => 'With Department (ADM23001)',
+                                        'custom' => 'Custom Format'
+                                    ])
+                                    ->required()
+                                    ->live()
+                                    ->default('basic'),
+
+                                Forms\Components\TextInput::make('custom_format')
+                                    ->label('Custom Format')
+                                    ->placeholder('EMP/{YY}/{NUM}')
+                                    ->helperText('Available tokens: {PREFIX}, {YY}, {NUM}, {DEPT}')
+                                    ->visible(fn(Get $get) => $get('format_type') === 'custom')
+                                    ->required(fn(Get $get) => $get('format_type') === 'custom'),
+
+                                Forms\Components\Select::make('prefix_type')
+                                    ->label('Prefix Type')
+                                    ->options([
+                                        'default' => 'Default (EMP)',
+                                        'school' => 'School Name',
+                                        'custom' => 'Custom'
+                                    ])
+                                    ->default('default')
+                                    ->live()
+                                    ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                        if ($state === 'school') {
+                                            $schoolName = Filament::getTenant()->name;
+                                            $prefix = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $schoolName), 0, 3));
+                                            $set('prefix', $prefix);
+                                        } elseif ($state === 'default') {
+                                            $set('prefix', 'EMP');
+                                        }
+                                    }),
+
+                                Forms\Components\TextInput::make('prefix')
+                                    ->label('Default Prefix')
+                                    ->default('EMP')
+                                    ->required(),
+
+                                Forms\Components\Select::make('year_format')
+                                    ->label('Year Format')
+                                    ->options([
+                                        'none' => 'No Year',
+                                        'short' => 'Short Year (23)',
+                                        'full' => 'Full Year (2023)'
+                                    ])
+                                    ->default('short')
+                                    ->visible(fn (Get $get) => in_array(
+                                        $get('format_type'),
+                                        ['with_year', 'with_department']
+                                    )),
+
+                                Forms\Components\TextInput::make('number_length')
+                                    ->label('Sequential Number Length')
+                                    ->numeric()
+                                    ->default(3)
+                                    ->required()
+                                    ->minValue(1)
+                                    ->maxValue(6),
+
+                                Forms\Components\TextInput::make('separator')
+                                    ->label('Separator Character')
+                                    ->maxLength(1)
+                                    ->default('-'),
+
+                                Forms\Components\KeyValue::make('department_prefixes')
+                                    ->label('Department Prefixes')
+                                    ->keyLabel('Department')
+                                    ->valueLabel('Prefix')
+                                    ->reorderable()
+                                    ->visible(fn(Get $get) => $get('format_type') === 'department'),
+                            ];
+                        })
+                        ->action(function (Staff $record, array $data): void {
+                            $tenant = Filament::getTenant();
+                            $settings = $tenant->settings;
+
+                            // Check if we should use existing format
+                            $hasExistingFormat = Staff::where('school_id', $tenant->id)
+                                ->whereNotNull('employee_id')
+                                ->exists();
+
+                            if (!$hasExistingFormat) {
+                                // Update settings with new format preferences
+                                $settings->employee_settings = $data;
+                                $settings->save();
+                            }
+
+                            // Generate employee ID
+                            $generator = new EmployeeIdGenerator($settings);
+                            $employeeId = $generator->generate([
+                                'designation_id' => $record->designation_id,
+                            ]);
+
+                            // Update staff record
+                            $record->update(['employee_id' => $employeeId]);
+
+                            Notification::make()
+                                ->success()
+                                ->title('Employee ID Generated')
+                                ->body("Generated ID: {$employeeId}")
+                                ->send();
+                        }),
+
                     Tables\Actions\Action::make('viewProfile')
                         ->url(fn(Staff $record): string => route('filament.sms.resources.staff.view', ['record' => $record, 'tenant' => Filament::getTenant()]))
                         ->icon('heroicon-m-eye'),
@@ -549,9 +670,9 @@ class StaffResource extends Resource
                                 'phone' => $record->phone_number,
                                 'custom' => $data['custom_password'],
                             };
-                            
+
                             $staffActiveStatus = Status::where('type', 'staff')->where('name', 'active')->first();
-                            
+
                             // Create user account
                             $user = $record->user()->create([
                                 'first_name' => $record->first_name,
@@ -611,8 +732,8 @@ class StaffResource extends Resource
                         ->color(fn(Staff $record) => $record->user?->status?->name === 'active' ? 'danger' : 'success')
                         ->label(fn(Staff $record) => $record->user?->status?->name === 'active' ? 'Deactivate Account' : 'Activate Account')
                         ->modalHeading(fn(Staff $record) => $record->user?->status?->name === 'active' ? 'Deactivate User Account' : 'Activate User Account')
-                        ->modalDescription(fn(Staff $record) => "Are you sure you want to " . 
-                            ($record->user?->status?->name === 'active' ? 'deactivate' : 'activate') . 
+                        ->modalDescription(fn(Staff $record) => "Are you sure you want to " .
+                            ($record->user?->status?->name === 'active' ? 'deactivate' : 'activate') .
                             " {$record->full_name}'s account?")
                         ->form([
                             Forms\Components\Textarea::make('reason')
@@ -622,7 +743,7 @@ class StaffResource extends Resource
                         ])
                         ->action(function (Staff $record, array $data): void {
                             $currentStatus = $record->user?->status?->name;
-                            
+
                             // Get the opposite status
                             $newStatus = Status::where('type', 'staff')
                                 ->where('name', $currentStatus === 'active' ? 'inactive' : 'active')
@@ -670,7 +791,7 @@ class StaffResource extends Resource
                         ->form([
                             Forms\Components\CheckboxList::make('roles')
                                 ->label('Assigned Roles')
-                                ->options(fn () => \Spatie\Permission\Models\Role::where('team_id', Filament::getTenant()->id)->pluck('name', 'id'))
+                                ->options(fn() => \Spatie\Permission\Models\Role::where('team_id', Filament::getTenant()->id)->pluck('name', 'id'))
                                 ->default(function (Staff $record) {
                                     return $record->user?->roles()->pluck('id')->toArray() ?? [];
                                 })
@@ -692,11 +813,11 @@ class StaffResource extends Resource
                             try {
                                 // Get the team/tenant ID
                                 $teamId = Filament::getTenant()->id;
-                                
+
                                 // Create the pivot data with team_id
                                 $pivotData = array_fill(0, count($data['roles']), ['team_id' => $teamId]);
                                 $roleData = array_combine($data['roles'], $pivotData);
-                                
+
                                 // Sync roles with pivot data
                                 $record->user->roles()->sync($roleData);
 
@@ -863,6 +984,11 @@ class StaffResource extends Resource
             'Status' => $record->status?->name,
             'Phone' => $record->phone_number,
         ];
+    }
+
+    public static function getGlobalSearchResultUrl(Model $record): string
+    {
+        return StaffResource::getUrl('view', ['record' => $record]);
     }
 
 

@@ -15,7 +15,7 @@ return new class extends Migration
         Schema::create('templates', function (Blueprint $table) {
             $table->id();
             $table->string('name')->nullable();
-            $table->string('slug')->unique()->nullable();
+            $table->string('slug')->nullable();
             $table->foreignId('school_id')->nullable()->constrained('schools')->nullOnDelete();
             $table->longText('content');
             $table->string('category')->nullable();
@@ -26,6 +26,10 @@ return new class extends Migration
             $table->integer('version')->default(1);
             $table->foreignId('last_edited_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
+
+            $table->unique(['name', 'school_id']);
+            $table->unique(['slug', 'school_id']);
+            $table->index(['name', 'school_id']);
         });
     }
 

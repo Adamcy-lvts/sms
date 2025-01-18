@@ -18,6 +18,10 @@ return new class extends Migration
             $table->foreignId('school_id')->constrained()->onDelete('cascade');
             $table->integer('capacity')->default(0);
             $table->timestamps();
+
+            $table->unique(['name', 'school_id']);
+            $table->unique(['slug', 'school_id']);
+            $table->index(['name', 'school_id']);
         });
     }
 

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class StudentMovement extends Model
 {
     protected $fillable = [
+        'school_id',
         'student_id',
         'from_class_id',
         'to_class_id',
@@ -41,11 +42,18 @@ class StudentMovement extends Model
         'demotion' => 'Demotion to lower class',
     ];
 
+
     // Movement requires destination school
     public const REQUIRES_DESTINATION = ['transfer'];
     
     // Movement terminates enrollment
     public const TERMINATES_ENROLLMENT = ['transfer', 'withdrawal', 'graduation'];
+
+    // school relationship
+    public function school(): BelongsTo
+    {
+        return $this->belongsTo(School::class);
+    }
 
     // Relationships
     public function student(): BelongsTo

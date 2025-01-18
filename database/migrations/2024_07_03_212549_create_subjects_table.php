@@ -25,7 +25,9 @@ return new class extends Migration
             $table->boolean('is_optional')->default(false);
             $table->boolean('is_active')->default(true);
             $table->boolean('is_archived')->default(false);
+
             $table->unique(['name', 'school_id']);
+            $table->unique(['slug', 'school_id']);
             $table->index(['name', 'school_id']);
             $table->timestamps();
         });

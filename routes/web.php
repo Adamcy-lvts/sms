@@ -4,8 +4,11 @@ use App\Livewire\ReportProgress;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ReceiptController;
+use App\Http\Controllers\WelcomeController;
 use App\Http\Controllers\ReportCardController;
+use App\Http\Controllers\LegalDocumentController;
 use App\Http\Controllers\AdmissionLetterController;
 use App\Http\Controllers\Sms\PaymentReceiptController;
 use App\Http\Controllers\ReportTemplatePreviewController;
@@ -14,6 +17,9 @@ use App\Http\Controllers\ReportTemplatePreviewController;
 
 
 Route::view('/', 'welcome');
+
+Route::get('/', [WelcomeController::class, 'index'])->name('welcome');
+Route::get('/pricing', [HomeController::class, 'pricing'])->name('pricing');
 
 Route::view('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])
@@ -43,15 +49,6 @@ Route::get('/admission-letter/{admission}', [AdmissionLetterController::class, '
 
 Route::get('/admission-letter-pdf/{admission}', [AdmissionLetterController::class, 'downloadAdmissionLetter'])->name('download.admission-letter.pdf');
 
-// Route::middleware(['auth'])->group(function () {
-//     Route::prefix('sms/{tenant}')->group(function () {
-//         // Payment Receipt Routes
-
-
-//         // Route::get('payments/{payment}/receipt/download', [PaymentReceiptController::class, 'download'])
-//         //     ->name('student.receipt.download');
-//     });
-// });
 
 Route::get('payments/{payment}/{tenant}/receipt/print', [PaymentReceiptController::class, 'print'])
     ->name('student.receipt.print');
@@ -81,3 +78,8 @@ Route::get('/reports/download/{file}', function ($file) {
 
     return response()->download($path);
 })->name('reports.download');
+
+// routes/web.php
+Route::get('/legal/{type}', [LegalDocumentController::class, 'show'])
+    ->name('legal.show')
+    ->where('type', 'terms|privacy');

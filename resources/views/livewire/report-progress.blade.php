@@ -4,7 +4,24 @@
 
             <div class="space-y-4">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-lg font-medium">Report Generation Progress</h3>
+                    <div>
+                        <h3 class="text-lg font-medium">
+                            @if ($status === 'completed')
+                                Report Generation Successful
+                            @else
+                                Report Generation Progress
+                            @endif
+                        </h3>
+                        <p class="text-sm text-gray-600 mt-1">
+                            @if ($status === 'completed')
+                                Generation report for {{ $className }} completed
+                            @elseif ($status === 'processing')
+                                Generating reports for {{ $className }}
+                            @elseif ($status === 'cancelled')
+                                Generation cancelled for {{ $className }}
+                            @endif
+                        </p>
+                    </div>
                     @if ($status === 'processing')
                         <button wire:click="cancelGeneration" class="text-sm text-red-600 hover:text-red-800">
                             Cancel Generation
@@ -14,21 +31,21 @@
 
                 <div class="space-y-2">
                     <div class="flex justify-between text-sm text-gray-600">
-                        <span>{{ $processedJobs }} of {{ $totalJobs }} students reports generated</span>
-                        <span>{{ $progress }}%</span>
+                        <span>{{ $processedStudents }} of {{ $totalStudents }} students processed</span>
+                        <span>{{ $this->progressPercentage }}%</span>
                     </div>
 
                     <div x-data="{
                         progress: 0,
                         progressInterval: null,
                     }" x-init="progressInterval = setInterval(() => {
-                        progress = {{ $progress }};
-                        if ({{ $progress }} >= 100) {
+                        progress = {{ $this->progressPercentage }};
+                        if ({{ $this->progressPercentage }} >= 100) {
                             clearInterval(progressInterval);
                         }
                     }, 100);"
                         class="relative w-full h-3 overflow-hidden rounded-full bg-gray-100">
-                        <span :style="'width:' + {{ $progress }} + '%'"
+                        <span :style="'width:' + {{ $this->progressPercentage }} + '%'"
                             class="absolute w-24 h-full duration-300 ease-linear bg-primary-600" x-cloak></span>
                     </div>
                     <div class="flex items-center justify-between">

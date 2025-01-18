@@ -65,7 +65,7 @@ class GradeService
         $assessmentTypes = AssessmentType::where('school_id', $student->school_id)
             ->where('is_active', true)
             ->get();
-
+           
         $assessmentScores = [];
         $totalScore = 0;
 
@@ -73,14 +73,14 @@ class GradeService
         foreach ($assessmentTypes as $type) {
             $assessmentScores[strtolower($type->code)] = '-';
         }
-
+     
         // Calculate total directly from raw scores
         foreach ($grades as $grade) {
-            $assessmentType = $grade->assessmentType;
+            $assessmentType = $grade->assessmentType;      
             if ($assessmentType) {
                 $code = strtolower($assessmentType->code);
                 $assessmentScores[$code] = number_format($grade->score, 1);
-
+                // dd($assessmentScores);
                 // Add raw score to total
                 $totalScore += $grade->score;
             }

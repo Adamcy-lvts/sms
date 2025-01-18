@@ -194,14 +194,13 @@ class SubscriptionResource extends Resource
 
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn(string $state): string => match ($state) {
                         'active' => 'success',
-                        'pending' => 'warning',
-                        'cancelled' => 'danger',
-                        'expired' => 'gray',
-                        'suspended' => 'danger',
-                        default => 'secondary',
-                    }),
+                        'expired' => 'danger',
+                        'cancelled' => 'warning',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn($record) => $record->is_on_trial ? 'Trial' : $record->status),
 
                 TextColumn::make('subscription_code')
                     ->searchable()
