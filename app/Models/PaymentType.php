@@ -41,7 +41,7 @@ class PaymentType extends Model
             ->first();
     }
 
-    public static function isTuitionFee(): bool
+    public function isTuitionFee(): bool
     {
         return str_starts_with($this->name, 'Tuition Fee -');
     }
