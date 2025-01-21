@@ -2,17 +2,42 @@
 
 namespace App\Filament\Sms\Pages\Auth;
 
-use Filament\Pages\Auth\EditProfile as BaseEditProfile;
-use Filament\Forms\Components\Component;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Section;
+use Throwable;
+use Filament\Forms\Get;
 use Filament\Forms\Form;
 use Filament\Actions\Action;
+use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Hash;
+use Filament\Support\Exceptions\Halt;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Component;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Forms\Components\FileUpload;
+use Illuminate\Validation\Rules\Password;
+use Filament\Support\Facades\FilamentView;
+use Filament\Pages\Auth\EditProfile as BaseEditProfile;
+use function Filament\Support\is_app_url;
 
 class EditProfile extends BaseEditProfile
 {
     protected static string $view = 'filament.sms.pages.auth.edit-profile';
+
+    public function mount(): void
+    {
+        parent::mount();
+
+        // Get the staff record and fill the signature if it exists
+        $staff = auth()->user()->staff;
+        if ($staff) {
+            $this->form->fill([
+                'first_name' => $staff->first_name,
+                'last_name' => $staff->last_name,
+                'email' => $staff->email,
+                'signature' => $staff->signature
+            ]);
+        }
+    }
 
     protected function getForms(): array
     {
@@ -25,6 +50,9 @@ class EditProfile extends BaseEditProfile
                                 $this->getFirstNameFormComponent(),
                                 $this->getLastNameFormComponent(),
                                 $this->getEmailFormComponent(),
+                                $this->getPasswordFormComponent(),
+                                $this->getPasswordConfirmationFormComponent(),
+                                $this->getSignatureFormComponent(),
                             ])
                             ->columns(2),
                     ])
@@ -40,6 +68,7 @@ class EditProfile extends BaseEditProfile
         return TextInput::make('first_name')
             ->label('First Name')
             ->required()
+            ->disabled()
             ->maxLength(255);
     }
 
@@ -47,6 +76,7 @@ class EditProfile extends BaseEditProfile
     {
         return TextInput::make('last_name')
             ->label('Last Name')
+            ->disabled()
             ->required()
             ->maxLength(255);
     }
@@ -66,22 +96,108 @@ class EditProfile extends BaseEditProfile
         return 'Profile updated successfully';
     }
 
-    protected function getHeaderActions(): array
+    protected function getPasswordFormComponent(): Component
     {
-        return [
-            Action::make('changePassword')
-                ->label('Change Password')
-                ->icon('heroicon-o-key')
-                ->action(function () {
-                    // Handle password change
-                }),
-            
-            Action::make('enable2FA')
-                ->label('Setup 2FA')
-                ->icon('heroicon-o-shield-check')
-                ->action(function () {
-                    // Handle 2FA setup
-                }),
-        ];
+        return TextInput::make('password')
+            ->label(__('filament-panels::pages/auth/edit-profile.form.password.label'))
+            ->password()
+            ->revealable(filament()->arePasswordsRevealable())
+            ->rule(Password::default())
+            ->autocomplete('new-password')
+            ->dehydrated(fn($state): bool => filled($state))
+            ->dehydrateStateUsing(fn($state): string => Hash::make($state))
+            ->live(debounce: 500)
+            ->same('passwordConfirmation');
+    }
+
+    protected function getPasswordConfirmationFormComponent(): Component
+    {
+        return TextInput::make('passwordConfirmation')
+            ->label(__('filament-panels::pages/auth/edit-profile.form.password_confirmation.label'))
+            ->password()
+            ->revealable(filament()->arePasswordsRevealable())
+            ->required()
+            ->visible(fn(Get $get): bool => filled($get('password')))
+            ->dehydrated(false);
+    }
+
+
+    protected function getSignatureFormComponent(): Component
+    {
+        $school = auth()->user()->schools->first();
+        return FileUpload::make('signature')
+            //only show for staff with can_sign_reports_card_permission
+            // ->visible(fn(Get $get) => auth()->user()->staff && auth()->user()->staff->can_sign_reports_card)
+            ->image()
+            ->disk('public')
+            ->directory("{$school->slug}/staff_signatures") // Organize by school slug
+            ->imageEditor() // Allow basic image editing
+            ->maxSize(1024) // 1MB limit
+            ->imageResizeMode('force')
+            ->imageCropAspectRatio('5:2') // Good ratio for signatures
+            ->columnSpanFull();
+    }
+
+    protected function mutateFormDataBeforeSave($data): array
+    {
+        // Remove signature from user data as it belongs to staff
+        $signature = $data['signature'] ?? null;
+        unset($data['signature']);
+
+        // Update staff signature separately
+        if ($signature !== null && auth()->user()->staff) {
+            auth()->user()->staff->update(['signature' => $signature]);
+        }
+
+        return $data;
+    }
+
+    public function save(): void
+    {
+        try {
+            $this->beginDatabaseTransaction();
+
+            $this->callHook('beforeValidate');
+
+            $data = $this->form->getState();
+
+            $this->callHook('afterValidate');
+
+            $data = $this->mutateFormDataBeforeSave($data);
+
+            $this->callHook('beforeSave');
+
+            $this->handleRecordUpdate($this->getUser(), $data);
+
+            $this->callHook('afterSave');
+
+            $this->commitDatabaseTransaction();
+        } catch (Halt $exception) {
+            $exception->shouldRollbackDatabaseTransaction() ?
+                $this->rollBackDatabaseTransaction() :
+                $this->commitDatabaseTransaction();
+
+            return;
+        } catch (Throwable $exception) {
+            $this->rollBackDatabaseTransaction();
+
+            throw $exception;
+        }
+
+        // Handle password session
+        if (request()->hasSession() && array_key_exists('password', $data)) {
+            request()->session()->put([
+                'password_hash_' . Filament::getAuthGuard() => $data['password'],
+            ]);
+        }
+
+        $this->data['password'] = null;
+        $this->data['passwordConfirmation'] = null;
+
+        $this->getSavedNotification()?->send();
+
+        if ($redirectUrl = $this->getRedirectUrl()) {
+            $this->redirect($redirectUrl, navigate: FilamentView::hasSpaMode() && is_app_url($redirectUrl));
+        }
     }
 }

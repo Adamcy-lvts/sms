@@ -7,13 +7,20 @@ use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Forms\Form;
 use Filament\Pages\Page;
+use App\Models\PaymentType;
 use App\Models\SchoolSettings;
 use Filament\Facades\Filament;
 use App\Helpers\EmployeeIdFormats;
 use Illuminate\Support\HtmlString;
+use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Tabs;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Illuminate\Support\Facades\Cache;
+use Filament\Forms\Components\Section;
 use App\Helpers\AdmissionNumberFormats;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use App\Services\AdmissionNumberGenerator;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -21,7 +28,7 @@ use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 class ManageSettings extends Page
 {
     use HasPageShield;
-    
+
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
     protected static ?string $navigationLabel = 'School Settings';
     protected static ?string $navigationGroup = 'Settings';
@@ -72,6 +79,16 @@ class ManageSettings extends Page
                 'number_start' => $settings->admission_settings['number_start'] ?? 1,
                 'reset_sequence_yearly' => $settings->admission_settings['reset_sequence_yearly'] ?? false,
                 'reset_sequence_by_session' => $settings->admission_settings['reset_sequence_by_session'] ?? false,
+            ],
+
+            // Add payment settings to the form fill
+            'payment_settings' => [
+                'default_payment_type' => $settings->payment_settings['default_payment_type'] ?? null,
+                'allow_session_payment' => $settings->payment_settings['allow_session_payment'] ?? true,
+                'due_dates' => [
+                    'default_days' => $settings->payment_settings['due_dates']['default_days'] ?? 7,
+                    'term_payment_types' => $settings->payment_settings['due_dates']['term_payment_types'] ?? [],
+                ],
             ],
         ]);
     }
@@ -260,7 +277,7 @@ class ManageSettings extends Page
                                     'full' => 'Full Year (2023)'
                                 ])
                                 ->default('short')
-                                ->visible(fn (Get $get) => in_array(
+                                ->visible(fn(Get $get) => in_array(
                                     $get('employee_settings.format_type'),
                                     ['with_year', 'with_department']
                                 )),
@@ -345,7 +362,53 @@ class ManageSettings extends Page
                                 ->minValue(1)
                                 ->maxValue(6),
                         ])
-                        ->columns(2)
+                        ->columns(2),
+                    Tabs\Tab::make('Payment Settings')
+                        ->icon('heroicon-o-currency-dollar')
+                        ->schema([
+                            Section::make([
+                                Grid::make(2)
+                                    ->schema([
+
+                                        TextInput::make('payment_settings.due_dates.default_days')
+                                            ->label('Default Due Days')
+                                            ->numeric()
+                                            ->default(7)
+                                            ->helperText('Default number of days after term start for payments'),
+                                    ]),
+
+                                Repeater::make('payment_settings.due_dates.term_payment_types')
+                                    ->label('Term Payment Due Dates')
+                                    ->schema([
+                                        Grid::make(2)
+                                            ->schema([
+                                                Select::make('payment_type')
+                                                    ->label('Payment Type')
+                                                    ->options(function () {
+                                                        return PaymentType::where('school_id', Filament::getTenant()->id)
+                                                            ->where('active', true)
+                                                            ->pluck('name', 'id');
+                                                    })
+                                                    ->required(),
+
+                                                TextInput::make('days')
+                                                    ->label('Days After Term Start')
+                                                    ->numeric()
+                                                    ->minValue(1)
+                                                    ->required(),
+                                            ]),
+                                    ])
+                                    ->columnSpanFull()
+                                    ->collapsible()
+                                    ->defaultItems(0),
+
+                                Toggle::make('payment_settings.allow_session_payment')
+                                    ->label('Allow Session Payments')
+                                    ->helperText('Allow parents to make payments for entire session')
+                                    ->default(true),
+                            ])
+                                ->columns(1),
+                        ]),
                 ])->persistTabInQueryString('manage-settings')
                 ->columnSpanFull()
         ])->statePath('data');
@@ -363,6 +426,15 @@ class ManageSettings extends Page
             'admission_settings' => $data['admission_settings'],
             'employee_settings' => $data['employee_settings'] ?? [],
             'academic_settings' => $data['academic_settings'] ?? [],
+            // Add payment settings to the update
+            'payment_settings' => $data['payment_settings'] ?? [
+                'default_payment_type' => null,
+                'allow_session_payment' => true,
+                'due_dates' => [
+                    'default_days' => 7,
+                    'term_payment_types' => [],
+                ],
+            ],
         ]);
 
         // Clear all cached settings for this school

@@ -33,7 +33,16 @@
                     <!-- School Info -->
                     <div class="text-center sm:text-left w-full sm:w-auto">
                         <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-4">
-                            <div class="text-xl font-bold">Ki</div>
+                            @if (isset($logoData))
+                                <div class="w-16 h-16">
+                                    <img src="{{ $logoData }}" alt="{{ $payment->school->name }}"
+                                        class="w-full h-full object-contain">
+                                </div>
+                            @else
+                                <div class="text-xl font-bold">
+                                    {{ substr($payment->school->name, 0, 2) }}
+                                </div>
+                            @endif
                             <div>
                                 <div class="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:gap-4">
                                     <h1 class="text-[15px] font-semibold text-gray-900">{{ $payment->school->name }}
@@ -53,7 +62,12 @@
                     <div class="text-center sm:text-right w-full sm:w-auto mt-4 sm:mt-0">
                         <div class="mb-3 hidden sm:block">
                             <div class="w-20 h-20 ml-auto border rounded flex items-center justify-center">
-                                <span class="text-[11px] text-gray-500">QR Code</span>
+                                @php
+                                    $qrCode = SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')->size(72)
+                                     ->merge($qrLogo, 0.3, true)
+                                    ->generate($QrViewUrl);
+                                @endphp
+                                {!! $qrCode !!}
                             </div>
                         </div>
                         <div class="text-[13px] space-y-1">
@@ -123,10 +137,11 @@
                 <div class="mb-3">
                     <div class="grid grid-cols-12 gap-4 text-[13px] font-medium text-gray-700 pb-2 border-b">
                         <div class="col-span-3">Payment Type</div>
-                        <div class="col-span-2">Method</div>
+                        <div class="col-span-2">Payment Method</div>
+                        <div class="col-span-1">Qty</div>
                         <div class="col-span-2 text-right">Amount</div>
                         <div class="col-span-2 text-right">Paid</div>
-                        <div class="col-span-3 text-right">Balance</div>
+                        <div class="col-span-2 text-right">Balance</div>
                     </div>
                 </div>
 
@@ -135,11 +150,14 @@
                     <div class="grid grid-cols-12 gap-4 text-[13px] py-3 border-b last:border-b-0">
                         <div class="col-span-3 text-gray-600">{{ $item->paymentType?->name }}</div>
                         <div class="col-span-2 text-gray-600">{{ $payment->paymentMethod?->name }}</div>
+                        <div class="col-span-1 text-center text-gray-600">
+                            {{ $item->paymentType?->category === 'physical_item' ? $item->quantity : '-' }}
+                        </div>
                         <div class="col-span-2 text-right font-medium text-gray-900">{{ formatNaira($item->amount) }}
                         </div>
                         <div class="col-span-2 text-right font-medium text-green-600">{{ formatNaira($item->deposit) }}
                         </div>
-                        <div class="col-span-3 text-right">
+                        <div class="col-span-2 text-right">
                             <span @class([
                                 'font-medium',
                                 'text-gray-900' => $item->balance == 0,
@@ -176,30 +194,21 @@
                     </div>
                 </div>
 
-                <!-- Payment Status -->
-                <div class="mt-4 text-center">
-                    <span @class([
-                        'inline-block px-3 py-1 rounded-full text-[13px] font-medium',
-                        'bg-green-100 text-green-800' => $payment->status?->name === 'Paid',
-                        'bg-yellow-100 text-yellow-800' => $payment->status?->name === 'Partial',
-                        'bg-red-100 text-red-800' => $payment->status?->name === 'Pending',
-                    ])>
-                        <span class="mr-1.5">●</span>
-                        Payment Status: {{ $payment->status?->name }}
-                    </span>
-                </div>
             </div>
 
             <!-- Terms & Notes -->
             <div class="px-6 py-4 bg-gray-50">
-                <h3 class="text-[13px] font-medium text-gray-900 mb-2">Terms & Notes:</h3>
-                <ul class="list-disc list-inside space-y-1 text-[13px] text-gray-600">
-                    <li>Payment is non-refundable</li>
-                    <li>Please keep this receipt for your records</li>
-                    @if ($payment->remark)
-                        <li>{{ $payment->remark }}</li>
-                    @endif
-                </ul>
+                @if ($payment->shouldShowTerms())
+                    <h3 class="text-[13px] font-medium text-gray-900 mb-2">Terms & Notes:</h3>
+                    <ul class="list-disc list-inside space-y-1 text-[13px] text-gray-600">
+                        @foreach ($payment->getTerms() as $term)
+                            <li>{{ $term }}</li>
+                        @endforeach
+                        @if ($payment->remark)
+                            <li>{{ $payment->remark }}</li>
+                        @endif
+                    </ul>
+                @endif
             </div>
 
             <!-- Footer -->

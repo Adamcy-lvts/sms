@@ -8,6 +8,7 @@ use App\Models\School;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Teacher;
+use App\Models\PaymentType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -22,6 +23,18 @@ class ClassRoom extends Model
         'school_id',
         'capacity',
     ];
+
+    public function getLevel(): string
+    {
+        if (str_contains(strtolower($this->name), 'nursery')) {
+            return PaymentType::LEVELS['NURSERY'];
+        }
+        if (str_contains(strtolower($this->name), 'primary')) {
+            return PaymentType::LEVELS['PRIMARY'];
+        }
+        // Both JSS and SSS return SECONDARY
+        return PaymentType::LEVELS['SECONDARY'];
+    }
 
     public function school()
     {

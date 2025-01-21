@@ -16,7 +16,9 @@ class PaymentItem extends Model
         'payment_type_id',
         'amount',
         'deposit',
-        'balance'
+        'balance',
+        'quantity',
+        'unit_price',
     ];
 
     public function payment()

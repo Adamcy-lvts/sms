@@ -302,11 +302,6 @@ class School extends Model
         return $this->hasMany(GradingScale::class);
     }
 
-    function subjectAssessments(): HasMany
-    {
-        return $this->hasMany(SubjectAssessment::class);
-    }
-
     function studentGrades(): HasMany
     {
         return $this->hasMany(StudentGrade::class);
@@ -345,6 +340,12 @@ class School extends Model
                 $query->where('name', 'school-admin');
             })
             ->first();
+    }
+
+    // In School model
+    public function roles()
+    {
+        return $this->hasMany(Role::class, 'team_id');
     }
 
     public function schoolSettings()

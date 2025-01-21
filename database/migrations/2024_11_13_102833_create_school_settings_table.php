@@ -17,6 +17,7 @@ return new class extends Migration
             $table->json('employee_settings')->nullable();
             $table->json('academic_settings')->nullable();
             $table->json('admission_settings')->nullable();
+            $table->json('payment_settings')->nullable();
             $table->boolean('enable_arabic')->default(false);
             $table->string('rtl_direction')->default('ltr');
 

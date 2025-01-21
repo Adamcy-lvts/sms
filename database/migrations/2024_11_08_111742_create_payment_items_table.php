@@ -14,7 +14,9 @@ return new class extends Migration
         Schema::create('payment_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('payment_id')->constrained()->onDelete('cascade');
-            $table->foreignId('payment_type_id')->constrained()->onDelete('restrict');
+            $table->foreignId('payment_type_id')->nullOnDelete();
+            $table->integer('quantity')->nullable();
+            $table->decimal('unit_price', 10, 2)->nullable();
             $table->decimal('amount', 10, 2);
             $table->decimal('deposit', 10, 2)->nullable();
             $table->decimal('balance', 10, 2)->nullable();

@@ -2,20 +2,21 @@
 
 namespace App\Filament\Sms\Resources;
 
-use BezhanSalleh\FilamentShield\Contracts\HasShieldPermissions;
-use BezhanSalleh\FilamentShield\Forms\ShieldSelectAllToggle;
-use App\Filament\Sms\Resources\RoleResource\Pages;
-use BezhanSalleh\FilamentShield\Support\Utils;
-use BezhanSalleh\FilamentShield\Traits\HasShieldFormComponents;
-use Filament\Facades\Filament;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
-use Illuminate\Contracts\Support\Arrayable;
-use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
+use Filament\Facades\Filament;
+use Filament\Resources\Resource;
+use Illuminate\Support\HtmlString;
+use Illuminate\Contracts\Support\Arrayable;
+use BezhanSalleh\FilamentShield\Support\Utils;
+use App\Filament\Sms\Resources\RoleResource\Pages;
+use BezhanSalleh\FilamentShield\Facades\FilamentShield;
+use BezhanSalleh\FilamentShield\Forms\ShieldSelectAllToggle;
+use BezhanSalleh\FilamentShield\Contracts\HasShieldPermissions;
+use BezhanSalleh\FilamentShield\Traits\HasShieldFormComponents;
 
 class RoleResource extends Resource implements HasShieldPermissions
 {
@@ -33,6 +34,29 @@ class RoleResource extends Resource implements HasShieldPermissions
             'delete',
             'delete_any',
         ];
+    }
+
+    public static function getResourceEntitiesSchema(): ?array
+    {
+        return collect(FilamentShield::getResources())
+            ->sortKeys()
+            ->map(function ($entity) {
+                $sectionLabel = strval(
+                    static::shield()->hasLocalizedPermissionLabels()
+                    ? FilamentShield::getLocalizedResourceLabel($entity['fqcn'])
+                    : $entity['model']
+                );
+
+                return Forms\Components\Section::make($sectionLabel)
+                    ->description(fn () => new HtmlString('<span style="word-break: break-word;">' . Utils::showModelPath($entity['fqcn']) . '</span>'))
+                    ->compact()
+                    ->schema([
+                        static::getCheckBoxListComponentForResource($entity),
+                    ])
+                    ->columnSpan(static::shield()->getSectionColumnSpan())
+                    ->collapsed();
+            })
+            ->toArray();
     }
 
     public static function form(Form $form): Form

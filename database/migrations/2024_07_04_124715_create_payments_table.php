@@ -24,6 +24,7 @@ return new class extends Migration
             $table->foreignId('status_id')->constrained()->onDelete('restrict');
             $table->foreignId('academic_session_id')->nullable()->constrained()->onDelete('set null');
             $table->foreignId('term_id')->nullable()->constrained()->onDelete('set null');
+            $table->string('payment_period')->nullable();
             $table->string('reference')->unique()->nullable();
             $table->string('payer_name')->nullable();
             $table->string('payer_phone_number')->nullable();

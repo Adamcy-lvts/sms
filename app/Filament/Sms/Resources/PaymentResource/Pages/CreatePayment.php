@@ -178,6 +178,12 @@ class CreatePayment extends CreateRecord
     {
         $tenant = Filament::getTenant();
 
+        // dd([
+        //     'all_data' => $data,
+        //     'payment_items' => $data['payment_items'] ?? 'no items',
+        //     'first_item' => $data['payment_items'][0] ?? 'no first item',
+        // ]);
+
         return DB::transaction(function () use ($data, $tenant) {
             $paymentItems = collect($data['payment_items'] ?? []);
             $totalAmount = $paymentItems->sum('item_amount');
@@ -218,15 +224,57 @@ class CreatePayment extends CreateRecord
                 'created_by' => auth()->id(),
                 'updated_by' => auth()->id(),
             ]);
-
-            // Create payment items
+// dd($paymentItems);
+            // Create payment items and handle inventory
             foreach ($paymentItems as $item) {
-                $payment->paymentItems()->create([
+                // Load payment type with inventory
+                $paymentType = PaymentType::with('inventory')
+                    ->find($item['payment_type_id']);
+
+                // Create payment item with quantity if it's a physical item
+                $paymentItem = $payment->paymentItems()->create([
                     'payment_type_id' => $item['payment_type_id'],
                     'amount' => floatval($item['item_amount']),
                     'deposit' => floatval($item['item_deposit']),
-                    'balance' => floatval($item['item_balance'])
+                    'balance' => floatval($item['item_balance']),
+                    'quantity' => $item['has_quantity'] ? $item['quantity'] : null,
+                    'unit_price' => $item['has_quantity'] ? $item['unit_price'] : null,
                 ]);
+
+                // Handle inventory reduction for physical items
+                if (
+                    $paymentType &&
+                    $paymentType->category === 'physical_item' &&
+                    $paymentType->inventory &&
+                    isset($item['quantity'])
+                ) {
+
+                    // Validate stock availability
+                    if ($paymentType->inventory->quantity < $item['quantity']) {
+                        // let's return a noficiation for the user
+                        Notification::make()
+                            ->danger()
+                            ->title('Insufficient Stock')
+                            ->body("Insufficient stock for {$paymentType->name}")
+                            ->persistent()
+                            ->send();
+                        // throw new \Exception("Insufficient stock for {$paymentType->name}");
+                    }
+
+                    // Create inventory transaction
+                    $paymentType->inventory->transactions()->create([
+                        'school_id' => $tenant->id,
+                        'type' => 'OUT',
+                        'quantity' => $item['quantity'],
+                        'reference_type' => 'payment',
+                        'reference_id' => $payment->id,
+                        'note' => "Sold to {$student->full_name}",
+                        'created_by' => auth()->id(),
+                    ]);
+
+                    // Update inventory quantity
+                    $paymentType->inventory->decrement('quantity', $item['quantity']);
+                }
             }
 
             // Show success notification with payment details
@@ -242,12 +290,6 @@ class CreatePayment extends CreateRecord
                             'record' => $payment
                         ]))
                         ->button(),
-                    // Action::make('new_payment')
-                    //     ->label('Record Another Payment')
-                    //     ->color('gray')
-                    //     ->action(function () {
-                    //         $this->form->fill([]);
-                    //     }),
                 ])
                 ->persistent()
                 ->send();
@@ -255,7 +297,6 @@ class CreatePayment extends CreateRecord
             return $payment;
         });
     }
-
     private function determineStatus($deposit, $amount): int
     {
         $statusName = match (true) {

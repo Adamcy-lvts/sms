@@ -53,56 +53,8 @@
             </div>
 
             {{-- Account Status & Quick Actions --}}
-            <div class="space-y-6">
-                {{-- Account Status --}}
-                <div
-                    class=" bg-white dark:bg-gray-900 p-6 shadow sm:rounded-xl sm:ring-1 sm:ring-gray-950/5 dark:sm:ring-white/10">
-                    <h3 class="text-base font-semibold leading-7 text-gray-950 dark:text-white">
-                        Account Status
-                    </h3>
-
-                    <dl class="mt-4 space-y-4 divide-y divide-gray-950/5 dark:divide-white/5">
-                        <div class="flex justify-between py-2">
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Joined</dt>
-                            <dd class="text-sm text-gray-950 dark:text-white">
-                                {{ auth()->user()->created_at?->diffForHumans() }}
-                            </dd>
-                        </div>
-
-                        <div class="flex justify-between py-2">
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Last Login</dt>
-                            <dd class="text-sm text-gray-950 dark:text-white">{{ now()->diffForHumans() }}</dd>
-                        </div>
-
-                        <div class="flex justify-between py-2">
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Status</dt>
-                            <dd>
-                                <x-filament::badge color="success">Active</x-filament::badge>
-                            </dd>
-                        </div>
-                    </dl>
-                </div>
-
-                {{-- Quick Actions --}}
-                <div
-                    class="fi-simple-main bg-white dark:bg-gray-900 p-6 shadow sm:rounded-xl sm:ring-1 sm:ring-gray-950/5 dark:sm:ring-white/10">
-                    <h3 class="text-base font-semibold leading-7 text-gray-950 dark:text-white mb-4">
-                        Quick Actions
-                    </h3>
-
-                    <div class="space-y-3">
-                        <x-filament::button wire:click="$dispatch('openModal', { id: 'change-password' })"
-                            color="gray" icon="heroicon-m-key" class="w-full justify-start">
-                            Change Password
-                        </x-filament::button>
-
-                        <x-filament::button wire:click="$dispatch('openModal', { id: 'two-factor-auth' })"
-                            color="gray" icon="heroicon-m-shield-check" class="w-full justify-start">
-                            Two Factor Auth
-                        </x-filament::button>
-                    </div>
-                </div>
-            </div>
+           
+           
         </div>
     </div>
 </x-dynamic-component>

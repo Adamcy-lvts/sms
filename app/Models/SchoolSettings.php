@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use App\Models\School;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\Model;
@@ -18,6 +19,7 @@ class SchoolSettings extends Model
         'employee_settings',
         'academic_settings',
         'admission_settings',
+        'payment_settings',  // Add this
       
     ];
 
@@ -65,6 +67,18 @@ class SchoolSettings extends Model
             "use_arabic": false
         }',
 
+        'payment_settings' => '{
+            "due_dates": {
+                "term_payment_types": {
+                    "school_fees": 30,
+                    "computer_fees": 14,
+                    "lab_fees": 14
+                },
+                "default_days": 7
+            },
+            "allow_session_payment": true
+        }',
+
       
     ];
 
@@ -72,6 +86,7 @@ class SchoolSettings extends Model
         'employee_settings' => 'array',
         'academic_settings' => 'array',
         'admission_settings' => 'array',
+        'payment_settings' => 'array',
        
        
     ];
@@ -112,6 +127,7 @@ class SchoolSettings extends Model
             'admission_settings' => json_decode(static::$defaultAttributes['admission_settings'], true),
             'employee_settings' => json_decode(static::$defaultAttributes['employee_settings'], true),
             'academic_settings' => json_decode(static::$defaultAttributes['academic_settings'], true),
+            'payment_settings' => json_decode(static::$defaultAttributes['payment_settings'], true),
             
         ];
     }
@@ -138,5 +154,29 @@ class SchoolSettings extends Model
         $settingsField = "{$type}_settings";
         $this->$settingsField = array_merge($this->$settingsField ?? [], $settings);
         $this->save();
+    }
+
+
+    // Add helper method for payment settings
+    public function getPaymentSettings(): array
+    {
+        return $this->payment_settings;
+    }
+
+    // Add helper method to get due date for a payment type
+    public function getDueDate(PaymentType $paymentType, Term $term): ?Carbon
+    {
+        $settings = $this->payment_settings['due_dates'] ?? [];
+        $daysAfterStart = $settings['term_payment_types'][$paymentType->code] 
+            ?? $settings['default_days'] 
+            ?? null;
+        
+        return $daysAfterStart ? $term->start_date->addDays($daysAfterStart) : null;
+    }
+
+    // Add helper method for session payment check
+    public function allowsSessionPayment(): bool
+    {
+        return $this->payment_settings['allow_session_payment'] ?? false;
     }
 }

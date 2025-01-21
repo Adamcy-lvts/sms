@@ -20,16 +20,20 @@ class ViewPayment extends ViewRecord
     protected static string $resource = PaymentResource::class;
     protected static string $view = 'filament.sms.resources.payment-resource.pages.view-payment';
 
-    public  $viewUrl;
+    public string $QrViewUrl = '';
+    public $qrLogo;
 
     public function mount(int | string $record): void
     {
         $this->record = $this->resolveRecord($record);
         $school = Filament::getTenant();
 
-        $this->viewUrl = PaymentResource::getUrl('view', [
+
+        $this->qrLogo = Storage::disk('public')->path($this->record->school->logo);
+
+        $this->QrViewUrl = PaymentResource::getUrl('view', [
             'record' => $this->record->id,
-            'tenant' => Filament::getTenant(),
+            'tenant' => $school->id,
         ]);
     }
 
@@ -53,7 +57,7 @@ class ViewPayment extends ViewRecord
                 ->icon('heroicon-o-printer')
                 ->openUrlInNewTab()
                 ->color('warning')
-                // ->url(fn () => route('student.receipt.print', ['record'=>$this->record,'tenant'=> $school->id ]))
+                // ->url(fn () => route('student.receipt.print', ['record'=>$this->record,'tenant'=> $ school->id ]))
 
                 ->icon('heroicon-o-printer')
                 ->openUrlInNewTab()
@@ -67,6 +71,7 @@ class ViewPayment extends ViewRecord
     public function downloadReceipt()
     {
         try {
+            
             $school = $this->record->school;
             $fileName = Str::slug("{$school->slug}-receipt-{$this->record->reference}") . '.pdf';
             $directory = storage_path("app/public/{$school->slug}/documents");
@@ -76,7 +81,7 @@ class ViewPayment extends ViewRecord
             if ($school->logo) {
                 // Remove the 'public/' prefix if it exists in the stored path
                 $logoPath = str_replace('public/', '', $school->logo);
-                
+
                 if (Storage::disk('public')->exists($logoPath)) {
                     $fullLogoPath = Storage::disk('public')->path($logoPath);
                     $extension = pathinfo($fullLogoPath, PATHINFO_EXTENSION);
@@ -103,7 +108,8 @@ class ViewPayment extends ViewRecord
                     'paymentMethod'
                 ]),
                 'school' => $school,
-                'viewUrl' => $this->viewUrl,
+                'QrViewUrl' => $this->QrViewUrl,
+                'qrLogo' => $this->qrLogo,
                 'logoData' => $logoData,
                 'isPrintMode' => false
             ])
@@ -148,28 +154,18 @@ class ViewPayment extends ViewRecord
         }
     }
 
-    // public function getQrCodeData()
-    // {
-    //     $payment = $this->record;
-    //     $school = Filament::getTenant();
-
-    //     // Generate the URL to view the payment
-    //     $viewUrl = PaymentResource::getUrl('view', [
-    //         'record' => $payment->id,
-    //         'tenant' => $school->id
-    //     ]);
-
-    //     // Generate QR code with the URL
-    //     return QrCode::size(85)
-    //         ->errorCorrection('H')
-    //         ->format('svg')
-    //         ->generate($viewUrl);
-    // }
-
-    // protected function getViewData(): array
-    // {
-    //     return [
-    //         'qrCode' => $this->getQrCodeData(),
-    //     ];
-    // }
+    protected function getViewData(): array
+    {
+        $this->qrCode = QrCode::format('svg')
+            ->size(72)
+            ->errorCorrection('H')
+            ->margin(1)
+            ->color(0, 0, 0)
+            ->merge($this->qrLogo, 0.3, true)
+            ->generate($this->QrViewUrl);
+        return [
+            'qrUrl' => $this->QrViewUrl,
+            'qrCode' => $this->qrCode,
+        ];
+    }
 }

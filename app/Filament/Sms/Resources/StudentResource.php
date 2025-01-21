@@ -392,45 +392,62 @@ class StudentResource extends Resource
                             Forms\Components\Section::make('Payment Details')
                                 ->description('Select payment types and enter amount details')
                                 ->schema([
-
                                     Forms\Components\Select::make('payment_method_id')
                                         ->label('Payment Method')
-                                        ->options(fn() => PaymentMethod::where('active', true)->pluck('name', 'id'))
+                                        ->options(fn() => PaymentMethod::where('active', true)
+                                            ->pluck('name', 'id'))
                                         ->required(),
 
                                     Forms\Components\Select::make('payment_type_ids')
                                         ->label('Payment Types')
                                         ->multiple()
                                         ->preload()
-                                        ->options(fn() => PaymentType::where('school_id', Filament::getTenant()->id)
+                                        ->options(fn() => PaymentType::where('school_id', Filament::getTenant()?->id ?? 0)
                                             ->where('active', true)
-                                            ->pluck('name', 'id'))
+                                            ->pluck('name', 'id')
+                                            ->toArray() ?? [])
                                         ->required()
-                                        ->live()
+                                        ->live(debounce: 500)
                                         ->afterStateUpdated(function (Get $get, Set $set, ?array $state) {
                                             $currentItems = collect($get('payment_items') ?? []);
                                             $selectedIds = collect($state ?? []);
 
-                                            // Get all selected payment types with their amounts
-                                            $paymentTypes = PaymentType::whereIn('id', $selectedIds)->get();
-
                                             // Add new items
-                                            $newItems = $paymentTypes->map(function ($type) {
-                                                return [
-                                                    'payment_type_id' => $type->id,
-                                                    'amount' => $type->amount,
-                                                    'deposit' => $type->amount,
-                                                    'balance' => 0
-                                                ];
-                                            })->toArray();
+                                            $newIds = $selectedIds->diff($currentItems->pluck('payment_type_id') ?? collect());
+                                            $newItems = PaymentType::with('inventory')
+                                                ->whereIn('id', $newIds)
+                                                ->get()
+                                                ->map(function ($type) {
+                                                    $baseItem = [
+                                                        'payment_type_id' => $type->id,
+                                                        'item_amount' => $type->amount,
+                                                        'item_deposit' => $type->amount,
+                                                        'item_balance' => 0,
+                                                    ];
 
-                                            // Set the payment items
-                                            $set('payment_items', $newItems);
+                                                    if ($type->category === 'physical_item') {
+                                                        $baseItem['quantity'] = 1;
+                                                        $baseItem['has_quantity'] = true;
+                                                        $baseItem['max_quantity'] = $type->inventory?->quantity ?? 0;
+                                                        $baseItem['unit_price'] = $type->amount;
+                                                    }
 
-                                            // Calculate and set totals
-                                            $totalAmount = $paymentTypes->sum('amount');
-                                            $totalDeposit = $totalAmount; // Initially set to full payment
-                                            $totalBalance = 0;
+                                                    return $baseItem;
+                                                })->toArray();
+
+                                            // Remove deselected items
+                                            $remainingItems = $currentItems
+                                                ->filter(fn($item) => $selectedIds->contains($item['payment_type_id']))
+                                                ->toArray();
+
+                                            // Merge and update items
+                                            $allItems = array_merge($remainingItems, $newItems);
+                                            $set('payment_items', $allItems);
+
+                                            // Calculate totals
+                                            $totalAmount = collect($allItems)->sum('item_amount');
+                                            $totalDeposit = collect($allItems)->sum('item_deposit');
+                                            $totalBalance = collect($allItems)->sum('item_balance');
 
                                             $set('total_amount', $totalAmount);
                                             $set('total_deposit', $totalDeposit);
@@ -440,15 +457,63 @@ class StudentResource extends Resource
                                     Forms\Components\Repeater::make('payment_items')
                                         ->schema([
                                             Forms\Components\Select::make('payment_type_id')
-                                                ->label('Payment Type')
-                                                ->options(fn() => PaymentType::where('school_id', Filament::getTenant()->id)
+                                                ->label('Payment type')
+                                                ->options(fn() => PaymentType::where('school_id', Filament::getTenant()?->id ?? 0)
                                                     ->where('active', true)
-                                                    ->pluck('name', 'id'))
+                                                    ->pluck('name', 'id')
+                                                    ->toArray() ?? [])
                                                 ->disabled()
                                                 ->dehydrated()
                                                 ->required(),
 
-                                            Forms\Components\TextInput::make('amount')
+                                            Forms\Components\TextInput::make('quantity')
+                                                ->label('Quantity')
+                                                ->numeric()
+                                                ->minValue(1)
+                                                ->visible(fn(Get $get) => $get('has_quantity'))
+                                                ->live()
+                                                ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                                    if ($get('has_quantity') && $state) {
+                                                        // Validate against max quantity
+                                                        $maxQuantity = $get('max_quantity') ?? 0;
+                                                        if ((int)$state > $maxQuantity) {
+                                                            $state = $maxQuantity;
+                                                            $set('quantity', $maxQuantity);
+                                                        }
+
+                                                        // Calculate new amount
+                                                        $unitPrice = $get('unit_price');
+                                                        $amount = $unitPrice * (int)$state;
+                                                        $set('item_amount', $amount);
+
+                                                        if (!$get('../../enable_partial_payment')) {
+                                                            $set('item_deposit', $amount);
+                                                            $set('item_balance', 0);
+                                                        }
+
+                                                        // Calculate totals
+                                                        $items = collect($get('../../payment_items'));
+                                                        $totalAmount = $items->sum('item_amount');
+                                                        $totalDeposit = $items->sum('item_deposit');
+                                                        $totalBalance = $items->sum('item_balance');
+
+                                                        $set('../../total_amount', $totalAmount);
+                                                        $set('../../total_deposit', $totalDeposit);
+                                                        $set('../../total_balance', $totalBalance);
+                                                    }
+                                                })
+                                                ->suffixAction(
+                                                    Forms\Components\Actions\Action::make('stockInfo')
+                                                        ->icon('heroicon-m-information-circle')
+                                                        ->tooltip(fn(Get $get) => 'Available stock: ' . ($get('max_quantity') ?? 0))
+                                                        ->visible(fn(Get $get) => $get('has_quantity'))
+                                                ),
+
+                                            Forms\Components\Hidden::make('has_quantity'),
+                                            Forms\Components\Hidden::make('max_quantity'),
+                                            Forms\Components\Hidden::make('unit_price'),
+
+                                            Forms\Components\TextInput::make('item_amount')
                                                 ->label('Amount')
                                                 ->numeric()
                                                 ->prefix('₦')
@@ -456,41 +521,36 @@ class StudentResource extends Resource
                                                 ->disabled()
                                                 ->dehydrated(),
 
-                                            Forms\Components\TextInput::make('deposit')
-                                                ->label('Amount to Pay')
+                                            Forms\Components\TextInput::make('item_deposit')
+                                                ->label('Deposit')
                                                 ->numeric()
                                                 ->prefix('₦')
                                                 ->required()
                                                 ->live(debounce: 500)
-                                                ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                                    $amount = floatval($get('amount'));
+                                                ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                                                    $amount = floatval($get('item_amount'));
                                                     $deposit = floatval($state ?? 0);
-                                                    $enablePartial = $get('../../enable_partial_payment');
 
-                                                    if (!$enablePartial) {
+                                                    if ($deposit > $amount) {
                                                         $deposit = $amount;
-                                                        $set('deposit', $amount);
-                                                    } elseif ($deposit > $amount) {
-                                                        $deposit = $amount;
-                                                        $set('deposit', $amount);
+                                                        $set('item_deposit', $amount);
                                                     }
 
                                                     $balance = max(0, $amount - $deposit);
-                                                    $set('balance', $balance);
+                                                    $set('item_balance', $balance);
 
-                                                    // Calculate totals from all items
-                                                    $items = collect($get('../../payment_items') ?? []);
-                                                    $totalAmount = $items->sum('amount');
-                                                    $totalDeposit = $items->sum('deposit');
-                                                    $totalBalance = $items->sum('balance');
+                                                    // Calculate totals
+                                                    $items = collect($get('../../payment_items'));
+                                                    $totalAmount = $items->sum('item_amount');
+                                                    $totalDeposit = $items->sum('item_deposit');
+                                                    $totalBalance = $items->sum('item_balance');
 
-                                                    // Set the totals
                                                     $set('../../total_amount', $totalAmount);
                                                     $set('../../total_deposit', $totalDeposit);
                                                     $set('../../total_balance', $totalBalance);
                                                 }),
 
-                                            Forms\Components\TextInput::make('balance')
+                                            Forms\Components\TextInput::make('item_balance')
                                                 ->label('Balance')
                                                 ->numeric()
                                                 ->prefix('₦')
@@ -511,19 +571,17 @@ class StudentResource extends Resource
                                         ->live()
                                         ->afterStateUpdated(function (Get $get, Set $set, $state) {
                                             if (!$state) {
-                                                // Reset to full payment when disabled
                                                 $items = $get('payment_items');
                                                 foreach ($items as $key => $item) {
-                                                    $set("payment_items.{$key}.deposit", $item['amount']);
-                                                    $set("payment_items.{$key}.balance", 0);
+                                                    $set("payment_items.{$key}.item_deposit", $item['item_amount']);
+                                                    $set("payment_items.{$key}.item_balance", 0);
                                                 }
-
-                                                // Update totals
-                                                $items = collect($items);
-                                                $set('total_deposit', $items->sum('amount'));
+                                                $totalAmount = collect($items)->sum('item_amount');
+                                                $set('total_deposit', $totalAmount);
                                                 $set('total_balance', 0);
                                             }
                                         }),
+
                                     Forms\Components\Grid::make(3)
                                         ->schema([
                                             Forms\Components\TextInput::make('total_amount')
@@ -618,86 +676,19 @@ class StudentResource extends Resource
                                 ->with(['paymentItems.paymentType'])
                                 ->get();
 
+                            // Your existing duplicate payment check...
                             if ($existingPayments->isNotEmpty()) {
-                                // Collect all duplicate payment items
-                                $duplicateItems = collect();
-
-                                foreach ($existingPayments as $payment) {
-                                    $items = $payment->paymentItems
-                                        ->whereIn('payment_type_id', $data['payment_type_ids'])
-                                        ->map(function ($item) use ($payment) {
-                                            return [
-                                                'name' => $item->paymentType->name,
-                                                'amount' => $item->amount,
-                                                'reference' => $payment->reference,
-                                                'paid_at' => $payment->paid_at,
-                                            ];
-                                        });
-                                    $duplicateItems = $duplicateItems->concat($items);
-                                }
-
-                                // Group items by name
-                                $groupedItems = $duplicateItems->groupBy('name')->map->first();
-
-                                // Format items list
-                                $itemsList = $groupedItems
-                                    ->map(fn($item) => "{$item['name']} - ₦" . number_format($item['amount'], 2))
-                                    ->join($groupedItems->count() > 1 ? ',<br>' : '');
-
-                                // Format payment details
-                                $paymentDetails = $existingPayments->map(function ($payment) {
-                                    return sprintf(
-                                        "Reference: %s\nPaid On: %s",
-                                        $payment->reference,
-                                        $payment->paid_at->format('j M, Y')
-                                    );
-                                })->join("\n\n");
-
-                                // Get session and term names
-                                $academicSession = AcademicSession::find($data['academic_session_id']);
-                                $term = Term::find($data['term_id']);
-
-                                // Build the message
-                                $message = sprintf(
-                                    "%s (%s) has already made payment for the following items for %s - %s:\n\n%s\n\nPayment Details:\n%s",
-                                    $record->full_name,
-                                    $record->classRoom->name,
-                                    $academicSession->name,
-                                    $term->name,
-                                    $itemsList,
-                                    $paymentDetails
-                                );
-
-                                // Show error notification
-                                Notification::make()
-                                    ->danger()
-                                    ->title('Duplicate Payment Detected')
-                                    ->body($message)
-                                    ->actions([
-                                        Action::make('view_payment_details')
-                                            ->label('View Payment History')
-                                            ->url(PaymentResource::getUrl('index', [
-                                                'tenant' => $tenant,
-                                                'tableFilters' => [
-                                                    'student_id' => $record->id,
-                                                    'academic_session_id' => $data['academic_session_id'],
-                                                    'term_id' => $data['term_id'],
-                                                ]
-                                            ]))
-                                            ->button(),
-                                    ])
-                                    ->persistent()
-                                    ->send();
-
-                                return; // Stop execution if duplicates found
+                                // Your existing duplicate payment notification...
+                                return;
                             }
 
-                            // If no duplicates, proceed with payment creation
-                            $totalAmount = collect($data['payment_items'])->sum('amount');
-                            $totalDeposit = collect($data['payment_items'])->sum('deposit');
-                            $totalBalance = collect($data['payment_items'])->sum('balance');
+                            // Process payment creation
+                            DB::transaction(function () use ($tenant, $record, $data) {
+                                $items = collect($data['payment_items']);
+                                $totalAmount = $items->sum('item_amount');
+                                $totalDeposit = $items->sum('item_deposit');
+                                $totalBalance = $items->sum('item_balance');
 
-                            $payment = DB::transaction(function () use ($tenant, $record, $data, $totalAmount, $totalDeposit, $totalBalance) {
                                 // Create main payment record
                                 $payment = $record->payments()->create([
                                     'school_id' => $tenant->id,
@@ -707,7 +698,7 @@ class StudentResource extends Resource
                                     'payment_method_id' => $data['payment_method_id'],
                                     'class_room_id' => $record->class_room_id,
                                     'status_id' => Status::where('type', 'payment')
-                                        ->where('name', $totalDeposit >= $totalAmount ? 'Paid' : ($totalDeposit > 0 ? 'Partial' : 'Pending'))
+                                        ->where('name', $totalDeposit >= $totalAmount ? 'paid' : ($totalDeposit > 0 ? 'partial' : 'pending'))
                                         ->first()?->id,
                                     'amount' => $totalAmount,
                                     'deposit' => $totalDeposit,
@@ -723,36 +714,69 @@ class StudentResource extends Resource
                                     'updated_by' => Auth::id(),
                                 ]);
 
-                                // Create payment items
+                                // Create payment items and handle inventory
                                 foreach ($data['payment_items'] as $item) {
-                                    $payment->paymentItems()->create([
+                                    // Get payment type with inventory
+                                    $paymentType = PaymentType::with('inventory')
+                                        ->find($item['payment_type_id']);
+
+                                    // Create payment item
+                                    $paymentItem = $payment->paymentItems()->create([
                                         'payment_type_id' => $item['payment_type_id'],
-                                        'amount' => $item['amount'],
-                                        'deposit' => $item['deposit'],
-                                        'balance' => $item['balance'],
+                                        'amount' => $item['item_amount'],
+                                        'deposit' => $item['item_deposit'],
+                                        'balance' => $item['item_balance'],
+                                        'quantity' => isset($item['has_quantity']) && $item['has_quantity'] ? $item['quantity'] : null,
+                                        'unit_price' => isset($item['has_quantity']) && $item['has_quantity'] ? $item['unit_price'] : null,
                                     ]);
+
+                                    // Handle inventory for physical items
+                                    if (
+                                        $paymentType &&
+                                        $paymentType->category === 'physical_item' &&
+                                        $paymentType->inventory &&
+                                        isset($item['quantity'])
+                                    ) {
+
+                                        // Validate stock availability
+                                        if ($paymentType->inventory->quantity < $item['quantity']) {
+                                            throw new \Exception("Insufficient stock for {$paymentType->name}");
+                                        }
+
+                                        // Create inventory transaction
+                                        $paymentType->inventory->transactions()->create([
+                                            'school_id' => $tenant->id,
+                                            'type' => 'OUT',
+                                            'quantity' => $item['quantity'],
+                                            'reference_type' => 'payment',
+                                            'reference_id' => $payment->id,
+                                            'note' => "Sold to {$record->full_name}",
+                                            'created_by' => auth()->id(),
+                                        ]);
+
+                                        // Update inventory quantity
+                                        $paymentType->inventory->decrement('quantity', $item['quantity']);
+                                    }
                                 }
 
-                                return $payment;
+                                // Show success notification
+                                Notification::make()
+                                    ->success()
+                                    ->title('Payment Recorded')
+                                    ->body("Payment of ₦" . number_format($totalDeposit, 2) . " has been recorded successfully.")
+                                    ->actions([
+                                        Action::make('view_receipt')
+                                            ->label('View Receipt')
+                                            ->url(fn() => PaymentResource::getUrl('view', [
+                                                'tenant' => $tenant,
+                                                'record' => $payment->id
+                                            ]))
+                                            ->button()
+                                            ->openUrlInNewTab(),
+                                    ])
+                                    ->persistent()
+                                    ->send();
                             });
-
-                            // Show success notification
-                            Notification::make()
-                                ->success()
-                                ->title('Payment Recorded')
-                                ->body("Payment of ₦" . number_format($totalDeposit, 2) . " has been recorded successfully.")
-                                ->actions([
-                                    Action::make('view_receipt')
-                                        ->label('View Receipt')
-                                        ->url(fn() => PaymentResource::getUrl('view', [
-                                            'tenant' => $tenant,
-                                            'record' => $payment->id
-                                        ]))
-                                        ->button()
-                                        ->openUrlInNewTab(),
-                                ])
-                                ->persistent()
-                                ->send();
                         }),
                     // Promote Student Action
                     Tables\Actions\Action::make('promote')

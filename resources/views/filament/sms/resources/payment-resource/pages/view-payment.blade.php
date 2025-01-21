@@ -40,8 +40,9 @@
                     <div class="flex sm:flex-col justify-between sm:text-right">
                         <!-- QR Code (Hidden on mobile) -->
                         <div
-                            class="hidden sm:flex sm:mb-4 w-24 h-24 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg items-center justify-center self-end ml-auto">
-                            <span class="text-xs text-gray-400 dark:text-gray-500">QR Code</span>
+                            class="hidden sm:flex sm:mb-4 w-20 h-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg items-center justify-center self-end ml-auto">
+            
+                            {!! $qrCode !!}
                         </div>
 
                         <!-- Receipt Info -->
@@ -139,13 +140,16 @@
             <!-- Payment Details -->
             <!-- Updated Payment Details Section -->
             <div class="p-4 sm:p-6 md:p-8">
-                <!-- Modified Headers -->
+                <!-- Payment Details Grid Headers -->
                 <div class="grid grid-cols-12 gap-2 sm:gap-4 pb-3 border-b border-gray-200 dark:border-gray-700">
                     <div class="col-span-3 text-left text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
                         Payment Type
                     </div>
                     <div class="col-span-2 text-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
-                        Method
+                        Payment Method
+                    </div>
+                    <div class="col-span-1 text-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Qty
                     </div>
                     <div class="col-span-2 text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
                         Amount
@@ -153,12 +157,13 @@
                     <div class="col-span-2 text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
                         Paid
                     </div>
-                    <div class="col-span-3 text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                    <div class="col-span-2 text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
                         Balance
                     </div>
                 </div>
 
                 <!-- Updated Payment Rows -->
+                <!-- Payment Items -->
                 @foreach ($this->record->paymentItems as $item)
                     <div class="grid grid-cols-12 gap-2 sm:gap-4 py-3 border-b border-gray-200 dark:border-gray-700">
                         <div class="col-span-3 text-left text-xs sm:text-sm text-gray-900 dark:text-gray-300">
@@ -166,6 +171,9 @@
                         </div>
                         <div class="col-span-2 text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                             {{ $this->record->paymentMethod?->name }}
+                        </div>
+                        <div class="col-span-1 text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                            {{ $item->paymentType?->category === 'physical_item' ? $item->quantity : '-' }}
                         </div>
                         <div
                             class="col-span-2 text-right text-xs sm:text-sm text-gray-900 dark:text-gray-300 font-medium">
@@ -175,7 +183,7 @@
                             class="col-span-2 text-right text-xs sm:text-sm text-green-600 dark:text-green-400 font-medium">
                             {{ formatNaira($item->deposit) }}
                         </div>
-                        <div class="col-span-3 text-right text-xs sm:text-sm">
+                        <div class="col-span-2 text-right text-xs sm:text-sm">
                             <span @class([
                                 'font-medium',
                                 'text-gray-900 dark:text-gray-300' => $item->balance == 0,
@@ -238,15 +246,18 @@
 
             <!-- Terms -->
             <div class="px-4 sm:px-6 md:px-8 py-4 sm:py-6">
-                <h3 class="font-medium text-xs sm:text-sm text-gray-900 dark:text-gray-300 mb-2 sm:mb-3">Terms & Notes:
-                </h3>
-                <ul class="list-disc list-inside space-y-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                    <li>Payment is non-refundable.</li>
-                    <li>Please keep this receipt for your records.</li>
-                    @if ($this->record->remark)
-                        <li>{{ $this->record->remark }}</li>
-                    @endif
-                </ul>
+                @if ($this->record->shouldShowTerms())
+                    <h3 class="font-medium text-xs sm:text-sm text-gray-900 dark:text-gray-300 mb-2 sm:mb-3">Terms &
+                        Notes:</h3>
+                    <ul class="list-disc list-inside space-y-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                        @foreach ($this->record->getTerms() as $term)
+                            <li>{{ $term }}</li>
+                        @endforeach
+                        @if ($this->record->remark)
+                            <li>{{ $this->record->remark }}</li>
+                        @endif
+                    </ul>
+                @endif
             </div>
 
             <!-- Footer -->
@@ -257,6 +268,7 @@
                 <p class="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">
                     Generated on {{ Carbon\Carbon::now()->format('F j, Y g:i A') }}
                 </p>
+
             </div>
         </div>
     </div>

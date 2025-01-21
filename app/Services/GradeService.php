@@ -322,7 +322,7 @@ class GradeService
         if (!$termComment) {
             return [];
         }
-
+// dd($termComment);
         $teacherStaff = null;
         $principalStaff = null;
 

@@ -368,7 +368,7 @@ class TermReports extends Page implements HasForms
                 'activities' => $activitiesConfig['sections'],
                 'generated_at' => now()
             ];
-            // dd($this->report);
+            // dd($this->report['comments']);
             $duration = microtime(true) - $startTime;
             $fromCache = $duration < 0.1;
 
