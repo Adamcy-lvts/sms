@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('subscriptions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('plan_id')->constrained()->onDelete('cascade');
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->string('subscription_code')->nullable();
             $table->string('status')->default('active'); // Subscription status: active, cancelled, paused
             $table->timestamp('starts_at'); // The start date of the subscription
@@ -26,6 +26,7 @@ return new class extends Migration
             $table->boolean('is_on_trial')->default(false); // Whether the subscription is a trial
             $table->string('token')->nullable(); // A token for handling subscription verification
             $table->json('features')->nullable(); // Features included in the subscription, can store JSON data
+            $table->softDeletes();
             $table->timestamps();
 
             $table->index('school_id');

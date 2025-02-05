@@ -55,6 +55,8 @@ use Filament\Pages\Auth\Register as AuthRegister;
 use Filament\Http\Responses\Auth\Contracts\RegistrationResponse;
 use DanHarrin\LivewireRateLimiting\Exceptions\TooManyRequestsException;
 use App\Models\Staff;
+use Filament\Forms\Components\Checkbox;
+use App\Services\LegalDocumentService;
 
 class Register extends AuthRegister
 {
@@ -68,6 +70,14 @@ class Register extends AuthRegister
     protected string $userModel;
     public $planId;
     public $billing;
+    // public LegalDocumentService $legalDocs;
+
+    // lets' add a boot method to set the user model
+    // public function boot(LegalDocumentService $legalDocs): void
+    // {
+    //     $this->legalDocs = $legalDocs;
+    // }
+
 
     // Also update the mount method:
     public function mount(): void
@@ -91,6 +101,8 @@ class Register extends AuthRegister
 
     public function form(Form $form): Form
     {
+        $legalDocs = new LegalDocumentService();
+
         return $form
             ->schema([
                 Wizard::make([
@@ -320,6 +332,13 @@ class Register extends AuthRegister
                                             ->visible(fn(Get $get) => $get('create_subjects')),
                                     ]),
                                 ]),
+
+                            Checkbox::make('terms_accepted')
+                                ->label(new HtmlString('I accept the <a href="' . $legalDocs->getTermsUrl() . '" class="text-primary-600 hover:text-primary-500" target="_blank">Terms of Service</a> and <a href="' . $legalDocs->getPrivacyUrl() . '" class="text-primary-600 hover:text-primary-500" target="_blank">Privacy Policy</a>'))
+                                ->required()
+                                ->rules(['accepted'])
+                                ->columnSpanFull(),
+
                         ]),
                 ])
                     ->submitAction(new HtmlString(Blade::render(<<<BLADE
@@ -335,6 +354,13 @@ class Register extends AuthRegister
 
     public function register(): ?RegistrationResponse
     {
+        // Add terms validation
+        $this->validate([
+            'data.terms_accepted' => 'accepted',
+        ], [
+            'data.terms_accepted.accepted' => 'You must accept the Terms of Service and Privacy Policy to continue.',
+        ]);
+
         try {
             $this->rateLimit(2);
 
@@ -359,8 +385,8 @@ class Register extends AuthRegister
 
                 // Setup school configurations using the service
                 $setupService = new SchoolSetupService();
-                
-                
+
+
                 // Continue
                 $setupService->setup($school, $data, $user);
 
@@ -470,6 +496,5 @@ class Register extends AuthRegister
         if ($agent) {
             $school->update(['agent_id' => $agent->id]);
         }
-
     }
 }

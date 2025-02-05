@@ -21,7 +21,7 @@ class ViewClassRoom extends ViewRecord
    {
        return [
            ClassRoomResource\Widgets\TeachersTable::class,
-           ClassRoomResource\Widgets\SubjectsTable::class,
+        //    ClassRoomResource\Widgets\SubjectsTable::class,
            ClassRoomResource\Widgets\BooksTable::class
        ];
    }

@@ -37,6 +37,8 @@ use Illuminate\Validation\Rules\Password;
 use Filament\Forms\Components\ColorPicker;
 use Illuminate\Database\Eloquent\Collection;
 use App\Filament\Resources\SchoolResource\Pages;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Resources\SchoolResource\RelationManagers\SuperAdminsRelationManager;
 use App\Filament\Resources\SchoolResource\RelationManagers\SubscriptionsRelationManager;
 
 class SchoolResource extends Resource
@@ -224,7 +226,7 @@ class SchoolResource extends Resource
                     ->label('Current Plan')
                     ->getStateUsing(function ($record) {
                         try {
-                            $subscription = $record->currentSubscription();
+                            $subscription = $record->currentSubscription;
                             return $subscription?->plan?->name ?? 'No Active Plan';
                         } catch (\Exception $e) {
                             return 'No Active Plan';
@@ -233,7 +235,7 @@ class SchoolResource extends Resource
                     ->badge()
                     ->color(function ($record) {
                         try {
-                            return $record->currentSubscription()?->plan ? 'success' : 'danger';
+                            return $record->currentSubscription?->plan ? 'success' : 'danger';
                         } catch (\Exception $e) {
                             return 'danger';
                         }
@@ -275,6 +277,7 @@ class SchoolResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+
                 Action::make('manage_subscription')
                     ->label(fn($record) => $record->currentSubscription()
                         ? 'Change Plan'
@@ -338,6 +341,8 @@ class SchoolResource extends Resource
                         });
                     }),
 
+                Tables\Actions\ForceDeleteAction::make(),
+                Tables\Actions\RestoreAction::make(),
                 Tables\Actions\DeleteAction::make()
                     ->before(function (School $record) {
                         if ($record->currentSubscription()) {
@@ -364,6 +369,8 @@ class SchoolResource extends Resource
                                 $this->halt();
                             }
                         }),
+                    Tables\Actions\ForceDeleteBulkAction::make(),
+                    Tables\Actions\RestoreBulkAction::make(),
                 ]),
             ])
             ->defaultSort('created_at', 'desc');
@@ -373,6 +380,7 @@ class SchoolResource extends Resource
     {
         return [
             SubscriptionsRelationManager::class,
+            SuperAdminsRelationManager::class,
             // RelationManagers\StudentsRelationManager::class,
             // RelationManagers\StaffRelationManager::class,
         ];
@@ -396,6 +404,14 @@ class SchoolResource extends Resource
             'Africa/Nairobi' => 'Nairobi (GMT+3)',
             // Add more as needed
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]);
     }
 
     public static function getGloballySearchableAttributes(): array

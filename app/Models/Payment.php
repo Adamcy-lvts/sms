@@ -32,6 +32,9 @@ class Payment extends Model
         'term_id',
         'original_payment_id',
         'is_balance_payment',
+        'is_tuition',
+        'payment_plan_type',
+        'payment_category',
         'reference',
         'payer_name',
         'payer_phone_number',
@@ -47,6 +50,7 @@ class Payment extends Model
     ];
 
     protected $casts = [
+        'is_tuition' => 'boolean',
         'is_balance_payment' => 'boolean',
         'meta_data' => 'array',
         'due_date' => 'datetime',
@@ -159,8 +163,19 @@ class Payment extends Model
     {
         return $this->belongsTo(ClassRoom::class, 'class_room_id');
     }
-    
 
-    
-    
+    public function scopeForSession($query, $sessionId)
+    {
+        return $query->where('academic_session_id', $sessionId);
+    }
+
+    public function scopeForTerm($query, $termId)
+    {
+        return $query->where('term_id', $termId);
+    }
+
+    public function scopeTuitionPayments($query)
+    {
+        return $query->where('is_tuition', true);
+    }
 }

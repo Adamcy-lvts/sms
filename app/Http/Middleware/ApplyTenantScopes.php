@@ -22,11 +22,15 @@ use App\Models\ClassRoom;
 use App\Models\Designation;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
+use App\Models\Feature;
 use App\Models\GradingScale;
+use App\Models\Inventory;
+use App\Models\InventoryTransaction;
 use App\Models\Payment;
 use App\Models\PaymentHistory;
 use App\Models\PaymentItem;
 use App\Models\PaymentMethod;
+use App\Models\PaymentPlan;
 use App\Models\PaymentType;
 use App\Models\Permission;
 use App\Models\Qualification;
@@ -50,6 +54,7 @@ use App\Models\SubscriptionReceipt;
 use App\Models\Teacher;
 use App\Models\StatusChange;
 use App\Models\StudentMovement;
+use App\Models\StudentPaymentPlan;
 use App\Models\TemplateVariable;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpFoundation\Response;
@@ -236,8 +241,27 @@ class ApplyTenantScopes
             fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
         );
 
+        PaymentPlan::addGlobalScope(
+            fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
+        );
+
+        StudentPaymentPlan::addGlobalScope(
+            fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
+        );
+
+        Inventory::addGlobalScope(
+            fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
+        );
+
+        InventoryTransaction::addGlobalScope(
+            fn(Builder $query) => $query->whereBelongsTo(Filament::getTenant()),
+        );
 
         
+
+
+
+
         return $next($request);
     }
 }

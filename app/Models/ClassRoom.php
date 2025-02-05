@@ -20,21 +20,11 @@ class ClassRoom extends Model
     protected $fillable = [
         'name',
         'slug',
+        'level',
         'school_id',
         'capacity',
     ];
 
-    public function getLevel(): string
-    {
-        if (str_contains(strtolower($this->name), 'nursery')) {
-            return PaymentType::LEVELS['NURSERY'];
-        }
-        if (str_contains(strtolower($this->name), 'primary')) {
-            return PaymentType::LEVELS['PRIMARY'];
-        }
-        // Both JSS and SSS return SECONDARY
-        return PaymentType::LEVELS['SECONDARY'];
-    }
 
     public function school()
     {
@@ -51,6 +41,13 @@ class ClassRoom extends Model
         return $this->hasMany(Staff::class);
     }
 
+
+    public function teachers()
+    {
+        return $this->belongsToMany(Teacher::class);
+    }
+
+
     public function subjects()
     {
         return $this->belongsToMany(Subject::class, 'class_room_subject');
@@ -59,5 +56,25 @@ class ClassRoom extends Model
     public function books()
     {
         return $this->hasMany(Book::class);
+    }
+
+    // Add helper method for level
+    public function getLevel(): ?string
+    {
+        // Extract level from class name or use stored level
+        return $this->level ?? $this->determineLevelFromName();
+    }
+
+    protected function determineLevelFromName(): ?string
+    {
+        $name = strtolower($this->name);
+
+        if (str_contains($name, 'nursery')) return 'nursery';
+        if (str_contains($name, 'primary')) return 'primary';
+        if (str_contains($name, 'secondary') || str_contains($name, 'jss') || str_contains($name, 'sss')) {
+            return 'secondary';
+        }
+
+        return null;
     }
 }

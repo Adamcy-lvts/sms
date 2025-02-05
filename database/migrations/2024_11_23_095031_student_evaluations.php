@@ -11,7 +11,7 @@ return new class extends Migration
         // Store activity types (e.g., Sports, Music, Art, etc.)
         Schema::create('activity_types', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->string('name');
             $table->string('code')->nullable();
             $table->text('description')->nullable();
@@ -21,6 +21,7 @@ return new class extends Migration
             $table->integer('display_order')->default(0);
             $table->string('icon')->nullable();
             $table->string('color')->nullable();
+            $table->softDeletes();
             $table->timestamps();
 
             // Ensure unique names within each school

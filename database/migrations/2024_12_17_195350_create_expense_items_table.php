@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('expense_items', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('school_id');
             $table->foreignId('expense_category_id')->constrained()->cascadeOnDelete();
             $table->string('name');
             $table->string('unit')->default('piece'); // piece, rim, box, etc.
@@ -28,6 +28,7 @@ return new class extends Migration
             $table->json('specifications')->nullable();
             $table->timestamp('last_purchase_date')->nullable();
             $table->decimal('last_purchase_price', 10, 2)->nullable();
+            $table->softDeletes();
             $table->timestamps();
 
             $table->unique(['school_id', 'expense_category_id', 'name']);

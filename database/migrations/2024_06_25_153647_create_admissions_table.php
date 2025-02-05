@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('admissions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->foreignId('academic_session_id')->constrained('academic_sessions')->onDelete('cascade');
             $table->string('session')->nullable();
             $table->string('first_name');
@@ -53,7 +53,7 @@ return new class extends Migration
              $table->string('emergency_contact_relationship');
              $table->string('emergency_contact_phone_number');
              $table->string('emergency_contact_email')->nullable();
-
+             $table->softDeletes();
 
             
             $table->timestamps();

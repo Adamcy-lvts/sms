@@ -17,19 +17,26 @@ use App\Helpers\Options;
 use Filament\Forms\Form;
 use App\Models\ClassRoom;
 use Filament\Tables\Table;
+use App\Models\PaymentPlan;
 use App\Models\PaymentType;
+use Filament\Support\RawJs;
 use App\Models\PaymentMethod;
 use Filament\Facades\Filament;
 use App\Models\AcademicSession;
 use App\Models\StudentMovement;
 use Illuminate\Validation\Rule;
 use Filament\Resources\Resource;
+use App\Models\StudentPaymentPlan;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
+use Filament\Forms\Components\Grid;
 use Illuminate\Support\Facades\Log;
+use Filament\Forms\Components\Radio;
 use Illuminate\Support\Facades\Auth;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Wizard;
 use Illuminate\Support\Facades\Blade;
 use App\Services\StudentStatusService;
@@ -38,23 +45,47 @@ use Filament\Forms\Components\Fieldset;
 use Filament\Forms\Components\Textarea;
 use Illuminate\Database\Eloquent\Model;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ViewField;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Notifications\Actions\Action;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Sms\Resources\StudentResource\Pages;
+use BezhanSalleh\FilamentShield\Contracts\HasShieldPermissions;
 use App\Filament\Sms\Resources\StudentResource\RelationManagers;
 
-class StudentResource extends Resource
+class StudentResource extends Resource implements HasShieldPermissions
 {
     protected static ?string $model = Student::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
     protected static ?string $navigationGroup = 'School Management';
+
+    public static function getPermissionPrefixes(): array
+    {
+        // These permissions will only be generated for the Student resource
+        return [
+            'view',
+            'view_any',
+            'create',
+            'update',
+            'delete',
+            'delete_any',
+            'promote', 
+            'change_status',
+            'record_payment',
+            'bulk_promote',
+            'bulk_status_change',
+            'bulk_payment',
+            'import',
+            'profile', // Changed from 'student_profile' to just 'profile'
+        ];
+    }
 
     public static function form(Form $form): Form
     {
@@ -205,11 +236,12 @@ class StudentResource extends Resource
 
     protected static function getSimpleStudentForm(): array
     {
+        $school = Filament::getTenant();
         return [
             Fieldset::make('Student Information')
                 ->schema([
                     TextInput::make('school_id')->hidden(),
-                    FileUpload::make('profile_picture')->label('Profile Picture')->required()->columnSpanFull(),
+                    FileUpload::make('profile_picture')->label('Profile Picture')->disk('public')->directory("{$school->slug}/student_profile_pictures")->columnSpan(2),
                     TextInput::make('first_name')->label('First Name')->required(),
                     TextInput::make('last_name')->label('Last Name')->required(),
                     TextInput::make('middle_name')->label('Middle Name'),
@@ -270,7 +302,7 @@ class StudentResource extends Resource
                         default => 'gray',
                     })
                     ->searchable()
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('status.name')
                     ->label('Status')
@@ -312,6 +344,93 @@ class StudentResource extends Resource
                     ->date('d M Y')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('payment_status')
+                    ->label('School/Tuition Fees Status')
+                    ->badge()
+                    ->formatStateUsing(function (Model $record) {
+                        $currentSession = config('app.current_session');
+                        $currentTerm = config('app.current_term');
+
+                        // Check for session payment first
+                        $sessionPayment = Payment::where('student_id', $record->id)
+                            ->where('academic_session_id', $currentSession?->id)
+                            ->where('is_tuition', true)
+                            ->where('payment_plan_type', 'session')
+                            ->whereHas('status', fn($q) => $q->where('name', 'paid'))
+                            ->first();
+
+                        if ($sessionPayment) {
+                            return 'Full Session Paid';
+                        }
+
+                        // Check for term payment
+                        $termPayment = Payment::where('student_id', $record->id)
+                            ->where('term_id', $currentTerm?->id)
+                            ->where('is_tuition', true)
+                            ->where('payment_plan_type', 'term')
+                            ->whereHas('status', fn($q) => $q->where('name', 'paid'))
+                            ->first();
+
+                        if ($termPayment) {
+                            return 'Current Term Paid';
+                        }
+
+                        // Check for partial payments
+                        $partialPayment = Payment::where('student_id', $record->id)
+                            ->where('academic_session_id', $currentSession?->id)
+                            ->where('is_tuition', true)
+                            ->whereHas('status', fn($q) => $q->where('name', 'partial'))
+                            ->first();
+
+                        if ($partialPayment) {
+                            return 'Partial Payment';
+                        }
+
+                        return 'Not Paid';
+                    })
+                    ->color(fn(string $state): string => match ($state) {
+                        'Full Session Paid' => 'success',
+                        'Current Term Paid' => 'info',
+                        'Partial Payment' => 'warning',
+                        'Not Paid' => 'danger',
+                        default => 'gray',
+                    })
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        $currentSession = config('app.current_session');
+                        $currentTerm = config('app.current_term');
+
+                        return $query
+                            ->leftJoin('payments', function ($join) use ($currentSession, $currentTerm) {
+                                $join->on('students.id', '=', 'payments.student_id')
+                                    ->where('payments.is_tuition', true)
+                                    ->where(function ($q) use ($currentSession, $currentTerm) {
+                                        $q->where(function ($sq) use ($currentSession) {
+                                            $sq->where('academic_session_id', $currentSession?->id)
+                                                ->where('payment_plan_type', 'session');
+                                        })->orWhere(function ($sq) use ($currentTerm) {
+                                            $sq->where('term_id', $currentTerm?->id)
+                                                ->where('payment_plan_type', 'term');
+                                        });
+                                    });
+                            })
+                            ->orderBy('payments.payment_plan_type', $direction)
+                            ->orderBy('payments.status_id', $direction)
+                            ->select('students.*');
+                    })
+                    ->description(function (Model $record) {
+                        $currentSession = config('app.current_session');
+
+                        $payment = Payment::where('student_id', $record->id)
+                            ->where('academic_session_id', $currentSession?->id)
+                            ->where('is_tuition', true)
+                            ->latest('paid_at')
+                            ->first();
+
+                        if (!$payment) return null;
+
+                        return "Last paid: " . $payment->paid_at->format('j M, Y');
+                    }),
             ])
             ->defaultSort('admission.admission_number', 'desc')
             ->filters([
@@ -334,6 +453,100 @@ class StudentResource extends Resource
                     ->options(fn() => Status::where('type', 'student')->pluck('name', 'id')->toArray())
                     ->multiple()
                     ->preload(),
+
+                Tables\Filters\Filter::make('payment_status')
+                    ->form([
+                        Forms\Components\Select::make('payment_status')
+                            ->label('Tuition Payment Status')
+                            ->multiple()
+                            ->options([
+                                'no_payment' => 'No Payment Made',
+                                'full_session_paid' => 'Full Session Paid',
+                                'current_term_paid' => 'Current Term Paid',
+                                'partial_payment' => 'Partial Payment',
+                                'defaulters' => 'All Defaulters'
+                            ])
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query->when($data['payment_status'] ?? null, function ($query) use ($data) {
+                            $currentSession = config('app.current_session');
+                            $currentTerm = config('app.current_term');
+
+                            $query->where(function ($q) use ($data, $currentSession, $currentTerm) {
+                                foreach ($data['payment_status'] as $status) {
+                                    switch ($status) {
+                                        case 'no_payment':
+                                            $q->orWhereDoesntHave('payments', function ($query) use ($currentSession) {
+                                                $query->where('is_tuition', true)
+                                                    ->where('academic_session_id', $currentSession->id);
+                                            });
+                                            break;
+
+                                        case 'full_session_paid':
+                                            $q->orWhereHas('payments', function ($query) use ($currentSession) {
+                                                $query->where('is_tuition', true)
+                                                    ->where('academic_session_id', $currentSession->id)
+                                                    ->where('payment_plan_type', 'session')
+                                                    ->whereColumn('deposit', '>=', 'amount')
+                                                    ->whereHas(
+                                                        'status',
+                                                        fn($sq) =>
+                                                        $sq->where('name', 'paid')
+                                                    );
+                                            });
+                                            break;
+
+                                        case 'current_term_paid':
+                                            $q->orWhereHas('payments', function ($query) use ($currentTerm) {
+                                                $query->where('is_tuition', true)
+                                                    ->where('term_id', $currentTerm->id)
+                                                    ->where('payment_plan_type', 'term')
+                                                    ->whereColumn('deposit', '>=', 'amount')
+                                                    ->whereHas(
+                                                        'status',
+                                                        fn($sq) =>
+                                                        $sq->where('name', 'paid')
+                                                    );
+                                            });
+                                            break;
+
+                                        case 'partial_payment':
+                                            $q->orWhereHas('payments', function ($query) use ($currentSession) {
+                                                $query->where('is_tuition', true)
+                                                    ->where('academic_session_id', $currentSession->id)
+                                                    ->whereColumn('deposit', '<', 'amount')
+                                                    ->whereHas(
+                                                        'status',
+                                                        fn($sq) =>
+                                                        $sq->where('name', 'partial')
+                                                    );
+                                            });
+                                            break;
+
+                                        case 'defaulters':
+                                            $q->orWhere(function ($query) use ($currentSession) {
+                                                $query->whereDoesntHave('payments', function ($sq) use ($currentSession) {
+                                                    $sq->where('is_tuition', true)
+                                                        ->where('academic_session_id', $currentSession->id);
+                                                })->orWhereHas('payments', function ($sq) use ($currentSession) {
+                                                    $sq->where('is_tuition', true)
+                                                        ->where('academic_session_id', $currentSession->id)
+                                                        ->where(function ($subsq) {
+                                                            $subsq->whereColumn('deposit', '<', 'amount')
+                                                                ->orWhereHas(
+                                                                    'status',
+                                                                    fn($status) =>
+                                                                    $status->whereIn('name', ['pending', 'partial'])
+                                                                );
+                                                        });
+                                                });
+                                            });
+                                            break;
+                                    }
+                                }
+                            });
+                        });
+                    }),
 
                 Tables\Filters\Filter::make('admitted_date')
                     ->form([
@@ -360,426 +573,336 @@ class StudentResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ActionGroup::make([
-                    Tables\Actions\ViewAction::make(),
+                    Tables\Actions\ViewAction::make(), 
                     Tables\Actions\EditAction::make(),
-                    Tables\Actions\Action::make('recordPayment')
+                      
+                    Tables\Actions\Action::make('payTuition')
+                        ->visible(fn(): bool => auth()->user()->can('record_payment_student'))
                         ->icon('heroicon-o-banknotes')
                         ->color('success')
-                        ->form([
-                            Forms\Components\Section::make('Academic Information')
-                                ->description('Select academic session and term')
-                                ->schema([
-                                    Forms\Components\Grid::make(2)
-                                        ->schema([
-                                            Forms\Components\Select::make('academic_session_id')
-                                                ->label('Academic Session')
-                                                ->options(fn() => AcademicSession::query()
-                                                    ->where('school_id', Filament::getTenant()->id)
-                                                    ->pluck('name', 'id'))
-                                                ->default(fn() => config('app.current_session')->id)
-                                                ->required(),
+                        ->label('Pay Tuition')
+                        ->modalHeading(fn(Student $record) => "Record Tuition Payment for {$record->full_name}")
+                        ->modalDescription(fn(Student $record) => "Class: {$record->classRoom?->name}")
+                        ->form(function (Student $record) {
+                            $session = config('app.current_session');
+                            $term = config('app.current_term');
+                            $classLevel = $record->classRoom?->level;
 
-                                            Forms\Components\Select::make('term_id')
-                                                ->label('Term')
-                                                ->options(fn(Get $get) => Term::query()
-                                                    ->where('academic_session_id', $get('academic_session_id'))
-                                                    ->pluck('name', 'id'))
-                                                ->default(fn() => config('app.current_term')->id)
-                                                ->required(),
-                                        ]),
-                                ])->collapsible(),
+                            // Get tuition payment type for this class level
+                            $tuitionType = PaymentType::query()
+                                ->where('school_id', Filament::getTenant()->id)
+                                ->where('is_tuition', true)
+                                ->whereHas('paymentPlans', function ($query) use ($classLevel) {
+                                    $query->where('class_level', $classLevel);
+                                })
+                                ->first();
 
-                            Forms\Components\Section::make('Payment Details')
-                                ->description('Select payment types and enter amount details')
-                                ->schema([
-                                    Forms\Components\Select::make('payment_method_id')
-                                        ->label('Payment Method')
-                                        ->options(fn() => PaymentMethod::where('active', true)
-                                            ->pluck('name', 'id'))
-                                        ->required(),
+                            // Calculate default amounts for session payment
+                            $defaultPlanType = 'session';
+                            $defaultAmount = $tuitionType?->getAmountForClass($classLevel, $defaultPlanType) ?? 0;
 
-                                    Forms\Components\Select::make('payment_type_ids')
-                                        ->label('Payment Types')
-                                        ->multiple()
-                                        ->preload()
-                                        ->options(fn() => PaymentType::where('school_id', Filament::getTenant()?->id ?? 0)
-                                            ->where('active', true)
-                                            ->pluck('name', 'id')
-                                            ->toArray() ?? [])
-                                        ->required()
-                                        ->live(debounce: 500)
-                                        ->afterStateUpdated(function (Get $get, Set $set, ?array $state) {
-                                            $currentItems = collect($get('payment_items') ?? []);
-                                            $selectedIds = collect($state ?? []);
+                            return [
+                                Grid::make(['default' => 1, 'lg' => 3])
+                                    ->schema([
+                                        Section::make('Payment Information')
+                                            ->columnSpan(1)
+                                            ->schema([
+                                                TextInput::make('student_name')
+                                                    ->label('Student')
+                                                    ->default($record->full_name)
+                                                    ->disabled(),
 
-                                            // Add new items
-                                            $newIds = $selectedIds->diff($currentItems->pluck('payment_type_id') ?? collect());
-                                            $newItems = PaymentType::with('inventory')
-                                                ->whereIn('id', $newIds)
-                                                ->get()
-                                                ->map(function ($type) {
-                                                    $baseItem = [
-                                                        'payment_type_id' => $type->id,
-                                                        'item_amount' => $type->amount,
-                                                        'item_deposit' => $type->amount,
-                                                        'item_balance' => 0,
-                                                    ];
+                                                TextInput::make('class_name')
+                                                    ->label('Class')
+                                                    ->default($record->classRoom?->name)
+                                                    ->disabled(),
 
-                                                    if ($type->category === 'physical_item') {
-                                                        $baseItem['quantity'] = 1;
-                                                        $baseItem['has_quantity'] = true;
-                                                        $baseItem['max_quantity'] = $type->inventory?->quantity ?? 0;
-                                                        $baseItem['unit_price'] = $type->amount;
-                                                    }
+                                                Select::make('academic_session_id')
+                                                    ->label('Academic Session')
+                                                    ->options(AcademicSession::pluck('name', 'id'))
+                                                    ->default($session?->id),
 
-                                                    return $baseItem;
-                                                })->toArray();
+                                                Select::make('term_id')
+                                                    ->label('Term')
+                                                    ->options(Term::pluck('name', 'id'))
+                                                    ->default($term?->id),
 
-                                            // Remove deselected items
-                                            $remainingItems = $currentItems
-                                                ->filter(fn($item) => $selectedIds->contains($item['payment_type_id']))
-                                                ->toArray();
+                                                Select::make('payment_method_id')
+                                                    ->label('Payment Method')
+                                                    ->options(PaymentMethod::where('active', true)->pluck('name', 'id'))
+                                                    ->required(),
 
-                                            // Merge and update items
-                                            $allItems = array_merge($remainingItems, $newItems);
-                                            $set('payment_items', $allItems);
+                                                TextInput::make('reference')
+                                                    ->default('PAY-' . strtoupper(uniqid()))
+                                                    ->disabled()
+                                                    ->dehydrated(),
 
-                                            // Calculate totals
-                                            $totalAmount = collect($allItems)->sum('item_amount');
-                                            $totalDeposit = collect($allItems)->sum('item_deposit');
-                                            $totalBalance = collect($allItems)->sum('item_balance');
-
-                                            $set('total_amount', $totalAmount);
-                                            $set('total_deposit', $totalDeposit);
-                                            $set('total_balance', $totalBalance);
-                                        }),
-
-                                    Forms\Components\Repeater::make('payment_items')
-                                        ->schema([
-                                            Forms\Components\Select::make('payment_type_id')
-                                                ->label('Payment type')
-                                                ->options(fn() => PaymentType::where('school_id', Filament::getTenant()?->id ?? 0)
-                                                    ->where('active', true)
-                                                    ->pluck('name', 'id')
-                                                    ->toArray() ?? [])
-                                                ->disabled()
-                                                ->dehydrated()
-                                                ->required(),
-
-                                            Forms\Components\TextInput::make('quantity')
-                                                ->label('Quantity')
-                                                ->numeric()
-                                                ->minValue(1)
-                                                ->visible(fn(Get $get) => $get('has_quantity'))
-                                                ->live()
-                                                ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                                    if ($get('has_quantity') && $state) {
-                                                        // Validate against max quantity
-                                                        $maxQuantity = $get('max_quantity') ?? 0;
-                                                        if ((int)$state > $maxQuantity) {
-                                                            $state = $maxQuantity;
-                                                            $set('quantity', $maxQuantity);
+                                                Toggle::make('enable_partial_payment')
+                                                    ->label('Enable Installment Payment')
+                                                    ->default(false)
+                                                    ->visible(fn() => $tuitionType?->installment_allowed)
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                                        if (!$state) {
+                                                            $amount = floatval($get('amount'));
+                                                            $set('deposit', $amount);
+                                                            $set('balance', 0);
                                                         }
+                                                    }),
+                                            ]),
 
-                                                        // Calculate new amount
-                                                        $unitPrice = $get('unit_price');
-                                                        $amount = $unitPrice * (int)$state;
-                                                        $set('item_amount', $amount);
+                                        Section::make('Tuition Details')
+                                            ->columnSpan(2)
+                                            ->schema([
+                                                Radio::make('payment_plan_type')
+                                                    ->label('Payment Plan')
+                                                    ->options([
+                                                        'session' => 'Full Session Payment (' .
+                                                            formatNaira($tuitionType?->getAmountForClass($classLevel, 'session')) . ')',
+                                                        'term' => 'Term Payment (' .
+                                                            formatNaira($tuitionType?->getAmountForClass($classLevel, 'term')) . ')'
+                                                    ])
+                                                    ->default($defaultPlanType)
+                                                    ->live()
+                                                    ->afterStateUpdated(function ($state, Set $set) use ($tuitionType, $classLevel) {
+                                                        $amount = $tuitionType?->getAmountForClass($classLevel, $state);
+                                                        $set('amount', $amount);
+                                                        $set('deposit', $amount);
+                                                    }),
 
-                                                        if (!$get('../../enable_partial_payment')) {
-                                                            $set('item_deposit', $amount);
-                                                            $set('item_balance', 0);
+                                                TextInput::make('amount')
+                                                    ->label('Amount')
+                                                    ->disabled()
+                                                    ->mask(RawJs::make('$money($input)'))
+                                                    ->stripCharacters(['₦', ','])
+                                                    ->dehydrated()
+                                                    ->prefix('₦')
+                                                    ->default($defaultAmount),
+
+                                                TextInput::make('deposit')
+                                                    ->label('Amount to Pay')
+                                                    ->numeric()
+                                                    ->prefix('₦')
+                                                    ->mask(RawJs::make('$money($input)'))
+                                                    ->stripCharacters(['₦', ','])
+                                                    ->required()
+                                                    ->default(fn() => $defaultAmount)
+                                                    ->disabled(fn(Get $get) => !$get('enable_partial_payment'))
+                                                    ->live(debounce: 800)
+                                                    ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                                                        if ($state === null) return;
+                                                        $amount = str_replace([',', '₦'], '', $get('amount'));
+                                                        $state = str_replace([',', '₦'], '', $state);
+                                                        $balance = floatval($amount) - floatval($state);
+                                                        $deposit = floatval($state);
+                                                        $amount = floatval($amount);
+
+                                                        // Prevent deposit from exceeding amount
+                                                        if ($deposit > $amount) {
+                                                            $set('deposit', $amount);
+                                                            $set('balance', 0);
+                                                            $deposit = $amount;
+                                                            Notification::make()
+                                                                ->warning()
+                                                                ->title('Invalid Amount')
+                                                                ->body("Amount to pay cannot exceed total amount of ₦" . number_format($amount, 2))
+                                                                ->send();
                                                         }
+                                                        $set('balance', $balance);
+                                                    }),
 
-                                                        // Calculate totals
-                                                        $items = collect($get('../../payment_items'));
-                                                        $totalAmount = $items->sum('item_amount');
-                                                        $totalDeposit = $items->sum('item_deposit');
-                                                        $totalBalance = $items->sum('item_balance');
+                                                TextInput::make('balance')
+                                                    ->label('Balance')
+                                                    ->disabled()
+                                                    ->mask(RawJs::make('$money($input)'))
+                                                    ->stripCharacters(['₦', ','])
+                                                    ->dehydrated()
+                                                    ->prefix('₦')
+                                                    ->default(0),
 
-                                                        $set('../../total_amount', $totalAmount);
-                                                        $set('../../total_deposit', $totalDeposit);
-                                                        $set('../../total_balance', $totalBalance);
-                                                    }
-                                                })
-                                                ->suffixAction(
-                                                    Forms\Components\Actions\Action::make('stockInfo')
-                                                        ->icon('heroicon-m-information-circle')
-                                                        ->tooltip(fn(Get $get) => 'Available stock: ' . ($get('max_quantity') ?? 0))
-                                                        ->visible(fn(Get $get) => $get('has_quantity'))
-                                                ),
+                                                TextInput::make('payer_name')
+                                                    ->label('Payer Name')
+                                                    ->default($record->admission?->guardian_name)
+                                                    ->required(),
 
-                                            Forms\Components\Hidden::make('has_quantity'),
-                                            Forms\Components\Hidden::make('max_quantity'),
-                                            Forms\Components\Hidden::make('unit_price'),
+                                                TextInput::make('payer_phone_number')
+                                                    ->label('Payer Phone')
+                                                    ->default($record->admission?->guardian_phone_number)
+                                                    ->tel(),
 
-                                            Forms\Components\TextInput::make('item_amount')
-                                                ->label('Amount')
-                                                ->numeric()
-                                                ->prefix('₦')
-                                                ->required()
-                                                ->disabled()
-                                                ->dehydrated(),
+                                                DateTimePicker::make('paid_at')
+                                                    ->label('Payment Date')
+                                                    ->default(now())
+                                                    ->required(),
 
-                                            Forms\Components\TextInput::make('item_deposit')
-                                                ->label('Deposit')
-                                                ->numeric()
-                                                ->prefix('₦')
-                                                ->required()
-                                                ->live(debounce: 500)
-                                                ->afterStateUpdated(function ($state, Get $get, Set $set) {
-                                                    $amount = floatval($get('item_amount'));
-                                                    $deposit = floatval($state ?? 0);
-
-                                                    if ($deposit > $amount) {
-                                                        $deposit = $amount;
-                                                        $set('item_deposit', $amount);
-                                                    }
-
-                                                    $balance = max(0, $amount - $deposit);
-                                                    $set('item_balance', $balance);
-
-                                                    // Calculate totals
-                                                    $items = collect($get('../../payment_items'));
-                                                    $totalAmount = $items->sum('item_amount');
-                                                    $totalDeposit = $items->sum('item_deposit');
-                                                    $totalBalance = $items->sum('item_balance');
-
-                                                    $set('../../total_amount', $totalAmount);
-                                                    $set('../../total_deposit', $totalDeposit);
-                                                    $set('../../total_balance', $totalBalance);
-                                                }),
-
-                                            Forms\Components\TextInput::make('item_balance')
-                                                ->label('Balance')
-                                                ->numeric()
-                                                ->prefix('₦')
-                                                ->disabled()
-                                                ->dehydrated(),
-                                        ])
-                                        ->defaultItems(0)
-                                        ->addable(false)
-                                        ->deletable(false)
-                                        ->reorderable(false)
-                                        ->columns(4)
-                                        ->columnSpanFull()
-                                        ->live(),
-
-                                    Forms\Components\Toggle::make('enable_partial_payment')
-                                        ->label('Enable Partial Payment')
-                                        ->default(false)
-                                        ->live()
-                                        ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                            if (!$state) {
-                                                $items = $get('payment_items');
-                                                foreach ($items as $key => $item) {
-                                                    $set("payment_items.{$key}.item_deposit", $item['item_amount']);
-                                                    $set("payment_items.{$key}.item_balance", 0);
-                                                }
-                                                $totalAmount = collect($items)->sum('item_amount');
-                                                $set('total_deposit', $totalAmount);
-                                                $set('total_balance', 0);
-                                            }
-                                        }),
-
-                                    Forms\Components\Grid::make(3)
-                                        ->schema([
-                                            Forms\Components\TextInput::make('total_amount')
-                                                ->label('Total Amount')
-                                                ->numeric()
-                                                ->prefix('₦')
-                                                ->disabled(),
-
-                                            Forms\Components\TextInput::make('total_deposit')
-                                                ->label('Total Amount to Pay')
-                                                ->numeric()
-                                                ->prefix('₦')
-                                                ->disabled(),
-
-                                            Forms\Components\TextInput::make('total_balance')
-                                                ->label('Total Balance')
-                                                ->numeric()
-                                                ->prefix('₦')
-                                                ->disabled(),
-                                        ]),
-                                ])->columns(1),
-
-                            Forms\Components\Section::make('Payer Information')
-                                ->schema([
-                                    Forms\Components\Grid::make(2)
-                                        ->schema([
-                                            Forms\Components\TextInput::make('payer_name')
-                                                ->label('Payer Name')
-                                                ->default(fn(Student $record) => $record->admission?->guardian_name)
-                                                ->required(),
-
-                                            Forms\Components\TextInput::make('payer_phone_number')
-                                                ->label('Payer Phone')
-                                                ->default(fn(Student $record) => $record->admission?->guardian_phone_number)
-                                                ->tel(),
-                                        ]),
-
-                                    Forms\Components\TextInput::make('reference')
-                                        ->label('Payment Reference')
-                                        ->default(fn() => 'PAY-' . strtoupper(uniqid()))
-                                        ->readonly()
-                                        ->dehydrated(),
-                                ]),
-
-                            Forms\Components\Section::make('Additional Information')
-                                ->schema([
-                                    Forms\Components\Grid::make(2)
-                                        ->schema([
-                                            Forms\Components\DateTimePicker::make('due_date')
-                                                ->label('Due Date')
-                                                ->required()
-                                                ->minDate(now())
-                                                ->default(now()->addDays(7)),
-
-                                            Forms\Components\DateTimePicker::make('paid_at')
-                                                ->label('Paid At')
-                                                ->default(now())
-                                                ->required(),
-                                        ]),
-
-                                    Forms\Components\Textarea::make('remark')
-                                        ->label('Remark')
-                                        ->maxLength(255)
-                                        ->columnSpan(2),
-
-                                    Forms\Components\KeyValue::make('meta_data')
-                                        ->label('Additional Details')
-                                        ->columnSpan(2),
-                                ]),
-                        ])
-                        ->modalHeading('Record Payment')
-                        ->modalWidth('5xl')
-                        ->action(function (Student $record, array $data): void {
+                                                Hidden::make('payment_category')->default('tuition'),
+                                                Hidden::make('payment_type_id')->default($tuitionType?->id),
+                                            ]),
+                                    ]),
+                            ];
+                        })
+                        ->action(function (Student $record, array $data) {
                             $tenant = Filament::getTenant();
+                            $payment = null;
 
-                            // Check for duplicate payments first
+                            // Check for existing payments
                             $existingPayments = Payment::query()
                                 ->where('school_id', $tenant->id)
                                 ->where('student_id', $record->id)
                                 ->where('academic_session_id', $data['academic_session_id'])
                                 ->where('term_id', $data['term_id'])
+                                ->where('is_tuition', true)
                                 ->whereHas('status', function ($query) {
                                     $query->where('name', 'paid');
-                                })
-                                ->whereHas('paymentItems', function ($query) use ($data) {
-                                    $query->whereIn('payment_type_id', $data['payment_type_ids'])
-                                        ->where(function ($q) {
-                                            $q->where('balance', 0)
-                                                ->orWhere('deposit', DB::raw('amount'));
-                                        });
                                 })
                                 ->with(['paymentItems.paymentType'])
                                 ->get();
 
-                            // Your existing duplicate payment check...
+                            // If we found any existing payments
                             if ($existingPayments->isNotEmpty()) {
-                                // Your existing duplicate payment notification...
+                                // Format payment details
+                                $paymentDetails = $existingPayments->map(function ($payment) {
+                                    return sprintf(
+                                        "Reference: %s\nPaid On: %s\nAmount: ₦%s",
+                                        $payment->reference,
+                                        $payment->paid_at->format('j M, Y'),
+                                        number_format($payment->amount, 2)
+                                    );
+                                })->join("\n\n");
+
+                                // Build the complete message
+                                $message = sprintf(
+                                    "%s (%s) has already made tuition payment for %s - %s:\n\n%s",
+                                    $record->full_name,           // Student name
+                                    $record->classRoom->name,     // Class name
+                                    AcademicSession::find($data['academic_session_id'])->name, // Session name
+                                    Term::find($data['term_id'])->name, // Term name
+                                    $paymentDetails               // Payment details
+                                );
+
+                                // Show the error notification
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Duplicate Payment Detected')
+                                    ->body($message)
+                                    ->actions([
+                                        Action::make('view_payment_history')
+                                            ->label('View Payment History')
+                                            ->url(PaymentResource::getUrl('index', [
+                                                'tenant' => $tenant,
+                                                'tableFilters' => [
+                                                    'student_id' => [$record->id],
+                                                    'academic_session_id' => [$data['academic_session_id']],
+                                                    'term_id' => [$data['term_id']],
+                                                ]
+                                            ]))
+                                            ->button(),
+                                    ])
+                                    ->persistent()
+                                    ->send();
+
                                 return;
                             }
 
-                            // Process payment creation
-                            DB::transaction(function () use ($tenant, $record, $data) {
-                                $items = collect($data['payment_items']);
-                                $totalAmount = $items->sum('item_amount');
-                                $totalDeposit = $items->sum('item_deposit');
-                                $totalBalance = $items->sum('item_balance');
+                            // Continue with existing validation and payment processing
+                            // ...existing code for payment processing...
 
-                                // Create main payment record
-                                $payment = $record->payments()->create([
+                            $tuitionType = PaymentType::find($data['payment_type_id']);
+                            if (
+                                $data['enable_partial_payment'] &&
+                                $tuitionType?->installment_allowed &&
+                                floatval($data['deposit']) < floatval($tuitionType->min_installment_amount)
+                            ) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Invalid Amount')
+                                    ->body("Minimum installment amount is ₦" . number_format($tuitionType->min_installment_amount, 2))
+                                    ->send();
+                                return;
+                            }
+                            DB::transaction(function () use ($record, $data, $tenant, &$payment) {
+                                // Get the tuition payment type
+                                $tuitionType = PaymentType::find($data['payment_type_id']);
+                                $classLevel = $record->classRoom->getLevel();
+
+                                // Create or update student payment plan
+                                $paymentPlan = PaymentPlan::where([
+                                    'payment_type_id' => $tuitionType->id,
+                                    'class_level' => $classLevel,
+                                ])->first();
+
+                                if ($paymentPlan) {
+                                    StudentPaymentPlan::updateOrCreate(
+                                        [
+                                            'student_id' => $record->id,
+                                            'academic_session_id' => $data['academic_session_id'],
+                                        ],
+                                        [
+                                            'school_id' => $tenant->id,
+                                            'payment_plan_id' => $paymentPlan->id,
+                                            'created_by' => auth()->id(),
+                                            'notes' => "Plan selected during tuition payment {$data['reference']}"
+                                        ]
+                                    );
+                                }
+
+                                // Create payment with tuition-specific data
+                                $payment = Payment::create([
                                     'school_id' => $tenant->id,
-                                    'receiver_id' => Auth::id(),
+                                    'student_id' => $record->id,
+                                    'class_room_id' => $record->class_room_id,
+                                    'receiver_id' => auth()->id(),
+                                    'payment_method_id' => $data['payment_method_id'],
                                     'academic_session_id' => $data['academic_session_id'],
                                     'term_id' => $data['term_id'],
-                                    'payment_method_id' => $data['payment_method_id'],
-                                    'class_room_id' => $record->class_room_id,
                                     'status_id' => Status::where('type', 'payment')
-                                        ->where('name', $totalDeposit >= $totalAmount ? 'paid' : ($totalDeposit > 0 ? 'partial' : 'pending'))
+                                        ->where('name', $data['balance'] > 0 ? 'partial' : 'paid')
                                         ->first()?->id,
-                                    'amount' => $totalAmount,
-                                    'deposit' => $totalDeposit,
-                                    'balance' => $totalBalance,
                                     'reference' => $data['reference'],
                                     'payer_name' => $data['payer_name'],
                                     'payer_phone_number' => $data['payer_phone_number'],
-                                    'remark' => $data['remark'],
-                                    'meta_data' => $data['meta_data'] ?? null,
-                                    'due_date' => $data['due_date'],
+                                    'amount' => $data['amount'],
+                                    'deposit' => $data['deposit'],
+                                    'balance' => $data['balance'],
+                                    'is_tuition' => true,
+                                    'payment_plan_type' => $data['payment_plan_type'],
+                                    'payment_category' => 'tuition',
                                     'paid_at' => $data['paid_at'],
-                                    'created_by' => Auth::id(),
-                                    'updated_by' => Auth::id(),
+                                    'created_by' => auth()->id(),
+                                    'updated_by' => auth()->id(),
                                 ]);
 
-                                // Create payment items and handle inventory
-                                foreach ($data['payment_items'] as $item) {
-                                    // Get payment type with inventory
-                                    $paymentType = PaymentType::with('inventory')
-                                        ->find($item['payment_type_id']);
+                                // Create single payment item for tuition
+                                $payment->paymentItems()->create([
+                                    'payment_type_id' => $data['payment_type_id'],
+                                    'amount' => $data['amount'],
+                                    'deposit' => $data['deposit'],
+                                    'balance' => $data['balance'],
+                                    'is_tuition' => true,
+                                ]);
+                            });
 
-                                    // Create payment item
-                                    $paymentItem = $payment->paymentItems()->create([
-                                        'payment_type_id' => $item['payment_type_id'],
-                                        'amount' => $item['item_amount'],
-                                        'deposit' => $item['item_deposit'],
-                                        'balance' => $item['item_balance'],
-                                        'quantity' => isset($item['has_quantity']) && $item['has_quantity'] ? $item['quantity'] : null,
-                                        'unit_price' => isset($item['has_quantity']) && $item['has_quantity'] ? $item['unit_price'] : null,
-                                    ]);
-
-                                    // Handle inventory for physical items
-                                    if (
-                                        $paymentType &&
-                                        $paymentType->category === 'physical_item' &&
-                                        $paymentType->inventory &&
-                                        isset($item['quantity'])
-                                    ) {
-
-                                        // Validate stock availability
-                                        if ($paymentType->inventory->quantity < $item['quantity']) {
-                                            throw new \Exception("Insufficient stock for {$paymentType->name}");
-                                        }
-
-                                        // Create inventory transaction
-                                        $paymentType->inventory->transactions()->create([
-                                            'school_id' => $tenant->id,
-                                            'type' => 'OUT',
-                                            'quantity' => $item['quantity'],
-                                            'reference_type' => 'payment',
-                                            'reference_id' => $payment->id,
-                                            'note' => "Sold to {$record->full_name}",
-                                            'created_by' => auth()->id(),
-                                        ]);
-
-                                        // Update inventory quantity
-                                        $paymentType->inventory->decrement('quantity', $item['quantity']);
-                                    }
-                                }
-
-                                // Show success notification
+                            if ($payment) {
                                 Notification::make()
                                     ->success()
-                                    ->title('Payment Recorded')
-                                    ->body("Payment of ₦" . number_format($totalDeposit, 2) . " has been recorded successfully.")
+                                    ->title('Tuition Payment Recorded')
+                                    ->body("Payment of ₦" . number_format($payment->deposit, 2) . " has been recorded.")
                                     ->actions([
                                         Action::make('view_receipt')
                                             ->label('View Receipt')
-                                            ->url(fn() => PaymentResource::getUrl('view', [
-                                                'tenant' => $tenant,
-                                                'record' => $payment->id
-                                            ]))
+                                            ->url(fn() => PaymentResource::getUrl('view', ['record' => $payment->id]))
                                             ->button()
                                             ->openUrlInNewTab(),
                                     ])
                                     ->persistent()
                                     ->send();
-                            });
-                        }),
+                            }
+                        })
+                        ->modalWidth('4xl'),
+
                     // Promote Student Action
                     Tables\Actions\Action::make('promote')
+                        ->visible(fn(): bool => auth()->user()->can('promote_student'))
                         ->icon('heroicon-o-arrow-up-circle')
                         ->color('info')
                         ->form([
@@ -828,6 +951,7 @@ class StudentResource extends Resource
 
                     // Change Status Action
                     Tables\Actions\Action::make('changeStatus')
+                        ->visible(fn(): bool => auth()->user()->can('change_status_student'))
                         ->icon('heroicon-o-arrow-path')
                         ->color('warning')
                         ->form([
@@ -870,15 +994,304 @@ class StudentResource extends Resource
                             });
                         }),
 
-                    Tables\Actions\DeleteAction::make(),
-                ]),
+                    Tables\Actions\DeleteAction::make()
+                        ->visible(fn(): bool => auth()->user()->can('delete_student')),
+
+                ])
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn(): bool => auth()->user()->can('delete_any_student')),
+
+                    Tables\Actions\BulkAction::make('bulkTuitionPayment')
+                        ->visible(fn(): bool => auth()->user()->can('bulk_payment_student'))
+                        ->icon('heroicon-o-banknotes')
+                        ->color('success')
+                        ->label('Pay Tuition')
+                        ->form(function (Collection $records) {
+                            $session = config('app.current_session');
+                            $term = config('app.current_term');
+
+                            // Get tuition types and amounts for each class level
+                            $tuitionAmounts = collect();
+                            foreach ($records as $student) {
+                                $classLevel = $student->classRoom?->level;
+                                $tuitionType = PaymentType::query()
+                                    ->where('school_id', Filament::getTenant()->id)
+                                    ->where('is_tuition', true)
+                                    ->whereHas('paymentPlans', function ($query) use ($classLevel) {
+                                        $query->where('class_level', $classLevel);
+                                    })
+                                    ->first();
+
+                                $tuitionAmounts->push([
+                                    'student' => $student,
+                                    'amount_session' => $tuitionType?->getAmountForClass($classLevel, 'session') ?? 0,
+                                    'amount_term' => $tuitionType?->getAmountForClass($classLevel, 'term') ?? 0,
+                                ]);
+                            }
+
+                            $totalSessionAmount = $tuitionAmounts->sum('amount_session');
+                            $totalTermAmount = $tuitionAmounts->sum('amount_term');
+
+                            return [
+                                Section::make('Selected Students')
+                                    ->description('The following students will be processed for payment')
+                                    ->schema([
+                                        ViewField::make('students')
+                                            ->view('filament.forms.components.students-table', [
+                                                'students' => $tuitionAmounts,
+                                                'totalSessionAmount' => $totalSessionAmount,
+                                                'totalTermAmount' => $totalTermAmount,
+                                            ])
+                                    ])
+                                    ->columnSpanFull(),
+                                Section::make('Payment Details')
+                                    ->columns(2)
+                                    ->schema([
+                                        Select::make('academic_session_id')
+                                            ->label('Academic Session')
+                                            ->options(AcademicSession::pluck('name', 'id'))
+                                            ->default($session?->id)
+                                            ->required(),
+
+                                        Select::make('term_id')
+                                            ->label('Term')
+                                            ->options(Term::pluck('name', 'id'))
+                                            ->default($term?->id)
+                                            ->required(),
+
+                                        Select::make('payment_method_id')
+                                            ->label('Payment Method')
+                                            ->options(PaymentMethod::where('active', true)->pluck('name', 'id'))
+                                            ->required(),
+
+                                        Radio::make('payment_plan_type')
+                                            ->label('Payment Plan')
+                                            ->options([
+                                                'session' => 'Full Session Payment',
+                                                'term' => 'Term Payment'
+                                            ])
+                                            ->default('session')
+                                            ->required()
+                                            ->live(),
+
+                                        Toggle::make('enable_partial_payment')
+                                            ->label('Enable Installment Payment')
+                                            ->default(false)
+                                            ->live(),
+
+                                        TextInput::make('payer_name')
+                                            ->label('Payer Name'),
+
+                                        TextInput::make('payer_phone_number')
+                                            ->label('Payer Phone')
+                                            ->tel(),
+
+                                        DateTimePicker::make('paid_at')
+                                            ->label('Payment Date')
+                                            ->default(now())
+                                            ->required(),
+                                    ]),
+                            ];
+                        })
+                        ->action(function (Collection $records, array $data) {
+                            $tenant = Filament::getTenant();
+                            $successCount = 0;
+                            $failedStudents = [];
+
+                            // Check for duplicate payments before starting the transaction
+                            $duplicatePayments = [];
+                            foreach ($records as $student) {
+                                // Check for existing payments
+                                $existingPayments = Payment::query()
+                                    ->where('school_id', $tenant->id)
+                                    ->where('student_id', $student->id)
+                                    ->where('academic_session_id', $data['academic_session_id'])
+                                    ->where('term_id', $data['term_id'])
+                                    ->where('is_tuition', true)
+                                    ->whereHas('status', function ($query) {
+                                        $query->where('name', 'paid');
+                                    })
+                                    ->with(['paymentItems.paymentType'])
+                                    ->get();
+
+                                if ($existingPayments->isNotEmpty()) {
+                                    $duplicatePayments[] = [
+                                        'student' => $student,
+                                        'payments' => $existingPayments->map(function ($payment) {
+                                            return [
+                                                'reference' => $payment->reference,
+                                                'paid_at' => $payment->paid_at->format('j M, Y'),
+                                                'amount' => number_format($payment->amount, 2),
+                                            ];
+                                        })->toArray()
+                                    ];
+                                }
+                            }
+
+                            // If there are duplicate payments, show notification and stop
+                            if (!empty($duplicatePayments)) {
+                                $message = "The following students already have payments for this period:\n\n";
+                                foreach ($duplicatePayments as $duplicate) {
+                                    $message .= "{$duplicate['student']->full_name} ({$duplicate['student']->classRoom->name}):\n";
+                                    foreach ($duplicate['payments'] as $payment) {
+                                        $message .= "- Ref: {$payment['reference']}, Paid: {$payment['paid_at']}, Amount: ₦{$payment['amount']}\n";
+                                    }
+                                    $message .= "\n";
+                                }
+
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Duplicate Payments Detected')
+                                    ->body($message)
+                                    ->actions([
+                                        Action::make('view_payments')
+                                            ->label('View Payment History')
+                                            ->url(PaymentResource::getUrl('index', [
+                                                'tenant' => $tenant,
+                                                'tableFilters' => [
+                                                    'student_id' => $duplicatePayments[0]['student']->id,
+                                                    'academic_session_id' => [$data['academic_session_id']],
+                                                    'term_id' => [$data['term_id']],
+                                                ]
+                                            ]))
+                                            ->button(),
+                                    ])
+                                    ->persistent()
+                                    ->send();
+
+                                return;
+                            }
+
+                            // Continue with existing bulk payment processing
+                            // ...existing code for bulk payment processing...
+
+                            DB::transaction(function () use ($records, $data, $tenant, &$successCount, &$failedStudents) {
+                                foreach ($records as $student) {
+                                    try {
+                                        $classLevel = $student->classRoom?->level;
+
+                                        // Get tuition payment type for this class level
+                                        $tuitionType = PaymentType::query()
+                                            ->where('school_id', $tenant->id)
+                                            ->where('is_tuition', true)
+                                            ->whereHas('paymentPlans', function ($query) use ($classLevel) {
+                                                $query->where('class_level', $classLevel);
+                                            })
+                                            ->first();
+
+                                        if (!$tuitionType) {
+                                            throw new \Exception("No tuition type found for {$student->full_name}'s class level");
+                                        }
+
+                                        // Calculate amount based on payment plan
+                                        $amount = $tuitionType->getAmountForClass($classLevel, $data['payment_plan_type']);
+
+                                        // Set deposit based on partial payment setting
+                                        $deposit = $amount;
+                                        if ($data['enable_partial_payment'] && $tuitionType->installment_allowed) {
+                                            $deposit = $tuitionType->min_installment_amount;
+                                        }
+
+                                        // Create payment plan if needed
+                                        $paymentPlan = PaymentPlan::where([
+                                            'payment_type_id' => $tuitionType->id,
+                                            'class_level' => $classLevel,
+                                        ])->first();
+
+                                        if ($paymentPlan) {
+                                            StudentPaymentPlan::updateOrCreate(
+                                                [
+                                                    'student_id' => $student->id,
+                                                    'academic_session_id' => $data['academic_session_id'],
+                                                ],
+                                                [
+                                                    'school_id' => $tenant->id,
+                                                    'payment_plan_id' => $paymentPlan->id,
+                                                    'created_by' => auth()->id(),
+                                                    'notes' => "Plan selected during bulk tuition payment"
+                                                ]
+                                            );
+                                        }
+
+                                        // Create payment
+                                        $payment = Payment::create([
+                                            'school_id' => $tenant->id,
+                                            'student_id' => $student->id,
+                                            'class_room_id' => $student->class_room_id,
+                                            'receiver_id' => auth()->id(),
+                                            'payment_method_id' => $data['payment_method_id'],
+                                            'academic_session_id' => $data['academic_session_id'],
+                                            'term_id' => $data['term_id'],
+                                            'status_id' => Status::where('type', 'payment')
+                                                ->where('name', $deposit < $amount ? 'partial' : 'paid')
+                                                ->first()?->id,
+                                            'reference' => 'PAY-' . strtoupper(uniqid()),
+                                            'payer_name' => $data['payer_name'],
+                                            'payer_phone_number' => $data['payer_phone_number'],
+                                            'amount' => $amount,
+                                            'deposit' => $deposit,
+                                            'balance' => $amount - $deposit,
+                                            'is_tuition' => true,
+                                            'payment_plan_type' => $data['payment_plan_type'],
+                                            'payment_category' => 'tuition',
+                                            'paid_at' => $data['paid_at'],
+                                            'created_by' => auth()->id(),
+                                            'updated_by' => auth()->id(),
+                                        ]);
+
+                                        // Create payment item
+                                        $payment->paymentItems()->create([
+                                            'payment_type_id' => $tuitionType->id,
+                                            'amount' => $amount,
+                                            'deposit' => $deposit,
+                                            'balance' => $amount - $deposit,
+                                            'is_tuition' => true,
+                                        ]);
+
+                                        $successCount++;
+                                    } catch (\Exception $e) {
+                                        $failedStudents[] = [
+                                            'name' => $student->full_name,
+                                            'error' => $e->getMessage()
+                                        ];
+                                    }
+                                }
+                            });
+
+                            // Show appropriate notification
+                            if (empty($failedStudents)) {
+                                Notification::make()
+                                    ->success()
+                                    ->title('Bulk Tuition Payment Successful')
+                                    ->body("Successfully processed payments for {$successCount} students.")
+                                    ->persistent()
+                                    ->send();
+                            } else {
+                                $failureMessage = "Processed {$successCount} payments successfully.\n\nFailed students:\n";
+                                foreach ($failedStudents as $failure) {
+                                    $failureMessage .= "- {$failure['name']}: {$failure['error']}\n";
+                                }
+
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Partial Success')
+                                    ->body($failureMessage)
+                                    ->persistent()
+                                    ->send();
+                            }
+                        })
+                        ->requiresConfirmation()
+                        ->modalWidth('4xl')
+                        ->modalHeading('Bulk Tuition Payment')
+                        ->modalDescription('Process tuition payment for multiple students at once.')
+                        ->deselectRecordsAfterCompletion(),
 
                     // Bulk Promote Action
                     Tables\Actions\BulkAction::make('bulkPromote')
+                        ->visible(fn(): bool => auth()->user()->can('bulk_promote_student'))
                         ->icon('heroicon-o-arrow-up-circle')
                         ->color('info')
                         ->form([
@@ -928,6 +1341,7 @@ class StudentResource extends Resource
 
                     // Bulk Status Change
                     Tables\Actions\BulkAction::make('bulkStatusChange')
+                        ->visible(fn(): bool => auth()->user()->can('bulk_status_change_student'))
                         ->icon('heroicon-o-arrow-path')
                         ->color('warning')
                         ->form([

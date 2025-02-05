@@ -11,9 +11,11 @@ use App\Models\Designation;
 use App\Models\Qualification;
 use App\Models\SalaryPayment;
 use Filament\Facades\Filament;
+use App\Services\FeatureService;
 use App\Services\EmployeeIdGenerator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Staff extends Model
@@ -59,6 +61,36 @@ class Staff extends Model
     //                 'id_format' => $settings->employee_id_format_type,
     //                 'designation_id' => $staff->designation_id,
     //             ]);
+    //         }
+    //     });
+    // }
+
+    // protected static function booted(): void
+    // {
+    //     static::updated(function (Staff $staff) {
+    //         // Check if user_id was added (staff member got a user account)
+    //         if ($staff->wasChanged('user_id') && $staff->user_id !== null) {
+    //             $school = $staff->school;
+    //             $featureService = app(FeatureService::class);
+    //             $result = $featureService->checkStaffUserLimit($school, $school->currentSubscription->plan);
+
+    //             if ($result->status === 'warning') {
+    //                 $superAdmin = $school->getSuperAdmin();
+    //                 if ($superAdmin) {
+    //                     Notification::make()
+    //                         ->warning()
+    //                         ->title('Staff User Account Limit Warning')
+    //                         ->body($result->message)
+    //                         ->icon('heroicon-o-exclamation-triangle')
+    //                         ->actions([
+    //                             \Filament\Notifications\Actions\Action::make('view_plans')
+    //                                 ->button()
+    //                                 ->url(route('filament.sms.pages.pricing-page', ['tenant' => $school->slug]))
+    //                                 ->label('View Plans'),
+    //                         ])
+    //                         ->sendToDatabase($superAdmin);
+    //                 }
+    //             }
     //         }
     //     });
     // }
@@ -117,5 +149,20 @@ class Staff extends Model
     public function bank()
     {
         return $this->belongsTo(Bank::class);
+    }
+
+    public static function countStaffWithUserAccounts(int $schoolId): int
+    {
+        return static::where('school_id', $schoolId)
+            ->whereNotNull('user_id')
+            ->count();
+    }
+
+    public static function hasReachedUserAccountLimit(School $school): bool
+    {
+        $currentCount = static::countStaffWithUserAccounts($school->id);
+        $maxAllowed = $school->currentSubscription?->plan?->max_staff ?? 0;
+        
+        return $maxAllowed > 0 && $currentCount >= $maxAllowed;
     }
 }

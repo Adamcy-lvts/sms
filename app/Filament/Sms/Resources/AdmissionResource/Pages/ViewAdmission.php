@@ -11,6 +11,7 @@ use App\Models\ClassRoom;
 use Illuminate\Support\Str;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use App\Services\FeatureService;
 use Filament\Infolists\Infolist;
 use Filament\Actions\ActionGroup;
 use Illuminate\Support\Facades\DB;
@@ -242,6 +243,34 @@ class ViewAdmission extends ViewRecord
                             ])
                     ])
                     ->action(function (array $data) {
+                        // Check student limit before proceeding if enrolling
+                        if ($data['enroll_now']) {
+                            $school = Filament::getTenant();
+                            $featureService = app(FeatureService::class);
+                            $result = $featureService->checkResourceLimit($school, 'students');
+                            
+                            if (!$result->allowed) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Student Limit Reached')
+                                    ->body($result->message)
+                                    ->persistent()
+                                    ->send();
+                                
+                                $this->halt();
+                                return;
+                            }
+
+                            if ($result->status === 'warning') {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Student Limit Warning')
+                                    ->body($result->message)
+                                    ->persistent()
+                                    ->send();
+                            }
+                        }
+
                         DB::beginTransaction();
                         try {
                             $school = Filament::getTenant();
@@ -260,6 +289,19 @@ class ViewAdmission extends ViewRecord
                                         ->where('category', 'admission_letter')
                                         ->where('is_active', true)
                                         ->first();
+                                    // Skip PDF generation if no template exists
+                                    if (!$this->template) {
+                                        Log::warning('No active admission letter template found', [
+                                            'school_id' => $school->id,
+                                            'admission_id' => $this->record->id
+                                        ]);
+                                        Notification::make()
+                                            ->warning()
+                                            ->title('No Letter Template')
+                                            ->body('Admission approved but no letter template was found to generate acceptance letter.')
+                                            ->send();
+                                        return;
+                                    }
 
                                     $renderer = new TemplateRenderService($this->template);
                                     $content = $renderer->renderForAdmission($this->record);
@@ -434,6 +476,33 @@ class ViewAdmission extends ViewRecord
                             ->default(true)
                     ])
                     ->action(function (array $data) {
+                        // Check student limit before enrollment
+                        $school = Filament::getTenant();
+                        $featureService = app(FeatureService::class);
+                        $result = $featureService->checkResourceLimit($school, 'students');
+                        
+                        if (!$result->allowed) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Student Limit Reached')
+                                ->body($result->message)
+                                ->persistent()
+                                ->send();
+                            
+                            $this->halt();
+                            return;
+                        }
+
+                        if ($result->status === 'warning') {
+                            Notification::make()
+                                ->warning()
+                                ->title('Student Limit Warning')
+                                ->body($result->message)
+                                ->persistent()
+                                ->send();
+                        }
+
+                        // Proceed with student creation
                         $student =  Student::create([
                             'school_id' => Filament::getTenant()->id,
                             'admission_id' => $this->record->id,

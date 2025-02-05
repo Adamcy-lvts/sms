@@ -11,6 +11,7 @@ use Filament\Widgets\TableWidget as BaseWidget;
 class BooksTable extends BaseWidget
 {
     public ?Model $record = null;
+    protected int | string | array $columnSpan = 'full';
     
     public function table(Table $table): Table
     {

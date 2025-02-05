@@ -9,6 +9,7 @@ use App\Models\School;
 use App\Models\Status;
 use App\Models\Student;
 use App\Models\Payment;
+use App\Models\PaymentPlan;
 use App\Models\PaymentType;
 use App\Models\PaymentMethod;
 use App\Models\PaymentHistory;
@@ -84,6 +85,7 @@ class PaymentSeeder extends Seeder
 
             // Get payment methods (they should already exist from PaymentMethodTableSeeder)
             $paymentMethods = PaymentMethod::where('school_id', $school->id)->get();
+            $paymentPlans = PaymentPlan::where('school_id', $school->id)->get();
 
             // Validate that payment methods exist
             if ($paymentMethods->isEmpty()) {
@@ -108,9 +110,125 @@ class PaymentSeeder extends Seeder
                 ->get();
 
             foreach ($students as $student) {
-                $this->createPaymentsForStudent($student, $sessions, $statuses, $paymentMethods);
+                $classLevel = $this->getClassLevel($student->classRoom->name);
+                $paymentPlan = $paymentPlans->where('class_level', $classLevel)->first();
+
+                if (!$paymentPlan) continue;
+
+                foreach ($sessions as $session) {
+                    $this->createSessionPayments(
+                        $student,
+                        $session,
+                        $paymentPlan,
+                        $paymentMethods->random()
+                    );
+                }
             }
         });
+    }
+
+    protected function createSessionPayments($student, $session, $paymentPlan, $paymentMethod): void
+    {
+        // Determine if paying full session or term by term (70% chance of full session)
+        $isFullSession = rand(1, 100) <= 70;
+
+        if ($isFullSession) {
+            $this->createFullSessionPayment($student, $session, $paymentPlan, $paymentMethod);
+        } else {
+            foreach ($session->terms as $term) {
+                $this->createTermPayment($student, $session, $term, $paymentPlan, $paymentMethod);
+            }
+        }
+    }
+
+    protected function createFullSessionPayment($student, $session, $paymentPlan, $paymentMethod): void
+    {
+        $payment = Payment::create([
+            'school_id' => $student->school_id,
+            'student_id' => $student->id,
+            'class_room_id' => $student->class_room_id,
+            'payment_method_id' => $paymentMethod->id,
+            'academic_session_id' => $session->id,
+            'status_id' => Status::where('name', 'paid')->first()->id,
+            'payment_plan_type' => 'session',
+            'payment_category' => 'tuition',
+            'is_tuition' => true,
+            'reference' => 'PAY-' . strtoupper(uniqid()),
+            'payer_name' => $student->admission->guardian_name,
+            'payer_phone_number' => $student->admission->guardian_phone_number,
+            'amount' => $paymentPlan->session_amount,
+            'deposit' => $paymentPlan->session_amount,
+            'balance' => 0,
+            'paid_at' => now()->subDays(rand(1, 30)),
+            'created_by' => 1,
+        ]);
+
+        $payment->paymentItems()->create([
+            'payment_type_id' => $paymentPlan->payment_type_id,
+            'amount' => $paymentPlan->session_amount,
+            'deposit' => $paymentPlan->session_amount,
+            'balance' => 0,
+            'is_tuition' => true
+        ]);
+
+        $this->createPaymentHistory($payment, $paymentPlan->session_amount, $paymentMethod);
+    }
+
+    protected function createTermPayment($student, $session, $term, $paymentPlan, $paymentMethod): void
+    {
+        $isPaid = rand(1, 100) <= 80; // 80% chance of being paid
+        $deposit = $isPaid ? $paymentPlan->term_amount : 0;
+
+        $payment = Payment::create([
+            'school_id' => $student->school_id,
+            'student_id' => $student->id,
+            'class_room_id' => $student->class_room_id,
+            'payment_method_id' => $paymentMethod->id,
+            'academic_session_id' => $session->id,
+            'term_id' => $term->id,
+            'status_id' => Status::where('name', $isPaid ? 'paid' : 'pending')->first()->id,
+            'payment_plan_type' => 'term',
+            'payment_category' => 'tuition',
+            'is_tuition' => true,
+            'reference' => 'PAY-' . strtoupper(uniqid()),
+            'payer_name' => $student->admission->guardian_name,
+            'payer_phone_number' => $student->admission->guardian_phone_number,
+            'amount' => $paymentPlan->term_amount,
+            'deposit' => $deposit,
+            'balance' => $paymentPlan->term_amount - $deposit,
+            'paid_at' => $isPaid ? now()->subDays(rand(1, 30)) : null,
+            'created_by' => 1,
+        ]);
+
+        $payment->paymentItems()->create([
+            'payment_type_id' => $paymentPlan->payment_type_id,
+            'amount' => $paymentPlan->term_amount,
+            'deposit' => $deposit,
+            'balance' => $paymentPlan->term_amount - $deposit,
+            'is_tuition' => true
+        ]);
+
+        if ($isPaid) {
+            $this->createPaymentHistory($payment, $deposit, $paymentMethod);
+        }
+    }
+
+    protected function getClassLevel(string $className): string
+    {
+        if (str_contains(strtoupper($className), 'NURSERY')) return 'nursery';
+        if (str_contains(strtoupper($className), 'PRIMARY')) return 'primary';
+        return 'secondary';
+    }
+
+    protected function createPaymentHistory($payment, $amount, $paymentMethod): void
+    {
+        PaymentHistory::create([
+            'payment_id' => $payment->id,
+            'amount' => $amount,
+            'payment_method_id' => $paymentMethod->id,
+            'remark' => 'Payment recorded',
+            'created_by' => 1,
+        ]);
     }
 
     protected function createPaymentsForStudent($student, $sessions, $statuses, $paymentMethods)
@@ -144,37 +262,37 @@ class PaymentSeeder extends Seeder
         }
     }
 
-    protected function createTermPayment($student, $session, $term, $level, $paymentMethod, $statuses)
-    {
-        $termStart = Carbon::parse($term->start_date);
-        $isPastTerm = $termStart->isPast();
+    // protected function createTermPayment($student, $session, $term, $level, $paymentMethod, $statuses)
+    // {
+    //     $termStart = Carbon::parse($term->start_date);
+    //     $isPastTerm = $termStart->isPast();
 
-        // Calculate total amount for termly fees
-        $termlyFees = $this->calculateTermlyFees($level);
+    //     // Calculate total amount for termly fees
+    //     $termlyFees = $this->calculateTermlyFees($level);
 
-        if ($isPastTerm) {
-            // Past terms - create full payments with 90% probability
-            if (rand(1, 100) <= 90) {
-                $payment = $this->createFullPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
-            } else {
-                // 10% chance of partial/pending payment for realism
-                $this->createPartialPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
-            }
-        } else {
-            // Current/future terms - more variation in payment status
-            $rand = rand(1, 100);
-            if ($rand <= 60) {
-                // 60% full payment
-                $payment = $this->createFullPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
-            } elseif ($rand <= 85) {
-                // 25% partial payment
-                $this->createPartialPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
-            } else {
-                // 15% pending payment
-                $this->createPendingPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
-            }
-        }
-    }
+    //     if ($isPastTerm) {
+    //         // Past terms - create full payments with 90% probability
+    //         if (rand(1, 100) <= 90) {
+    //             $payment = $this->createFullPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
+    //         } else {
+    //             // 10% chance of partial/pending payment for realism
+    //             $this->createPartialPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
+    //         }
+    //     } else {
+    //         // Current/future terms - more variation in payment status
+    //         $rand = rand(1, 100);
+    //         if ($rand <= 60) {
+    //             // 60% full payment
+    //             $payment = $this->createFullPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
+    //         } elseif ($rand <= 85) {
+    //             // 25% partial payment
+    //             $this->createPartialPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
+    //         } else {
+    //             // 15% pending payment
+    //             $this->createPendingPayment($student, $session, $term, $termlyFees, $paymentMethod, $statuses);
+    //         }
+    //     }
+    // }
 
     protected function createFullPayment($student, $session, $term, $amount, $paymentMethod, $statuses): Payment
     {
@@ -304,16 +422,16 @@ class PaymentSeeder extends Seeder
         }
     }
 
-    protected function createPaymentHistory($payment, $amount, $paymentMethod): void
-    {
-        PaymentHistory::create([
-            'payment_id' => $payment->id,
-            'amount' => $amount,
-            'payment_method_id' => $paymentMethod->id,
-            'remark' => $payment->remark,
-            'created_by' => 1,
-        ]);
-    }
+    // protected function createPaymentHistory($payment, $amount, $paymentMethod): void
+    // {
+    //     PaymentHistory::create([
+    //         'payment_id' => $payment->id,
+    //         'amount' => $amount,
+    //         'payment_method_id' => $paymentMethod->id,
+    //         'remark' => $payment->remark,
+    //         'created_by' => 1,
+    //     ]);
+    // }
 
     protected function calculateTermlyFees($level): float
     {
@@ -458,166 +576,3 @@ class PaymentSeeder extends Seeder
         }
     }
 }
-
-
-
-
-
-
-
-
-// namespace Database\Seeders;
-
-// use Carbon\Carbon;
-// use App\Models\Term;
-// use App\Models\Payment;
-// use App\Models\Student;
-// use App\Models\AcademicSession;
-// use App\Models\PaymentMethod;
-// use Illuminate\Support\Str;
-// use Illuminate\Database\Seeder;
-
-// class PaymentSeeder extends Seeder
-// { // Group payment types by category
-//     protected $paymentGroups = [
-//         'essential' => [
-//             'School Fee',
-//             'Development Levy',
-//             'Examination Fee'
-//         ],
-//         'one_time' => [
-//             'Uniform',
-//             'ID Card',
-//             'Sports Wear'
-//         ],
-//         'facilities' => [
-//             'Laboratory Fee',
-//             'Library Fee',
-//             'Computer Lab Fee'
-//         ],
-//         'optional' => [
-//             'School Bus Service',
-//             'Extra-Curricular Activities'
-//         ]
-//     ];
-//     public function run(): void
-//     {
-
-//         //    $schools = \App\Models\School::whereIn('id', [1, 2])->get();
-//         $schools = \App\Models\School::where('id', 1)->get();
-//         $sessions = AcademicSession::whereIn('id', [1, 2])->with('terms')->get();
-
-//         foreach ($schools as $school) {
-//             $students = Student::where('school_id', $school->id)->get();
-//             $paymentTypes = \App\Models\PaymentType::where('school_id', $school->id)->get();
-//             $paymentMethods = PaymentMethod::where('school_id', $school->id)->get();
-
-//             foreach (AcademicSession::whereIn('id', [1, 2])->with('terms')->get() as $session) {
-//                 foreach ($session->terms as $term) {
-//                     $termStart = Carbon::parse($term->start_date);
-
-//                     foreach ($students as $student) {
-//                         // Essential fees payment (80% chance of payment)
-//                         if (rand(1, 100) <= 80) {
-//                             $this->createPaymentForGroup(
-//                                 'essential',
-//                                 $paymentTypes,
-//                                 $student,
-//                                 $school,
-//                                 $session,
-//                                 $term,
-//                                 $paymentMethods,
-//                                 $termStart->copy()->addDays(rand(1, 14))
-//                             );
-//                         }
-
-//                         // One-time fees (First term only or new students)
-//                         if ($term->name === 'First Term' || rand(1, 100) <= 20) {
-//                             $this->createPaymentForGroup(
-//                                 'one_time',
-//                                 $paymentTypes,
-//                                 $student,
-//                                 $school,
-//                                 $session,
-//                                 $term,
-//                                 $paymentMethods,
-//                                 $termStart->copy()->addDays(rand(7, 21))
-//                             );
-//                         }
-
-//                         // Facilities fees (70% chance, paid later in term)
-//                         if (rand(1, 100) <= 70) {
-//                             $this->createPaymentForGroup(
-//                                 'facilities',
-//                                 $paymentTypes,
-//                                 $student,
-//                                 $school,
-//                                 $session,
-//                                 $term,
-//                                 $paymentMethods,
-//                                 $termStart->copy()->addDays(rand(14, 28))
-//                             );
-//                         }
-
-//                         // Optional fees (40% chance)
-//                         if (rand(1, 100) <= 40) {
-//                             $this->createPaymentForGroup(
-//                                 'optional',
-//                                 $paymentTypes,
-//                                 $student,
-//                                 $school,
-//                                 $session,
-//                                 $term,
-//                                 $paymentMethods,
-//                                 $termStart->copy()->addDays(rand(21, 35))
-//                             );
-//                         }
-//                     }
-//                 }
-//             }
-//         }
-//     }
-
-//     protected function createPaymentForGroup($groupName, $paymentTypes, $student, $school, $session, $term, $paymentMethods, $paidDate)
-//     {
-//         $groupTypes = $paymentTypes->filter(
-//             fn($type) =>
-//             in_array($type->name, $this->paymentGroups[$groupName])
-//         );
-
-//         if ($groupTypes->isEmpty()) return;
-
-//         $totalAmount = $groupTypes->sum('amount');
-//         $deposit = $totalAmount * (rand(70, 100) / 100);
-//         $status = $deposit >= $totalAmount ? 'paid' : 'partial';
-
-//         $payment = Payment::create([
-//             'school_id' => $school->id,
-//             'student_id' => $student->id,
-//             'class_room_id' => $student->class_room_id,
-//             'academic_session_id' => $session->id,
-//             'term_id' => $term->id,
-//             'payment_method_id' => $paymentMethods->random()->id,
-//             'status_id' => \App\Models\Status::where('name', $status)->first()->id,
-//             'reference' => 'PAY-' . strtoupper(Str::random(8)),
-//             'payer_name' => $student->admission->guardian_name,
-//             'payer_phone_number' => $student->admission->guardian_phone_number,
-//             'amount' => $totalAmount,
-//             'deposit' => $deposit,
-//             'balance' => $totalAmount - $deposit,
-//             'due_date' => $paidDate->copy()->addDays(14),
-//             'paid_at' => $deposit > 0 ? $paidDate : null,
-//             'created_by' => 1
-//         ]);
-
-//         foreach ($groupTypes as $type) {
-//             $itemDeposit = ($deposit / $totalAmount) * $type->amount;
-//             $payment->paymentItems()->create([
-//                 'payment_type_id' => $type->id,
-//                 'amount' => $type->amount,
-//                 'deposit' => $itemDeposit,
-//                 'balance' => $type->amount - $itemDeposit
-//             ]);
-//         }
-//     }
-// }

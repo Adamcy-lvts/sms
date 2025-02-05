@@ -156,8 +156,7 @@ class ViewPayment extends ViewRecord
 
     protected function getViewData(): array
     {
-        $this->qrCode = QrCode::format('svg')
-            ->size(72)
+        $this->qrCode = QrCode::size(72)
             ->errorCorrection('H')
             ->margin(1)
             ->color(0, 0, 0)

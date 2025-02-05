@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('student_grades', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->foreignId('student_id')->constrained()->onDelete('cascade');
             $table->foreignId('subject_id')->constrained();
             $table->foreignId('assessment_type_id')->constrained();
@@ -27,6 +27,7 @@ return new class extends Migration
             $table->foreignId('recorded_by')->constrained('users');
             $table->foreignId('modified_by')->nullable()->constrained('users');
             $table->timestamp('graded_at')->nullable();
+            $table->softDeletes();
             $table->timestamps();
 
             // Prevent duplicate grades for same student and assessment in same school

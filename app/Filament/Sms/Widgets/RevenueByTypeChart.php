@@ -17,7 +17,7 @@ class RevenueByTypeChart extends ChartWidget
     use HasWidgetShield;
     protected static ?string $heading = 'Revenue Distribution';
     protected static ?string $description = 'Revenue breakdown by payment type';
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 3;
     // protected int | string | array $columnSpan = 'full';
     protected static ?string $maxHeight = '280px';
 

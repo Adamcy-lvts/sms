@@ -5,10 +5,12 @@ namespace App\Filament\Sms\Pages;
 use App\Models\Term;
 use App\Models\Staff;
 use App\Models\Student;
+use App\Models\Teacher;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Forms\Form;
 use Filament\Pages\Page;
+use App\Models\ClassRoom;
 use App\Models\ActivityType;
 use App\Services\GradeService;
 use Filament\Facades\Filament;
@@ -54,6 +56,7 @@ class StudentEvaluation extends Page implements HasForms
 
     public ?array $data = [];
     public ?array $termSummary = null;
+    public $selectedClassId = null;
     protected GradeService $gradeService;
 
     public function boot(GradeService $gradeService)
@@ -76,17 +79,45 @@ class StudentEvaluation extends Page implements HasForms
             ->schema([
                 // Student Selection Section
                 Section::make('Select Student')
-                    ->description('Choose the student and academic period for evaluation')
+                    ->description('Choose the class and student for evaluation')
                     ->schema([
+                        Select::make('class_room_id')
+                            ->label('Class')
+                            ->options(function () {
+                                $query = ClassRoom::query();
+                                
+                                // If user is a teacher, only show assigned classes
+                                if (auth()->user()->hasRole('teacher')) {
+                                    $teacher = Teacher::where('staff_id', auth()->user()->staff->id)->first();
+                                    if ($teacher) {
+                                        $query->whereHas('teachers', function ($q) use ($teacher) {
+                                            $q->where('teachers.id', $teacher->id);
+                                        });
+                                    }
+                                }
+                                
+                                return $query->pluck('name', 'id');
+                            })
+                            ->searchable()
+                            ->required()
+                            ->live()
+                            ->afterStateUpdated(function ($state, Set $set) {
+                                $this->selectedClassId = $state;
+                                $set('student_id', null);
+                            }),
+
                         Select::make('student_id')
                             ->label('Student')
-                            ->options(function () {
+                            ->options(function (Get $get) {
+                                if (!$get('class_room_id')) {
+                                    return [];
+                                }
+                                
                                 return Student::query()
-                                    ->where('school_id', Filament::getTenant()->id)
-                                    ->with(['classRoom'])
+                                    ->where('class_room_id', $get('class_room_id'))
                                     ->get()
                                     ->mapWithKeys(fn($student) => [
-                                        $student->id => "{$student->full_name} - {$student->classRoom->name}"
+                                        $student->id => $student->full_name
                                     ]);
                             })
                             ->searchable()
@@ -97,6 +128,7 @@ class StudentEvaluation extends Page implements HasForms
                                     $this->loadTermSummary();
                                 }
                             })
+                            ->visible(fn (Get $get): bool => filled($get('class_room_id')))
                             ->columnSpan(2),
 
                         Select::make('academic_session_id')

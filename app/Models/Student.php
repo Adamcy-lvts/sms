@@ -38,7 +38,9 @@ class Student extends Model
         'created_by',
     ];
 
-    // ... your existing methods ...
+    protected $casts = [
+        'date_of_birth' => 'date',
+    ];
 
     /**
      * Get all payments for the student
@@ -46,6 +48,11 @@ class Student extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function tuitionPayments()
+    {
+        return $this->hasMany(Payment::class)->where('is_tuition', true);
     }
 
     public function getProfilePictureUrlAttribute()

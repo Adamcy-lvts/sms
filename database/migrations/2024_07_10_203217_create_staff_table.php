@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('staff', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('designation_id')->constrained()->onDelete('cascade');
             $table->foreignId('status_id')->constrained('statuses');
@@ -35,6 +35,7 @@ return new class extends Migration
             $table->string('profile_picture')->nullable();
             $table->text('emergency_contact')->nullable();
             $table->string('signature')->nullable();
+            $table->softDeletes();
             $table->timestamps();
         });
     }

@@ -14,11 +14,12 @@ return new class extends Migration
         Schema::create('feedback_responses', function (Blueprint $table) {
             $table->id();
             $table->foreignId('feedback_id')->constrained()->onDelete('cascade');
-            $table->foreignId('school_id')->constrained();
+            $table->foreignId('school_id');
             $table->foreignId('user_id')->constrained();
             $table->json('responses');
             $table->text('comments')->nullable();
             $table->integer('rating');
+            $table->softDeletes();
             $table->timestamps();
         });
     }

@@ -18,6 +18,7 @@ return new class extends Migration
             $table->foreignId('payment_method_id')->constrained();
             $table->text('remark')->nullable();
             $table->foreignId('created_by')->constrained('users');
+            $table->softDeletes();
             $table->timestamps();
         });
     }

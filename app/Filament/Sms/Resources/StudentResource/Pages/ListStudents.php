@@ -16,6 +16,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Resources\Pages\ListRecords;
 use App\Filament\Sms\Resources\StudentResource;
 use App\Filament\Imports\StudentAdmissionImporter;
+use App\Services\FeatureService;
 
 class ListStudents extends ListRecords
 {
@@ -23,82 +24,32 @@ class ListStudents extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        $tenant = Filament::getTenant();
+        $school = Filament::getTenant();
+        $featureService = app(FeatureService::class);
+        
+        // Separate feature check from limit check
+        $hasBulkDataFeature = $featureService->hasFeatureAccess($school, 'bulk_data');
+        $limitCheck = $featureService->checkResourceLimit($school, 'students');
+        $canImport = auth()->user()->can('import_student');
+
         return [
             Actions\CreateAction::make(),
             ImportAction::make()
                 ->importer(StudentAdmissionImporter::class)
                 ->label('Import Students')
-                ->modalHeading('Import Students from CSV')
-                // ->modalDescription('Upload a CSV file to import students. Please make sure your file follows the correct format.')
+                ->modalHeading('Import Students')
+                ->modalDescription('Upload a CSV file to import students.')
                 ->modalSubmitActionLabel('Import')
                 ->modalCancelActionLabel('Cancel')
                 ->closeModalByClickingAway(false)
-                ->successNotificationTitle('Import completed')
-                ->failureNotificationTitle('Import failed')
                 ->icon('heroicon-o-arrow-up-tray')
-            // Action::make('import')
-            //     ->label('Import Students')
-            //     ->form([
-            //         FileUpload::make('excel_file')
-            //             ->label('Excel File')
-            //             ->required()
-            //             ->acceptedFileTypes([
-            //                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            //                 'application/vnd.ms-excel'
-            //             ])
-            //             ->maxSize(5120)
-            //             ->disk('public')->directory("{$tenant->slug}/documents")
-            //             ->visibility('private')
-            //             ->storeFileNamesIn('original_filename'),
-
-            //     ])
-            //     ->action(function (array $data): void {
-            //         try {
-            //             $import = new StudentAdmissionImport();
-            //             Excel::import($import, Storage::disk('public')->path($data['excel_file']));
-
-            //             // Show single success message if there were successful imports
-            //             if (count($import->getSuccesses()) > 0) {
-            //                 Notification::make()
-            //                     ->success()
-            //                     ->title('Import Completed')
-            //                     ->body($import->getSuccesses()[0])
-            //                     ->send();
-            //             }
-
-            //             // Show single error message if there were errors
-            //             if (count($import->getErrors()) > 0) {
-            //                 Notification::make()
-            //                     ->danger()
-            //                     ->title('Import Errors')
-            //                     ->body(implode("\n", $import->getErrors()))
-            //                     ->seconds(30)
-            //                     ->send();
-            //             }
-
-            //             // Clean up the imported file
-            //             Storage::delete($data['excel_file']);
-            //         } catch (\Exception $e) {
-            //             Notification::make()
-            //                 ->danger()
-            //                 ->title('Import Failed')
-            //                 ->body('An error occurred during import: ' . $e->getMessage())
-            //                 ->send();
-
-            //             // Clean up on error
-            //             if (isset($data['excel_file'])) {
-            //                 Storage::delete($data['excel_file']);
-            //             }
-            //         }
-            //     })
-            //     ->modalWidth('lg')
-            //     ->modalHeading('Import Students')
-            //     ->modalDescription('Upload an Excel file containing student information. The file should include all required fields in the correct format.')
-            //     ->modalSubmitActionLabel('Upload and Import')
-            //     ->modalCancelActionLabel('Cancel')
-            //     ->successNotificationTitle('Import Completed')
-            // ->successNotificationMessage('Students have been imported successfully.');
+                ->visible($hasBulkDataFeature && $canImport) // Added permission check here
+                ->disabled(!$limitCheck->allowed)
+                ->tooltip(!$hasBulkDataFeature 
+                    ? 'Bulk data import is not available in your current plan'
+                    : (!$canImport 
+                        ? 'You do not have permission to import students'
+                        : ($limitCheck->allowed ? null : $limitCheck->message))),
         ];
     }
 }

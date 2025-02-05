@@ -13,14 +13,14 @@ return new class extends Migration
     {
         Schema::create('school_settings', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('school_id');
             $table->json('employee_settings')->nullable();
             $table->json('academic_settings')->nullable();
             $table->json('admission_settings')->nullable();
             $table->json('payment_settings')->nullable();
             $table->boolean('enable_arabic')->default(false);
             $table->string('rtl_direction')->default('ltr');
-
+            $table->softDeletes();
             $table->timestamps();
 
             $table->unique('school_id');

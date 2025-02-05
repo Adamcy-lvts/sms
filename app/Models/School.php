@@ -25,8 +25,10 @@ use App\Models\AdmLtrTemplate;
 use App\Models\AcademicSession;
 use App\Models\ExpenseCategory;
 use App\Models\VariableTemplate;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -35,6 +37,7 @@ class School extends Model
 {
     use HasFactory;
     use HasFeatures;
+    use SoftDeletes;
 
     protected $fillable = [
         // Basic Information
@@ -131,6 +134,27 @@ class School extends Model
         'deleted_at',
     ];
 
+    protected array $cascadeDeletes = [
+        'academicSessions',
+        'terms',
+        'students',
+        'classRooms',
+        'subjects',
+        'payments',
+        'paymentTypes',
+        'paymentMethods',
+        'designations',
+        'staff',
+        'activityTypes',
+        'behavioralTraits',
+        'assessmentTypes',
+        'gradingScales',
+        'reportTemplates',
+        'templateVariables',
+        'schoolCalendarEvents',
+        'settings',
+    ];
+
     public function agent()
     {
         return $this->belongsTo(Agent::class, 'agent_id');
@@ -171,15 +195,27 @@ class School extends Model
         }
     }
 
-    public function currentSubscription()
+    /**
+     * Get the current active subscription for the school.
+     */
+    public function currentSubscription(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
-        return $this->subscriptions()
+        return $this->hasOne(Subscription::class)
             ->where('status', 'active')
-            ->where('ends_at', '>', now())
-            ->latest('starts_at')
-            ->first();
+            ->where(function ($query) {
+                $query->whereNull('ends_at')
+                    ->orWhere('ends_at', '>', now());
+            })
+            ->latest('starts_at');
     }
 
+    /**
+     * Get the feature slugs of the current subscription's plan.
+     */
+    public function getCurrentPlanFeatureSlugs(): array
+    {
+        return $this->currentSubscription?->plan->features->pluck('slug')->toArray() ?? [];
+    }
 
     public function getLogoUrlAttribute(): string
     {
@@ -188,22 +224,36 @@ class School extends Model
             : asset('img/sch_logo.png');
     }
 
-
-    public function hasFeature(string $feature): bool
-    {
-        $subscription = $this->currentSubscription();
-        return $subscription ? $subscription->hasFeature($feature) : false;
-    }
-
     public function features(): array
     {
         $subscription = $this->currentSubscription();
         return $subscription ? $subscription->plan->features : [];
     }
 
-    public function subscriptions()
+    public function hasFeature(string $featureSlug): bool
     {
-        return $this->hasMany(Subscription::class, 'school_id');
+        $cachedFeatures = Cache::remember("school:{$this->id}:features", 3600, function () {
+            return $this->currentSubscription?->plan->features->pluck('slug')->toArray() ?? [];
+        });
+
+        return in_array($featureSlug, $cachedFeatures);
+    }
+
+    public function getFeatureLimit(string $featureSlug, string $limitKey): ?int
+    {
+        return Cache::remember("school:{$this->id}:limit:{$featureSlug}:{$limitKey}", 3600, function () use ($featureSlug, $limitKey) {
+            return $this->currentSubscription?->plan->features
+                ->firstWhere('slug', $featureSlug)
+                ?->pivot->limits[$limitKey] ?? null;
+        });
+    }
+
+    /**
+     * Get all subscriptions for the school.
+     */
+    public function subscriptions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Subscription::class);
     }
 
     // public function hasHadTrial()
@@ -407,6 +457,16 @@ class School extends Model
         return $this->hasMany(TemplateVariable::class);
     }
 
+    public function paymentPlans()
+    {
+        return $this->hasMany(PaymentPlan::class);
+    }
+
+    public function studentPaymentPlans()
+    {
+        return $this->hasMany(StudentPaymentPlan::class);
+    }
+
     /**
      * Get all super admins for the school
      * 
@@ -452,8 +512,6 @@ class School extends Model
      */
     public function getSuperAdminsForNotifications()
     {
-        return $this->superAdmins()
-            ->with('notificationPreferences')
-            ->get();
+        return $this->superAdmins();
     }
 }

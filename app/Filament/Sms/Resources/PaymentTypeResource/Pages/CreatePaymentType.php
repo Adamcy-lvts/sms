@@ -25,7 +25,6 @@ class CreatePaymentType extends CreateRecord
                 // For physical items, use selling_price as amount
                 $amount = $data['selling_price'];
             }
-
             // Create payment type
             $paymentType = PaymentType::create([
                 'school_id' => Filament::getTenant()->id,
@@ -34,6 +33,11 @@ class CreatePaymentType extends CreateRecord
                 'amount' => $amount, // Set amount according to category
                 'description' => $data['description'] ?? null,
                 'active' => $data['active'] ?? true,
+                // Add new fields
+                'is_tuition' => $data['is_tuition'] ?? false,
+                'class_level' => $data['is_tuition'] ? ($data['class_level'] ?? 'all') : null,
+                'installment_allowed' => $data['category'] === 'service_fee' ? ($data['installment_allowed'] ?? false) : false,
+                'min_installment_amount' => $data['installment_allowed'] ? ($data['min_installment_amount'] ?? null) : null,
             ]);
 
             // Create inventory for physical items

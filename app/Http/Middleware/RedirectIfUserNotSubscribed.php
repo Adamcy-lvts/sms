@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
@@ -24,9 +25,10 @@ class RedirectIfUserNotSubscribed
 
         $user = Auth::user();
         $school = $user->schools->first();
+        $tenant = Filament::getTenant();
 
         // Bypass for pricing page with matching tenant slug
-        if ($request->route()->getName() === 'filament.sms.pages.pricing-page' && $request->route('tenant') === $school->slug) {
+        if ($request->route()->getName() === 'filament.sms.pages.pricing-page' && $request->route('tenant') === $tenant->slug) {
             return $next($request);
         }
 
@@ -43,7 +45,7 @@ class RedirectIfUserNotSubscribed
 
         // Redirect to billing if no school or no active subscription
         if (!$school || !$school->subscriptions()->where('status', 'active')->exists()) {
-            return redirect()->route('filament.sms.tenant.billing', ['tenant' => $school->slug]);
+            return redirect()->route('filament.sms.tenant.billing', ['tenant' => $tenant->slug]);
         }
 
         // Proceed with the request if none of the conditions above are met

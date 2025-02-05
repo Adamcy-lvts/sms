@@ -13,12 +13,13 @@ return new class extends Migration
     {
         Schema::create('grading_scales', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->string('grade');        // e.g., A, B, C
             $table->integer('min_score');   // Minimum score for this grade
             $table->integer('max_score');   // Maximum score for this grade
             $table->string('remark')->nullable(); // e.g., Excellent, Good, Fair
             $table->boolean('is_active')->default(true);
+            $table->softDeletes();
             $table->timestamps();
 
             // Prevent overlapping grade ranges

@@ -21,10 +21,9 @@ class StatusTableSeeder extends Seeder
             ['name' => 'deceased', 'type' => 'student'],
             
             // Payment Statuses
-            ['name' => 'pending', 'type' => 'payment'],
+            ['name' => 'cancelled', 'type' => 'payment'],
             ['name' => 'partial', 'type' => 'payment'],
             ['name' => 'paid', 'type' => 'payment'],
-            ['name' => 'overdue', 'type' => 'payment'],
             ['name' => 'refunded', 'type' => 'payment'],
             
             ['name' => 'active', 'type' => 'user'],

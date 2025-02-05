@@ -20,22 +20,11 @@ class PlansTableSeeder extends Seeder
             'description' => "Essential features for small to medium schools",
             'monthly_price' => 15000,
             'yearly_discount' => 20, // 20% off for yearly
-            'max_students' => 500,
-            'max_staff' => 5,
-            'max_classes' => 15,
             'trial_period' => 30,
             'badge_color' => '#10B981', // Emerald-500
-            'features' => [
-                'Profile Management',
-                'Role-Based Access Control',
-                'Financial Management',
-                'Attendance Tracking',
-                'Report Card Generation',
-                'Basic Analytics',
-                '500 Students Limit',
-                '5 Staff Accounts',
-                'Email Support'
-            ],
+            'max_students' => 500,
+            'max_staff' => 5,
+            'max_classes' => null,
             'cto' => 'Start your subscription'
         ],
         [
@@ -43,23 +32,11 @@ class PlansTableSeeder extends Seeder
             'description' => "Advanced features for growing schools",
             'monthly_price' => 25000,
             'yearly_discount' => 25, // 25% off for yearly
-            'max_students' => 1000,
-            'max_staff' => 15,
-            'max_classes' => 30,
             'trial_period' => 30,
             'badge_color' => '#6366F1', // Indigo-500
-            'features' => [
-                'All Basic Features',
-                'Admission Management',
-                'SMS Notifications',
-                'Performance Analytics',
-                'Library Management',
-                'Bulk Data Import/Export',
-                '1000 Students Limit',
-                '15 Staff Accounts',
-                'Priority Email Support',
-                'Staff Management'
-            ],
+            'max_students' => 1000,
+            'max_staff' => 15,
+            'max_classes' => null,
             'cto' => 'Start your subscription'
         ],
         [
@@ -67,24 +44,11 @@ class PlansTableSeeder extends Seeder
             'description' => "Complete solution for large institutions",
             'monthly_price' => 50000,
             'yearly_discount' => 30, // 30% off for yearly
-            'max_students' => null, // Unlimited
-            'max_staff' => null,  // Unlimited
-            'max_classes' => null, // Unlimited
             'trial_period' => 30,
             'badge_color' => '#EC4899', // Pink-500
-            'features' => [
-                'All Standard Features',
-                'CBT Integration',
-                'Parent & Student Portal',
-                'Advanced Reporting',
-                'API Access',
-                'Priority Support',
-                'Unlimited Students',
-                'Unlimited Staff',
-                'Dedicated Account Manager',
-                'Custom Integration Support',
-                '24/7 Phone Support'
-            ],
+            'max_students' => 2000, // Updated to 2000
+            'max_staff' => 30,      // Updated to 30
+            'max_classes' => null,
             'cto' => 'Start your subscription'
         ],
     ];
@@ -168,13 +132,12 @@ class PlansTableSeeder extends Seeder
                 'discounted_price' => $discountedPrice,
                 'interval' => $interval,
                 'duration' => $isYearly ? 365 : 30,
-                'features' => $planData['features'],
                 'plan_code' => $paystackPlan['data']['plan_code'],
                 'yearly_discount' => $isYearly ? $planData['yearly_discount'] : 0,
+                'trial_period' => $planData['trial_period'],
                 'max_students' => $planData['max_students'],
                 'max_staff' => $planData['max_staff'],
                 'max_classes' => $planData['max_classes'],
-                'trial_period' => $planData['trial_period'],
                 'has_trial' => $planData['trial_period'] > 0,
                 'badge_color' => $planData['badge_color'],
                 'cto' => $planData['cto'],

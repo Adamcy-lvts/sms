@@ -63,9 +63,7 @@
                         <div class="mb-3 hidden sm:block">
                             <div class="w-20 h-20 ml-auto border rounded flex items-center justify-center">
                                 @php
-                                    $qrCode = SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')->size(72)
-                                     ->merge($qrLogo, 0.3, true)
-                                    ->generate($QrViewUrl);
+                                    $qrCode = SimpleSoftwareIO\QrCode\Facades\QrCode::size(72)->generate($QrViewUrl);
                                 @endphp
                                 {!! $qrCode !!}
                             </div>
@@ -134,30 +132,32 @@
 
             <!-- Modified Payment Details -->
             <div class="px-6 py-6">
-                <div class="mb-3">
-                    <div class="grid grid-cols-12 gap-4 text-[13px] font-medium text-gray-700 pb-2 border-b">
-                        <div class="col-span-3">Payment Type</div>
-                        <div class="col-span-2">Payment Method</div>
-                        <div class="col-span-1">Qty</div>
-                        <div class="col-span-2 text-right">Amount</div>
-                        <div class="col-span-2 text-right">Paid</div>
-                        <div class="col-span-2 text-right">Balance</div>
-                    </div>
+                <div
+                    class="grid grid-cols-[2fr,1fr,1.2fr,0.8fr,1.2fr,1.2fr,1.2fr] gap-3 text-[13px] font-medium text-gray-700 pb-2 border-b">
+                    <div>Payment For</div>
+                    <div>Plan</div>
+                    <div>Method</div>
+                    <div class="text-center">Qty</div>
+                    <div class="text-right">Amount</div>
+                    <div class="text-right">Paid</div>
+                    <div class="text-right">Balance</div>
                 </div>
 
                 <!-- Payment Items -->
                 @foreach ($payment->paymentItems as $item)
-                    <div class="grid grid-cols-12 gap-4 text-[13px] py-3 border-b last:border-b-0">
-                        <div class="col-span-3 text-gray-600">{{ $item->paymentType?->name }}</div>
-                        <div class="col-span-2 text-gray-600">{{ $payment->paymentMethod?->name }}</div>
-                        <div class="col-span-1 text-center text-gray-600">
+                    <div
+                        class="grid grid-cols-[2fr,1fr,1.2fr,0.8fr,1.2fr,1.2fr,1.2fr] gap-3 text-[13px] py-3 border-b last:border-b-0">
+                        <div class="text-gray-600">{{ $item->paymentType?->name }}</div>
+                        <div class="text-gray-600">
+                            {{ $item->is_tuition ? ucfirst($payment->payment_plan_type ?? 'N/A') : '-' }}
+                        </div>
+                        <div class="text-gray-600">{{ $payment->paymentMethod?->name }}</div>
+                        <div class="text-center text-gray-600">
                             {{ $item->paymentType?->category === 'physical_item' ? $item->quantity : '-' }}
                         </div>
-                        <div class="col-span-2 text-right font-medium text-gray-900">{{ formatNaira($item->amount) }}
-                        </div>
-                        <div class="col-span-2 text-right font-medium text-green-600">{{ formatNaira($item->deposit) }}
-                        </div>
-                        <div class="col-span-2 text-right">
+                        <div class="text-right font-medium text-gray-900">{{ formatNaira($item->amount) }}</div>
+                        <div class="text-right font-medium text-green-600">{{ formatNaira($item->deposit) }}</div>
+                        <div class="text-right">
                             <span @class([
                                 'font-medium',
                                 'text-gray-900' => $item->balance == 0,

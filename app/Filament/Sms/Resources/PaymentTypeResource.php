@@ -51,6 +51,39 @@ class PaymentTypeResource extends Resource
                         ->label('Is Active')
                         ->default(true),
 
+                    Forms\Components\Toggle::make('is_tuition')
+                        ->label('Is Tuition Fee')
+                        ->default(false)
+                        ->live(),
+
+                    Forms\Components\Select::make('class_level')
+                        ->label('Class Level')
+                        ->options([
+                            'nursery' => 'Nursery',
+                            'primary' => 'Primary',
+                            'secondary' => 'Secondary',
+                            'all' => 'All Levels',
+                        ])
+                        ->visible(fn (Forms\Get $get) => 
+                            $get('is_tuition') && $get('category') === 'service_fee'
+                        ),
+
+                    Forms\Components\Toggle::make('installment_allowed')
+                        ->label('Allow Installment Payments')
+                        ->default(false)
+                        ->live()
+                        ->visible(fn (Forms\Get $get) => 
+                            $get('category') === 'service_fee'
+                        ),
+
+                    Forms\Components\TextInput::make('min_installment_amount')
+                        ->label('Minimum Installment Amount')
+                        ->numeric()
+                        ->prefix('₦')
+                        ->visible(fn (Forms\Get $get) => 
+                            $get('installment_allowed') && $get('category') === 'service_fee'
+                        ),
+
                     Forms\Components\Textarea::make('description')
                         ->maxLength(255)
                         ->columnSpanFull(),
@@ -118,6 +151,22 @@ class PaymentTypeResource extends Resource
                         'success' => 'physical_item',
                     ]),
 
+                Tables\Columns\IconColumn::make('is_tuition')
+                    ->boolean()
+                    ->label('Tuition'),
+
+                Tables\Columns\TextColumn::make('class_level')
+                    ->badge()
+                    ->colors([
+                        'warning' => 'nursery',
+                        'cyan' => 'primary',
+                        'indigo' => 'secondary',
+                        'gray' => 'all',
+                    ]),
+
+                Tables\Columns\ToggleColumn::make('installment_allowed')
+                    ->label('Installments'),
+
                 Tables\Columns\TextColumn::make('amount')
                     ->formatStateUsing(
                         fn($state, Model $record) =>
@@ -151,6 +200,7 @@ class PaymentTypeResource extends Resource
                     ->label('Due Date')
                     ->sortable(),
 
+              
                 Tables\Columns\TextColumn::make('description')
                     ->limit(50)
                     ->toggleable(isToggledHiddenByDefault: true),

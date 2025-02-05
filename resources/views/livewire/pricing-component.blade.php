@@ -76,21 +76,61 @@
                     <!-- Features List with improved styling -->
                     <div class="border-t border-gray-100 p-8 bg-gray-50">
                         <h3 class="font-semibold text-gray-900 mb-4">Features:</h3>
+                        
+                        @php
+                            $planTierLevel = match($plan->name) {
+                                'Basic' => 1,
+                                'Standard' => 2,
+                                'Premium' => 3,
+                                default => 0
+                            };
+                            
+                            $tierFeatures = $plan->features->filter(function($feature) use ($planTierLevel) {
+                                return \App\Models\Feature::getTierLevel($feature->slug) === $planTierLevel;
+                            });
+                            
+                            $inheritanceLabel = match($planTierLevel) {
+                                2 => 'All Basic features +',
+                                3 => 'All Standard features +',
+                                default => ''
+                            };
+                        @endphp
+
+                        @if ($inheritanceLabel)
+                            <p class="text-sm text-gray-600 mb-2">{{ $inheritanceLabel }}</p>
+                        @endif
+
                         <ul class="space-y-3">
-                            @forelse($plan->features as $feature)
+                            @forelse($tierFeatures as $feature)
                                 <li class="flex items-start">
                                     <svg class="h-5 w-5 text-green-500 mt-0.5 mr-2" fill="none" viewBox="0 0 24 24"
                                         stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M5 13l4 4L19 7" />
                                     </svg>
-                                    <span class="text-gray-600">{{ $feature }}</span>
+                                    <span class="text-gray-600">{{ $feature->name }}</span>
                                 </li>
                             @empty
                                 <li class="text-gray-500">No features listed for this plan.</li>
                             @endforelse
                         </ul>
 
+                        @if ($plan->hasLimits())
+                            <div class="mt-4 pt-4 border-t border-gray-200">
+                                <h4 class="text-sm font-medium mb-2">Usage Limits:</h4>
+                                <ul class="space-y-1">
+                                    @if ($plan->max_students)
+                                        <li class="text-sm text-gray-600">Up to {{ number_format($plan->max_students) }} students</li>
+                                    @endif
+                                    @if ($plan->max_staff)
+                                        <li class="text-sm text-gray-600">Up to {{ number_format($plan->max_staff) }} staff Login Accounts</li>
+                                    @endif
+                                    @if ($plan->max_classes)
+                                        <li class="text-sm text-gray-600">Up to {{ number_format($plan->max_classes) }} classes</li>
+                                    @endif
+                                </ul>
+                            </div>
+                        @endif
                     </div>
                 </div>
             @empty

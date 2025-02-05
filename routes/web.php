@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\ReportProgress;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
@@ -83,3 +84,5 @@ Route::get('/reports/download/{file}', function ($file) {
 Route::get('/legal/{type}', [LegalDocumentController::class, 'show'])
     ->name('legal.show')
     ->where('type', 'terms|privacy');
+
+

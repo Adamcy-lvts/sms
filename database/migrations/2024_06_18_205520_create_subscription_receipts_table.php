@@ -14,13 +14,14 @@ return new class extends Migration
         Schema::create('subscription_receipts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('payment_id')->constrained('subs_payments')->onDelete('cascade')->unique(); // Reference to the transaction
-            $table->foreignId('school_id')->constrained('schools')->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->dateTime('payment_date');
             $table->string('receipt_for')->nullable();
             $table->decimal('amount', 8, 2);
             $table->text('remarks')->nullable();
             $table->string('qr_code')->nullable(); // if you want to store QR code data/path
             $table->string('receipt_number')->unique(); // Unique receipt number
+            $table->softDeletes();
             $table->timestamps();
         });
     }

@@ -15,12 +15,8 @@ class PaymentType extends Model
 
     const CATEGORY_SERVICE = 'service_fee';
     const CATEGORY_PHYSICAL = 'physical_item';
+    const TUITION_PREFIX = 'Tuition/School Fees';
 
-    const LEVELS = [
-        'NURSERY' => 'Nursery',
-        'PRIMARY' => 'Primary',
-        'SECONDARY' => 'Secondary'
-    ];
 
     protected $fillable = [
         'school_id',
@@ -28,22 +24,25 @@ class PaymentType extends Model
         'category',
         'amount',
         'active',
+        'is_tuition',
+        'class_level',             // For tracking education level
+        'installment_allowed',     // Allow partial payments
+        'min_installment_amount',  // Minimum installment amount
         'has_due_date',
         'description',
 
     ];
 
-    public static function getTuitionFeeForLevel(string $level)
-    {
-        return static::where('school_id', Filament::getTenant()->id)
-            ->where('name', 'LIKE', "Tuition Fee - {$level}%")
-            ->where('active', true)
-            ->first();
-    }
+    protected $casts = [
+        'is_tuition' => 'boolean',
+        'active' => 'boolean',
+        'installment_allowed' => 'boolean',
+        'has_due_date' => 'boolean'
+    ];
 
-    public function isTuitionFee(): bool
+    public function getMinPaymentAmount(): float
     {
-        return str_starts_with($this->name, 'Tuition Fee -');
+        return $this->installment_allowed ? $this->min_installment_amount : $this->amount;
     }
 
     // Add helper method
@@ -94,5 +93,21 @@ class PaymentType extends Model
             // If anything goes wrong, return a default due date
             return $term->start_date->addDays(7);
         }
+    }
+
+    // Add relationship to payment plans
+    public function paymentPlans()
+    {
+        return $this->hasMany(PaymentPlan::class);
+    }
+
+    // Helper to get amount for specific class level and period
+    public function getAmountForClass(string $classLevel, string $period = 'session'): ?float
+    {
+        $plan = $this->paymentPlans()
+            ->where('class_level', $classLevel)
+            ->first();
+
+        return $plan ? $plan->getAmount($period) : null;
     }
 }

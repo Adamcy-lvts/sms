@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('inventory_transactions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('school_id');
             $table->foreignId('inventory_id')->constrained()->cascadeOnDelete();
             $table->enum('type', ['IN', 'OUT']); 
             $table->integer('quantity');
@@ -21,6 +21,7 @@ return new class extends Migration
             $table->unsignedBigInteger('reference_id')->nullable();
             $table->text('note')->nullable();
             $table->foreignId('created_by')->nullable()->constrained('users');
+            $table->softDeletes();
             $table->timestamps();
         });
     }

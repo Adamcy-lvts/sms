@@ -20,41 +20,41 @@ class SchoolSettings extends Model
         'academic_settings',
         'admission_settings',
         'payment_settings',  // Add this
-      
+
     ];
 
     // Default settings structure
     protected static $defaultAttributes = [
         // Admission Settings
         'admission_settings' => '{
-            "format_type": "with_year",
+            "format_type": "school_session",
             "custom_format": null,
-            "prefix": "ADM",
+            "school_prefix": null,
             "length": 4,
             "separator": "/",
-            "school_initials": null,
+            "include_separator": true,
+            "include_prefix": true,
             "initials_method": "first_letters",
-            "session_format": "short",
+            "session_format": "full_session",
             "number_start": 1,
-            "reset_sequence_yearly": false,
-            "reset_sequence_by_session": false
+            "reset_sequence_by_session": true,
+            "include_session": true,
+            "custom_session": null,
+            "manual_numbering": false,
+            "show_last_number": true,
+            "default_session_format": "short_session"
         }',
 
         // Employee Settings
         'employee_settings' => '{
-            "format_type": "basic",
-            "custom_format": null,
-            "prefix": "EMP",
-            "prefix_type": "default",
+            "prefix_type": "consonants",
+            "include_prefix": true,
+            "include_year": true,
+            "include_separator": true,
             "year_format": "short",
+            "separator": "/",
             "number_length": 3,
-            "separator": "-",
-            "department_prefixes": {},
-            "separator_rules": {
-                "enabled": true,
-                "preserve_year": true,
-                "preserve_number": true
-            }
+            "custom_year": null
         }',
 
         // Academic Settings
@@ -79,7 +79,7 @@ class SchoolSettings extends Model
             "allow_session_payment": true
         }',
 
-      
+
     ];
 
     protected $casts = [
@@ -87,8 +87,8 @@ class SchoolSettings extends Model
         'academic_settings' => 'array',
         'admission_settings' => 'array',
         'payment_settings' => 'array',
-       
-       
+
+
     ];
 
     // Boot method for cache handling
@@ -128,7 +128,7 @@ class SchoolSettings extends Model
             'employee_settings' => json_decode(static::$defaultAttributes['employee_settings'], true),
             'academic_settings' => json_decode(static::$defaultAttributes['academic_settings'], true),
             'payment_settings' => json_decode(static::$defaultAttributes['payment_settings'], true),
-            
+
         ];
     }
 
@@ -156,6 +156,14 @@ class SchoolSettings extends Model
         $this->save();
     }
 
+    // Add a method to get merged settings with defaults
+    public function getMergedSettings(string $type): array
+    {
+        $defaults = json_decode(static::$defaultAttributes["{$type}_settings"], true);
+        $current = $this->{"{$type}_settings"} ?? [];
+
+        return array_merge($defaults, $current);
+    }
 
     // Add helper method for payment settings
     public function getPaymentSettings(): array
@@ -167,10 +175,10 @@ class SchoolSettings extends Model
     public function getDueDate(PaymentType $paymentType, Term $term): ?Carbon
     {
         $settings = $this->payment_settings['due_dates'] ?? [];
-        $daysAfterStart = $settings['term_payment_types'][$paymentType->code] 
-            ?? $settings['default_days'] 
+        $daysAfterStart = $settings['term_payment_types'][$paymentType->code]
+            ?? $settings['default_days']
             ?? null;
-        
+
         return $daysAfterStart ? $term->start_date->addDays($daysAfterStart) : null;
     }
 

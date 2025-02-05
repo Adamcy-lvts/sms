@@ -10,10 +10,12 @@ use Filament\Pages\Page;
 use App\Models\PaymentType;
 use App\Models\SchoolSettings;
 use Filament\Facades\Filament;
+use App\Models\AcademicSession;
 use App\Helpers\EmployeeIdFormats;
 use Illuminate\Support\HtmlString;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Tabs;
+use App\Services\EmployeeIdGenerator;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Illuminate\Support\Facades\Cache;
@@ -50,12 +52,17 @@ class ManageSettings extends Page
             // Employee ID Settings
 
             'employee_settings' => [
-                'format_type' => $settings->employee_settings['format_type'] ?? 'basic',
-                'custom_format' => $settings->employee_settings['custom_format'] ?? null,
+
                 'prefix' => $settings->employee_settings['prefix'] ?? 'EMP',
                 'number_length' => $settings->employee_settings['number_length'] ?? 3,
                 'separator' => $settings->employee_settings['separator'] ?? '-',
-                'department_prefixes' => $settings->employee_settings['department_prefixes'] ?? [],
+                'include_prefix' => $settings->employee_settings['include_prefix'] ?? true,
+                'include_year' => $settings->employee_settings['include_year'] ?? true,
+                'include_separator' => $settings->employee_settings['include_separator'] ?? true,
+                'prefix_type' => $settings->employee_settings['prefix_type'] ?? 'default',
+                'year_format' => $settings->employee_settings['year_format'] ?? 'short',
+                'custom_year' => $settings->employee_settings['custom_year'] ?? null,
+
             ],
 
             'academic_settings' => [
@@ -70,15 +77,19 @@ class ManageSettings extends Page
             'admission_settings' => [
                 'format_type' => $settings->admission_settings['format_type'] ?? 'basic',
                 'custom_format' => $settings->admission_settings['custom_format'] ?? null,
-                'prefix' => $settings->admission_settings['prefix'] ?? 'ADM',
+                'school_prefix' => $settings->admission_settings['school_prefix'] ?? null,
                 'length' => $settings->admission_settings['length'] ?? 4,
                 'separator' => $settings->admission_settings['separator'] ?? '-',
-                'school_initials' => $settings->admission_settings['school_initials'] ?? null,
                 'initials_method' => $settings->admission_settings['initials_method'] ?? 'first_letters',
                 'session_format' => $settings->admission_settings['session_format'] ?? 'short',
                 'number_start' => $settings->admission_settings['number_start'] ?? 1,
-                'reset_sequence_yearly' => $settings->admission_settings['reset_sequence_yearly'] ?? false,
-                'reset_sequence_by_session' => $settings->admission_settings['reset_sequence_by_session'] ?? false,
+                'reset_sequence_by_session' => $settings->admission_settings['reset_sequence_by_session'] ?? true,
+                'include_session' => $settings->admission_settings['include_session'] ?? true,
+                'custom_session' => $settings->admission_settings['custom_session'] ?? null,
+                'include_separator' => $settings->admission_settings['include_separator'] ?? true,
+                'include_prefix' => $settings->admission_settings['include_prefix'] ?? true,
+                'manual_numbering' => $settings->admission_settings['manual_numbering'] ?? false,
+                'show_last_number' => $settings->admission_settings['show_last_number'] ?? true,
             ],
 
             // Add payment settings to the form fill
@@ -102,110 +113,49 @@ class ManageSettings extends Page
                     Tabs\Tab::make('Admission Number Settings')
                         ->icon('heroicon-o-ticket')
                         ->schema([
+                            // Add these at the top of your admission settings schema
+                            Forms\Components\Toggle::make('admission_settings.manual_numbering')
+                                ->label('Manual Admission Number Entry')
+                                ->live()
+                                ->default(false)
+                                ->helperText('Allow manual input of admission numbers instead of automatic generation'),
+
+                            Forms\Components\Toggle::make('admission_settings.show_last_number')
+                                ->label('Show Last Used Number')
+                                ->default(true)
+                                ->visible(fn (Get $get) => $get('admission_settings.manual_numbering'))
+                                ->helperText('Display the last used admission number when entering new numbers'),
+
                             // Forms\Components\Select::make('admission_number_format_type')
-                            Forms\Components\Select::make('admission_settings.format_type')
-                                ->label('Number Format Type')
-                                ->options([
-                                    'basic' => 'Basic (ADM-0001)',
-                                    'with_year' => 'With Year (ADM-23-001)',
-                                    'school_initials' => 'School Initials (KPS-001)',
-                                    'school_year' => 'School with Year (KPS-23-001)',
-                                    'with_session' => 'With Session and default prefix (ADM-2324-001)',
-                                    'school_session' => 'School with Session (KPS-2324-001)',
-                                    'custom' => 'Custom Format'
-                                ])
-                                ->required()
-                                ->live()
-                                ->default('basic')
-                                ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                    if ($state === 'custom') {
-                                        $savedFormat = $get('admission_settings.custom_format');
-                                        if ($savedFormat) {
-                                            $set('admission_settings.custom_format', $savedFormat);
-                                        }
-                                    }
-                                }),
-
-                            Forms\Components\TextInput::make('admission_settings.custom_format')
-                                ->label('Custom Format Template')
-                                ->placeholder('KIA/{YYYY}/{NUM}')
-                                ->helperText(new HtmlString('Available tokens: ' . implode(', ', array_keys(AdmissionNumberFormats::getAvailableTokens()))))
-                                ->visible(fn(Get $get) => $get('admission_settings.format_type') === 'custom')
-                                ->required(fn(Get $get) => $get('admission_settings.format_type') === 'custom')
-                                ->live()
-                                ->debounce(500)
-                                ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                    $generator = new AdmissionNumberGenerator();
-                                    $preview = $generator->previewFormat($state);
-                                    $set('admission_settings.preview', $preview);
-                                }),
-
-                            Forms\Components\Placeholder::make('admission_settings.preview')
-                                ->label('Format Preview')
-                                ->content(fn(Get $get) => $get('admission_settings.preview') ?? 'Enter a valid format to see preview')
-                                ->visible(fn(Get $get) => $get('admission_settings.format_type') === 'custom'),
-
-                            // Hidden field to store custom format
-                            Forms\Components\Hidden::make('saved_custom_format'),
-
-
-                            Forms\Components\TextInput::make('admission_settings.prefix')
-                                ->label('Default Prefix')
-                                ->default('ADM')
-                                // ->placeholder('ADM')
-                                ->maxLength(5),
-
-
-
-                            Forms\Components\TextInput::make('admission_settings.school_initials')
-                                ->label('Custom School Initials')
-                                ->live()
-                                ->helperText('Leave empty to auto-generate from school name')
-                                ->afterStateUpdated(function (Get $get, Set $set, ?string $state) {
-                                    if (!empty($state)) {
-                                        $set('admission_settings.number_prefix', $state);
-                                    }
-                                }),
-
+                            
                             Forms\Components\Select::make('admission_settings.initials_method')
-                                ->label('School Initials Generation Method')
+                                ->label('Prefix Generation Method')
+                                ->helperText('Select how to generate prefix from school name')
                                 ->options([
-                                    'first_letters' => 'First Letters (KPS)',
-                                    'significant_words' => 'Skip Common Words',
-                                    'consonants' => 'First Consonants'
+                                    'first_letters' => 'First Letters (e.g., KPS)',
+                                    'consonants' => 'First Consonants (e.g., KHL)',
                                 ])
                                 ->required()
                                 ->live()
+                                ->default('first_letters')
+                                ->visible(fn(Get $get) => $get('admission_settings.include_prefix'))
                                 ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                    // Get tenant name
                                     $schoolName = Filament::getTenant()->name;
-
-                                    // Generate initials based on selected method
-                                    $initials = match ($state) {
-                                        'first_letters' => $this->getFirstLettersInitials($schoolName),
-                                        'significant_words' => $this->getSignificantWordsInitials($schoolName),
-                                        'consonants' => $this->getFirstConsonants($schoolName),
-                                        default => $this->getFirstLettersInitials($schoolName)
-                                    };
-
-                                    // Update both school initials and default prefix if custom initials is empty
-                                    if (empty($get('school_initials'))) {
-                                        $set('school_initials', $initials);
-                                    }
-                                    $set('admission_number_prefix', $initials);
+                                    $generator = new AdmissionNumberGenerator();
+                                    $useConsonants = $state === 'consonants';
+                                    $prefix = $generator->generateSchoolInitials($useConsonants);
+                                    $set('admission_settings.school_prefix', $prefix);
                                 }),
 
-
-                            Forms\Components\Select::make('admission_settings.session_format')
-                                ->label('Session Format')
-                                ->options([
-                                    'short' => 'Short Year (23)',
-                                    'short_session' => 'Short Session (2324)',
-                                    'full_year' => 'Full Year (2023)',
-                                    'full_session' => 'Full Session (2023/2024)',
-                                    'custom' => 'Custom Format'
-                                ])
-                                ->required(),
+                            Forms\Components\TextInput::make('admission_settings.school_prefix')
+                                ->label('School Prefix')
+                                ->maxLength(3)
+                                ->required()
+                                ->live()
+                                ->disabled()
+                                ->dehydrated()
+                                ->visible(fn(Get $get) => $get('admission_settings.include_prefix'))
+                                ->helperText('Generated from school name based on selected method'),
 
                             Forms\Components\TextInput::make('session_custom_format')
                                 ->label('Custom Session Format')
@@ -215,92 +165,191 @@ class ManageSettings extends Page
                             Forms\Components\TextInput::make('admission_settings.length')
                                 ->label('Sequential Number Length')
                                 ->numeric()
+                                ->live()
                                 ->default(4)
                                 ->required()
                                 ->minValue(1)
                                 ->maxValue(6),
 
+                            Forms\Components\Toggle::make('admission_settings.include_session')
+                                ->label('Include Session in Number')
+                                ->default(true)
+                                ->live(),
+
+                            Forms\Components\Select::make('admission_settings.custom_session')
+                                ->label('Use Specific Session')
+                                ->options(fn() => AcademicSession::orderByDesc('created_at')->pluck('name', 'name'))
+                                ->searchable()
+                                ->preload()
+                                ->live()
+                                ->helperText('Leave empty to use current session')
+                                ->visible(fn(Get $get) => $get('admission_settings.include_session')),
+
+                            Forms\Components\Select::make('admission_settings.session_format')
+                                ->label('Session Format')
+                                ->options([
+                                    'short' => 'Short Year (23)',
+                                    'short_session' => 'Short Session (2324)',
+                                    'full_year' => 'Full Year (2023)',
+                                    'full_session' => 'Full Session (2023/2024)',
+                                ])
+                                ->visible(fn(Get $get) => $get('admission_settings.include_session'))
+                                ->live()
+                                ->required(fn(Get $get) => $get('admission_settings.include_session')),
+
+                            Forms\Components\Toggle::make('admission_settings.reset_sequence_by_session')
+                                ->label('Reset Sequence for Each Session')
+                                ->default(true)
+                                ->helperText('Start numbering from 1 for each new session')
+                                ->visible(fn(Get $get) => $get('admission_settings.include_session')),
+
+                            Forms\Components\Toggle::make('admission_settings.include_separator')
+                                ->label('Use Separator')
+                                ->default(true)
+                                ->live()
+                                ->helperText('Add separator between parts of the admission number'),
+
                             Forms\Components\TextInput::make('admission_settings.separator')
                                 ->label('Separator Character')
                                 ->maxLength(1)
-                                ->default('-'),
+                                ->live()
+                                ->default('-')
+                                ->visible(fn(Get $get) => $get('admission_settings.include_separator')),
+
+                            Forms\Components\Toggle::make('admission_settings.include_prefix')
+                                ->label('Include School Prefix')
+                                ->default(true)
+                                ->live()
+                                ->helperText('Include school prefix in the admission number'),
+
+
+
+                            Forms\Components\Placeholder::make('admission_preview')
+                                ->label('Number Format Preview')
+                                ->content(function (Get $get) {
+                                    $generator = new AdmissionNumberGenerator();
+                                    return $generator->previewFormat([
+                                        'format_type' => $get('admission_settings.format_type'),
+                                        'custom_format' => $get('admission_settings.custom_format'),
+                                        'school_prefix' => $get('admission_settings.school_prefix'),
+                                        'separator' => $get('admission_settings.separator'),
+                                        'length' => $get('admission_settings.length'),
+                                        'include_session' => $get('admission_settings.include_session'),
+                                        'custom_session' => $get('admission_settings.custom_session'),
+                                        'session_format' => $get('admission_settings.session_format'),
+                                        'initials_method' => $get('admission_settings.initials_method'),
+                                        'include_separator' => $get('admission_settings.include_separator'),
+                                        'include_prefix' => $get('admission_settings.include_prefix'),
+                                    ]);
+                                })
+                                ->live(),
+
+
 
                         ])->columns(2),
                     Tabs\Tab::make('Employee ID Settings')
                         ->schema([
-                            Forms\Components\Select::make('employee_settings.format_type')
-                                ->label('ID Format Type')
-                                ->options([
-                                    'basic' => 'Basic (EMP001)',
-                                    'with_year' => 'With Year (EMP23001)',
-                                    'department' => 'With Department (ADM23001)',
-                                    'custom' => 'Custom Format'
-                                ])
-                                ->required()
-                                ->live(),
-
-                            Forms\Components\TextInput::make('employee_settings.custom_format')
-                                ->label('Custom Format')
-                                ->placeholder('EMP/{YY}/{NUM}')
-                                ->helperText('Available tokens: {PREFIX}, {YY}, {NUM}, {DEPT}')
-                                ->visible(fn(Get $get) => $get('employee_settings.format_type') === 'custom'),
 
                             Forms\Components\Select::make('employee_settings.prefix_type')
-                                ->label('Prefix Type')
+                                ->label('School Name Format')
+                                ->helperText('Select how to generate school initials, consonant means first consonants of words, first letters means first letter of each word of the school name')
                                 ->options([
-                                    'default' => 'Default (EMP)',
-                                    'school' => 'School Name',
-                                    'custom' => 'Custom'
+                                    'consonants' => 'Consonants (KHL)',
+                                    'first_letters' => 'First Letters (KIA)',
                                 ])
-                                ->default('default')
+                                ->default('consonants')
                                 ->live()
                                 ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                    if ($state === 'school') {
-                                        $schoolName = Filament::getTenant()->name;
-                                        $prefix = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $schoolName), 0, 3));
-                                        $set('employee_settings.prefix', $prefix);
-                                    } elseif ($state === 'default') {
-                                        $set('employee_settings.prefix', 'EMP');
-                                    }
+                                    $schoolName = Filament::getTenant()->name;
+                                    $generator = new EmployeeIdGenerator();
+                                    $initials = $generator->generateSchoolInitials($state === 'consonants');
+                                    $set('employee_settings.prefix', $initials);
                                 }),
+
 
                             Forms\Components\TextInput::make('employee_settings.prefix')
                                 ->label('Default Prefix')
                                 ->default('EMP')
+                                ->live()
                                 ->required(),
 
                             Forms\Components\Select::make('employee_settings.year_format')
                                 ->label('Year Format')
                                 ->options([
-                                    'none' => 'No Year',
                                     'short' => 'Short Year (23)',
                                     'full' => 'Full Year (2023)'
                                 ])
                                 ->default('short')
-                                ->visible(fn(Get $get) => in_array(
-                                    $get('employee_settings.format_type'),
-                                    ['with_year', 'with_department']
-                                )),
+                                ->live()
+                                ->visible(fn(Get $get) => $get('employee_settings.include_year')),
+
+                            Forms\Components\DatePicker::make('employee_settings.custom_year')
+                                ->label('Start Year')
+                                ->format('Y')
+                                ->maxDate(now())
+                                ->helperText('Leave empty to use current year')
+                                ->live(),
 
                             Forms\Components\TextInput::make('employee_settings.number_length')
                                 ->label('Sequential Number Length')
                                 ->numeric()
+                                ->live()
                                 ->default(3)
                                 ->required()
                                 ->minValue(1)
                                 ->maxValue(6),
-
-                            Forms\Components\TextInput::make('employee_settings.separator')
-                                ->label('Separator Character')
-                                ->maxLength(1)
-                                ->default('-'),
 
                             Forms\Components\KeyValue::make('employee_settings.department_prefixes')
                                 ->label('Department Prefixes')
                                 ->keyLabel('Department')
                                 ->valueLabel('Prefix')
                                 ->reorderable()
-                                ->visible(fn(Get $get) => $get('employee_settings.format_type') === 'department')
+                                ->visible(fn(Get $get) => $get('employee_settings.format_type') === 'department'),
+
+                            Forms\Components\Grid::make(2)
+                                ->schema([
+                                    Forms\Components\Toggle::make('employee_settings.include_prefix')
+                                        ->label('Include Prefix')
+                                        ->default(true)
+                                        ->live()
+                                        ->helperText('Include school prefix in ID format'),
+
+                                    Forms\Components\Toggle::make('employee_settings.include_year')
+                                        ->label('Include Year')
+                                        ->default(true)
+                                        ->live()
+                                        ->helperText('Include year in ID format'),
+
+                                    Forms\Components\Toggle::make('employee_settings.include_separator')
+                                        ->label('Use Separator')
+                                        ->default(true)
+                                        ->live()
+                                        ->helperText('Add separator between parts'),
+
+                                    Forms\Components\TextInput::make('employee_settings.separator')
+                                        ->label('Separator Character')
+                                        ->default('/')
+                                        ->maxLength(1)
+                                        ->visible(fn(Get $get) => $get('employee_settings.include_separator')),
+                                ]),
+
+                            Forms\Components\Placeholder::make('preview')
+                                ->label('Format Preview')
+                                ->content(function (Get $get) {
+                                    $generator = new EmployeeIdGenerator();
+                                    return $generator->previewFormat([
+                                        'include_prefix' => $get('employee_settings.include_prefix'),
+                                        'include_year' => $get('employee_settings.include_year'),
+                                        'include_separator' => $get('employee_settings.include_separator'),
+                                        'separator' => $get('employee_settings.separator'),
+                                        'initials_method' => $get('employee_settings.initials_method'),
+                                        'prefix' => $get('employee_settings.prefix'),
+                                        'prefix_type' => $get('employee_settings.prefix_type'),
+                                        'year_format' => $get('employee_settings.year_format'),
+                                        'number_length' => $get('employee_settings.number_length'),
+                                        'custom_year' => $get('employee_settings.custom_year'),
+                                    ]);
+                                }),
                         ])
                         ->columns(2),
 
@@ -453,59 +502,5 @@ class ManageSettings extends Page
                 ->label('Save Settings')
                 ->submit('save'),
         ];
-    }
-
-    // Helper methods for initials generation
-    protected function getFirstLettersInitials(string $name): string
-    {
-        $words = array_filter(explode(' ', $name));
-        if (count($words) === 1) {
-            return strtoupper(substr($words[0], 0, 3));
-        }
-        $initials = array_slice(array_map(fn($word) => substr($word, 0, 1), $words), 0, 3);
-        return strtoupper(implode('', $initials));
-    }
-
-    protected function getSignificantWordsInitials(string $name): string
-    {
-        $skipWords = ['the', 'of', 'and', 'in', 'at', 'by', 'for'];
-        $words = array_filter(
-            explode(' ', strtolower($name)),
-            fn($word) => !in_array($word, $skipWords)
-        );
-        $initials = array_map(fn($word) => substr($word, 0, 1), $words);
-        return strtoupper(implode('', array_slice($initials, 0, 3)));
-    }
-
-    protected function getFirstConsonants(string $name): string
-    {
-        $words = array_filter(explode(' ', $name));
-        $consonants = '';
-
-        foreach ($words as $word) {
-            if (preg_match('/[bcdfghjklmnpqrstvwxyz]/i', $word, $matches)) {
-                $consonants .= $matches[0];
-            } else {
-                $consonants .= substr($word, 0, 1);
-            }
-            if (strlen($consonants) >= 3) break;
-        }
-
-        return strtoupper(substr(str_pad($consonants, 3, 'X'), 0, 3));
-    }
-
-    public function previewFormat(string $format): string
-    {
-        $replacements = [
-            '{PREFIX}' => 'ADM',
-            '{SCHOOL}' => 'KPS',
-            '{YY}' => date('y'),
-            '{YYYY}' => date('Y'),
-            '{SESSION}' => '2324',
-            '{NUM}' => '0001',
-            '{SEP}' => '-'
-        ];
-
-        return str_replace(array_keys($replacements), array_values($replacements), $format);
     }
 }

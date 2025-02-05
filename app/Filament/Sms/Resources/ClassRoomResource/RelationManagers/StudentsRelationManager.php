@@ -154,6 +154,7 @@ class StudentsRelationManager extends RelationManager
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->label('Mark All Present')
+                    ->visible(fn(): bool => auth()->user()->can('can_take_attendance_class_room'))
                     ->requiresConfirmation()
                     ->modalHeading('Mark Entire Class Present')
                     ->modalDescription('Are you sure you want to mark all students present?')
@@ -204,10 +205,10 @@ class StudentsRelationManager extends RelationManager
                     ->tooltip('Mark Present')
                     ->button()
                     ->size('xs')
-                    ->hidden(fn(Student $record) => \App\Models\AttendanceRecord::where([
-                        'student_id' => $record->id,
-                        'date' => now()->toDateString(),
-                    ])->exists())
+                    ->visible(fn(Student $record): bool => 
+                        auth()->user()->can('can_take_attendance_class_room') && 
+                        !$this->hasAttendanceForToday($record)
+                    )
                     ->action(function (Student $record) {
                         try {
                             \App\Models\AttendanceRecord::create([
@@ -246,10 +247,10 @@ class StudentsRelationManager extends RelationManager
                     ->tooltip('Mark Absent')
                     ->button()
                     ->size('xs')
-                    ->hidden(fn(Student $record) => \App\Models\AttendanceRecord::where([
-                        'student_id' => $record->id,
-                        'date' => now()->toDateString(),
-                    ])->exists())
+                    ->visible(fn(Student $record): bool => 
+                        auth()->user()->can('can_take_attendance_class_room') && 
+                        !$this->hasAttendanceForToday($record)
+                    )
                     ->action(function (Student $record) {
                         try {
                             \App\Models\AttendanceRecord::create([
@@ -287,10 +288,10 @@ class StudentsRelationManager extends RelationManager
                         ->icon('heroicon-o-pencil-square')
                         ->color('warning')
                         ->tooltip('Edit Attendance')
-                        ->visible(fn(Student $record) => \App\Models\AttendanceRecord::where([
-                            'student_id' => $record->id,
-                            'date' => now()->toDateString(),
-                        ])->exists())
+                        ->visible(fn(Student $record): bool => 
+                            auth()->user()->can('can_take_attendance_class_room') && 
+                            $this->hasAttendanceForToday($record)
+                        )
                         ->form([
                             Forms\Components\Select::make('status')
                                 ->label('Update Status')
@@ -404,6 +405,7 @@ class StudentsRelationManager extends RelationManager
                     Action::make('promote')
                         ->icon('heroicon-o-arrow-up-circle')
                         ->color('info')
+                        ->visible(fn(): bool => auth()->user()->can('promote_student'))
                         ->form([
                             Forms\Components\Select::make('class_room_id')
                                 ->label('New Class')
@@ -454,6 +456,7 @@ class StudentsRelationManager extends RelationManager
                     Tables\Actions\Action::make('changeStatus')
                         ->icon('heroicon-o-arrow-path')
                         ->color('warning')
+                        ->visible(fn(): bool => auth()->user()->can('change_status_student'))
                         ->form([
                             Forms\Components\Select::make('status_id')
                                 ->label('New Status')
@@ -494,8 +497,11 @@ class StudentsRelationManager extends RelationManager
                             }
                         }),
 
-                    Tables\Actions\EditAction::make(),
-                    Tables\Actions\DeleteAction::make(),
+                    Tables\Actions\EditAction::make()
+                        ->visible(fn(): bool => auth()->user()->can('update_student')),
+
+                    Tables\Actions\DeleteAction::make()
+                        ->visible(fn(): bool => auth()->user()->can('delete_student')),
                 ]),
             ])
             ->bulkActions([
@@ -504,6 +510,7 @@ class StudentsRelationManager extends RelationManager
                     BulkAction::make('bulkMarkPresent')
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
+                        ->visible(fn(): bool => auth()->user()->can('can_take_attendance_class_room'))
                         ->requiresConfirmation()
                         ->action(function (Collection $records): void {
                             $marked = 0;
@@ -545,6 +552,7 @@ class StudentsRelationManager extends RelationManager
                     BulkAction::make('bulkPromote')
                         ->icon('heroicon-o-arrow-up-circle')
                         ->color('info')
+                        ->visible(fn(): bool => auth()->user()->can('bulk_promote_student'))
                         ->form([
                             Forms\Components\Select::make('class_room_id')
                                 ->label('New Class')
@@ -590,6 +598,7 @@ class StudentsRelationManager extends RelationManager
                     BulkAction::make('bulkStatusChange')
                         ->icon('heroicon-o-arrow-path')
                         ->color('warning')
+                        ->visible(fn(): bool => auth()->user()->can('bulk_status_change_student'))
                         ->form([
                             Forms\Components\Select::make('status_id')
                                 ->label('New Status')
@@ -624,8 +633,17 @@ class StudentsRelationManager extends RelationManager
                             });
                         }),
 
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn(): bool => auth()->user()->can('delete_any_student')),
                 ]),
             ]);
+    }
+
+    private function hasAttendanceForToday(Student $student): bool
+    {
+        return \App\Models\AttendanceRecord::where([
+            'student_id' => $student->id,
+            'date' => now()->toDateString(),
+        ])->exists();
     }
 }

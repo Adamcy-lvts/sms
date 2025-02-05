@@ -105,4 +105,12 @@ class ClassRoomPolicy
     {
         return $user->can('reorder_class::room');
     }
+
+    /**
+     * Determine whether the user can take attendance.
+     */
+    public function canTakeAttendance(User $user): bool
+    {
+        return $user->can('can_take_attendance_class::room');
+    }
 }

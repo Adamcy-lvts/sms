@@ -5,12 +5,15 @@ namespace App\Filament\Resources;
 use Filament\Forms;
 use App\Models\Plan;
 use Filament\Tables;
+use App\Models\Feature;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
+use Filament\Forms\Components\Group;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TagsInput;
@@ -20,6 +23,7 @@ use Filament\Forms\Components\RichEditor;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Forms\Components\ColorPicker;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\ToggleButtons;
 use Illuminate\Database\Eloquent\Collection;
 use App\Filament\Resources\PlanResource\Pages;
@@ -64,10 +68,11 @@ class PlanResource extends Resource
                             ->minValue(0)
                             ->step(100)
                             ->placeholder('0.00')
-                            ->helperText(fn (callable $get) => 
-                                $get('interval') === 'annually' ? 
-                                'Enter the full annual price' : 
-                                'Enter the monthly price'
+                            ->helperText(
+                                fn(callable $get) =>
+                                $get('interval') === 'annually' ?
+                                    'Enter the full annual price' :
+                                    'Enter the monthly price'
                             ),
 
                         TextInput::make('yearly_discount')
@@ -104,23 +109,45 @@ class PlanResource extends Resource
                 Section::make('Plan Features')
                     ->description('Define what\'s included in this plan')
                     ->schema([
-                        TagsInput::make('features')
-                            ->label('Plan Features')
-                            ->separator(',')
-                            ->suggestions([
-                                'Profile Management',
-                                'Role-Based Access Control',
-                                'Financial Management',
-                                'Attendance Tracking',
-                                'Report Card Generation',
-                                'Basic Analytics',
-                                '500 Students Limit',
-                                '5 Staff Accounts',
-                                'Email Support'
-                            ])
+                        CheckboxList::make('features')
+                            ->options(
+                                Feature::all()
+                                    ->mapWithKeys(fn($feature) => [$feature->id => $feature->name])
+                                    ->toArray()
+                            )
+                            ->searchable()
+                            ->columns(3)
                             ->columnSpanFull()
-                            ->required()
-                            ->helperText('Press Enter, Tab or comma to add a feature'),
+                            ->reactive(),
+
+                        Group::make()
+                            ->schema([
+                                TextInput::make('featureLimits.max_students')
+                                    ->label('Maximum Students')
+                                    ->numeric()
+                                    ->placeholder('Leave empty for unlimited')
+                                    ->visible(fn($get) => collect($get('features'))->contains(
+                                        fn($id) => Feature::find($id)?->slug === 'students_limit'
+                                    )),
+
+                                TextInput::make('featureLimits.max_staff')
+                                    ->label('Maximum Staff')
+                                    ->numeric()
+                                    ->placeholder('Leave empty for unlimited')
+                                    ->visible(fn($get) => collect($get('features'))->contains(
+                                        fn($id) => Feature::find($id)?->slug === 'staff_limit'
+                                    )),
+
+                                TextInput::make('featureLimits.max_classes')
+                                    ->label('Maximum Classes')
+                                    ->numeric()
+                                    ->placeholder('Leave empty for unlimited')
+                                    ->visible(fn($get) => collect($get('features'))->contains(
+                                        fn($id) => Feature::find($id)?->slug === 'classes_limit'
+                                    )),
+                            ])
+                            ->columns(3)
+                            ->columnSpanFull(),
 
                         RichEditor::make('description')
                             ->toolbarButtons([

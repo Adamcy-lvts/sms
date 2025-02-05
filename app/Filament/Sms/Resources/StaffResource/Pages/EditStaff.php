@@ -22,6 +22,18 @@ class EditStaff extends EditRecord
     // Handle form data before saving updates
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        // if ($this->record->user) {
+        //     $data['create_user_account'] = true;
+        //     $data['roles'] = $this->record->user->roles()
+        //         ->where('team_id', Filament::getTenant()->id)
+        //         ->pluck('id')
+        //         ->toArray();
+                
+        //     $data['permissions'] = $this->record->user->permissions()
+        //         ->pluck('id')
+        //         ->toArray();
+        // }
+    
         // Ensure school_id is set
         $data['school_id'] = Filament::getTenant()->id;
         return $data;
@@ -78,8 +90,8 @@ class EditStaff extends EditRecord
             $data['teacher'] = [
                 'specialization' => $teacher->specialization,
                 'teaching_experience' => $teacher->teaching_experience,
-                'subjects' => $teacher->subjects()->pluck('id')->all() ?? [],
-                'class_rooms' => $teacher->classRooms()->pluck('id')->all() ?? [],
+                'subjects' => $teacher->subjects()->pluck('subjects.id')->all() ?? [],
+                'class_rooms' => $teacher->classRooms()->pluck('class_rooms.id')->all() ?? [],
             ];
         } else {
             $data['is_teacher'] = false;

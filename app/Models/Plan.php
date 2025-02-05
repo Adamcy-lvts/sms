@@ -27,38 +27,37 @@ class Plan extends Model
      * The attributes that are mass assignable.
      */
     protected $fillable = [
-        'name',             // Plan name (e.g., Basic Monthly, Basic Annual)
-        'description',      // Detailed plan description
-        'price',           // Original price in currency units
-        'discounted_price', // Discounted price for annual plans
-        'interval',        // Billing interval (monthly/annually)
-        'duration',        // Plan duration in days (30 for monthly, 365 for annually)
-        'features',        // Array of features included in the plan
-        'plan_code',       // Paystack plan code
-        'yearly_discount', // Percentage discount for annual plans
-        'trial_period',    // Trial period in days
-        'has_trial',      // Whether trial is enabled
-        'status',         // Plan status (active/inactive/archived)
-        'badge_color',    // Color for UI display
-        'cto',            // Call to action text
-        'max_students',   // Maximum students allowed
-        'max_staff',      // Maximum staff allowed
-        'max_classes'     // Maximum classes allowed
+        'name',
+        'description',
+        'price',
+        'discounted_price',
+        'interval',
+        'duration',
+        'plan_code',
+        'yearly_discount',
+        'trial_period',
+        'has_trial',
+        'status',
+        'max_students',
+        'max_staff',
+        'max_classes',
+        'badge_color',
+        'cto'
     ];
 
     /**
      * The attributes that should be cast.
      */
     protected $casts = [
-        'features' => 'array',
         'price' => 'decimal:2',
         'discounted_price' => 'decimal:2',
         'yearly_discount' => 'integer',
         'has_trial' => 'boolean',
+        'trial_period' => 'integer',
+        'duration' => 'integer',
         'max_students' => 'integer',
         'max_staff' => 'integer',
-        'max_classes' => 'integer',
-        'trial_period' => 'integer'
+        'max_classes' => 'integer'
     ];
 
     /**
@@ -71,11 +70,27 @@ class Plan extends Model
         'yearly_discount' => 0
     ];
 
-      // Helper method to check if plan offers trial
-      public function offersTrial(): bool 
-      {
-          return $this->has_trial && $this->trial_period > 0;
-      }
+    // Update relationships
+    public function features()
+    {
+        return $this->belongsToMany(Feature::class, 'feature_plan');
+    }
+
+    public function hasStudentLimit(): bool
+    {
+        return !is_null($this->max_students);
+    }
+
+    public function hasUnlimitedStudents(): bool
+    {
+        return is_null($this->max_students);
+    }
+
+    // Helper method to check if plan offers trial
+    public function offersTrial(): bool
+    {
+        return $this->has_trial && $this->trial_period > 0;
+    }
 
     /**
      * Get the display price (discounted if available)
@@ -183,11 +198,29 @@ class Plan extends Model
     /**
      * Check if plan includes a specific feature
      */
-    public function hasFeature(string $feature): bool
+    public function hasFeature(string $featureName): bool
     {
-        return in_array($feature, $this->features) ||
-            in_array('All Basic Features', $this->features) ||
-            in_array('All Standard Features', $this->features);
+        return $this->features->contains('name', $featureName) ||
+            $this->features->contains('name', 'All Basic Features') ||
+            $this->features->contains('name', 'All Standard Features');
+    }
+
+    /**
+     * Get limit for a specific feature
+     */
+    public function getFeatureLimit(string $featureSlug)
+    {
+        $feature = $this->features()->where('slug', $featureSlug)->first();
+        return $feature ? $feature->pivot->limits : null;
+    }
+
+    /**
+     * Check if plan has unlimited usage for a feature
+     */
+    public function hasUnlimitedFeature(string $featureSlug): bool
+    {
+        $limit = $this->getFeatureLimit($featureSlug);
+        return $limit === null || $limit === -1;
     }
 
     /**
@@ -229,10 +262,30 @@ class Plan extends Model
      */
     public static function allFeatures(): array
     {
-        return self::pluck('features')
-            ->flatten()
-            ->unique()
-            ->values()
-            ->toArray();
+        return Feature::whereHas('plans')->pluck('name')->unique()->values()->toArray();
+    }
+
+    public function getLimit(string $type): ?int
+    {
+        $limitField = "{$type}_limit";
+        return $this->$limitField;
+    }
+
+    public function hasUnlimitedUsage(string $type): bool
+    {
+        return !$this->hasLimit($type);
+    }
+
+    public function hasLimit(string $field): bool
+    {
+        return !is_null($this->$field);
+    }
+
+    public function getRemainingLimit(string $field, int $currentCount): int
+    {
+        if (!$this->hasLimit($field)) {
+            return PHP_INT_MAX;
+        }
+        return max(0, $this->$field - $currentCount);
     }
 }

@@ -3,14 +3,14 @@
         <!-- Subscription Management Section -->
         <x-filament::section>
             <div class="space-y-4">
-                @if ($school->currentSubscription()->next_payment_date ?? null)
+                @if ($school->currentSubscription->next_payment_date ?? null)
                     <div class="text-sm text-warning-500">
                         Next Payment Date: <strong class="font-medium">{{ $nextBillingDate }}</strong>
                     </div>
                 @endif
 
                 <p class="text-sm text-gray-600 dark:text-gray-400">
-                    @if ($school->currentSubscription())
+                    @if ($school->currentSubscription)
                         You are currently subscribed. To manage your subscription settings or to download invoices, click 'Manage Subscription' below.
                     @else
                         You're not currently subscribed to any plan. Click 'Subscribe' below to choose a plan that fits your needs.
@@ -22,7 +22,7 @@
                         Manage Subscription
                     </x-filament::button>
 
-                    @if (!$school->currentSubscription())
+                    @if (!$school->currentSubscription)
                         <x-filament::button size="sm" wire:click="subscribe">
                             Subscribe
                         </x-filament::button>
@@ -32,7 +32,7 @@
         </x-filament::section>
 
         <!-- Cancel Subscription Section -->
-        @if ($school->currentSubscription())
+        @if ($school->currentSubscription)
             <x-filament::section>
                 <div class="space-y-4">
                     <p class="text-sm text-gray-600 dark:text-gray-400">

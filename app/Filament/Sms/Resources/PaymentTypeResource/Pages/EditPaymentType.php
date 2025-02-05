@@ -52,6 +52,17 @@ class EditPaymentType extends EditRecord
                 'amount' => $amount,
                 'description' => $data['description'] ?? null,
                 'active' => $data['active'] ?? true,
+                // Add new fields
+                'is_tuition' => $data['is_tuition'] ?? false,
+                'class_level' => $data['is_tuition'] && $data['category'] === 'service_fee' 
+                    ? ($data['class_level'] ?? 'all') 
+                    : null,
+                'installment_allowed' => $data['category'] === 'service_fee' 
+                    ? ($data['installment_allowed'] ?? false) 
+                    : false,
+                'min_installment_amount' => isset($data['installment_allowed']) && $data['installment_allowed'] 
+                    ? ($data['min_installment_amount'] ?? null) 
+                    : null,
             ]);
 
             // Handle inventory

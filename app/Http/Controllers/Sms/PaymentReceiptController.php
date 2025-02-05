@@ -11,6 +11,7 @@ use Spatie\Browsershot\Browsershot;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
+use App\Filament\Sms\Resources\PaymentResource;
 
 class PaymentReceiptController extends Controller
 {
@@ -27,7 +28,11 @@ class PaymentReceiptController extends Controller
         if ($payment->school_id !== $tenant->id) {
             abort(Response::HTTP_NOT_FOUND);
         }
-    
+        $QrViewUrl = PaymentResource::getUrl('view', [
+            'record' => $payment->id,
+            'tenant' => $tenant->id,
+        ]);
+        
         return view('pdfs.student-payment-receipt', [
             'payment' => $payment->load([
                 'student.classRoom',
@@ -35,7 +40,8 @@ class PaymentReceiptController extends Controller
                 'term',
                 'status',
                 'paymentType',
-                'paymentMethod'
+                'paymentMethod',
+                'QrViewUrl' => $QrViewUrl,
             ]),
             'school' => $tenant,
             'isPrintMode' => true

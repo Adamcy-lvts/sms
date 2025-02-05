@@ -11,6 +11,7 @@ use App\Models\Subject;
 use App\Models\Template;
 use App\Models\ClassRoom;
 use App\Models\Designation;
+use App\Models\PaymentPlan;
 use App\Models\PaymentType;
 use Illuminate\Support\Str;
 use App\Models\ActivityType;
@@ -66,6 +67,10 @@ class SchoolSetupService
             // Create default admission letter templates and variables
             $this->createDefaultAdmissionTemplate($school);
 
+              // Add new setup methods
+              $this->setupDefaultPaymentTypes($school);
+              $this->setupDefaultPaymentPlans($school);
+
             // Create subjects based on toggles
             if ($data['create_subjects'] ?? false) {
                 $this->createSubjects($school, $data['create_islamic_subjects'] ?? false);
@@ -90,6 +95,11 @@ class SchoolSetupService
                     $this->setupTrialSubscription($school, $plan, $data['billing_type'] ?? 'monthly');
                 }
             }
+
+            // Create default roles
+            $roleService = new RoleSetupService();
+            $roleService->setupSchoolRoles($school);
+
         } catch (\Exception $e) {
             Log::error('School setup error: ' . $e->getMessage());
             throw $e;
@@ -831,10 +841,21 @@ class SchoolSetupService
     public function createStaff(array $data, School $school, Authenticatable $user): Staff
     {
         // Get admin designation
-        $designation = Designation::where('school_id', $school->id)->where('name', 'Administrator')->first();
+        $designation = Designation::where('school_id', $school->id)
+            ->where('name', 'Administrator')
+            ->first();
 
         // Get active status for staff
-        $activeStatus = Status::where('type', 'staff')->where('name', 'active')->first();
+        $activeStatus = Status::where('type', 'staff')
+            ->where('name', 'active')
+            ->first();
+
+        // Generate employee ID
+        $employeeIdGenerator = new EmployeeIdGenerator();
+        $employeeId = $employeeIdGenerator->generate([
+            'designation_id' => $designation->id,
+            'is_admin' => true
+        ]);
 
         return Staff::create([
             'school_id' => $school->id,
@@ -845,6 +866,8 @@ class SchoolSetupService
             'last_name' => $data['last_name'],
             'email' => $data['admin_email'],
             'hire_date' => now(),
+            'employee_id' => $employeeId, // Add the generated employee ID
+            'is_admin' => true,
         ]);
     }
 
@@ -984,5 +1007,209 @@ class SchoolSetupService
                 ]);
             }
         }
+    }
+
+    protected function setupDefaultPaymentTypes(School $school): void
+    {
+        // Define default payment types matching the model structure
+        $paymentTypes = [
+            // Tuition/School Fees for different levels
+            [
+                'name' => PaymentType::TUITION_PREFIX . ' (Nursery)',
+                'category' => PaymentType::CATEGORY_SERVICE,
+                'amount' => 75000,
+                'active' => true,
+                'is_tuition' => true,
+                'class_level' => 'nursery',
+                'installment_allowed' => true,
+                'min_installment_amount' => 25000, // One term amount
+                'has_due_date' => true,
+                'description' => 'Nursery school tuition fees - can be paid termly or full session',
+            ],
+            [
+                'name' => PaymentType::TUITION_PREFIX . ' (Primary)',
+                'category' => PaymentType::CATEGORY_SERVICE,
+                'amount' => 90000,
+                'active' => true,
+                'is_tuition' => true,
+                'class_level' => 'primary',
+                'installment_allowed' => true,
+                'min_installment_amount' => 30000, // One term amount
+                'has_due_date' => true,
+                'description' => 'Primary school tuition fees - can be paid termly or full session',
+            ],
+            [
+                'name' => PaymentType::TUITION_PREFIX . ' (Secondary)',
+                'category' => PaymentType::CATEGORY_SERVICE,
+                'amount' => 120000,
+                'active' => true,
+                'is_tuition' => true,
+                'class_level' => 'secondary',
+                'installment_allowed' => true,
+                'min_installment_amount' => 40000, // One term amount
+                'has_due_date' => true,
+                'description' => 'Secondary school tuition fees - can be paid termly or full session',
+            ],
+
+            // Physical Items
+            [
+                'name' => 'School Uniform (Complete Set)',
+                'category' => PaymentType::CATEGORY_PHYSICAL,
+                'amount' => 15000,
+                'active' => true,
+                'is_tuition' => false,
+                'installment_allowed' => false,
+                'has_due_date' => false,
+                'description' => 'Complete set of school uniform including sports wear',
+            ],
+            [
+                'name' => 'PE Kit',
+                'category' => PaymentType::CATEGORY_PHYSICAL,
+                'amount' => 12000,
+                'active' => true,
+                'is_tuition' => false,
+                'installment_allowed' => false,
+                'has_due_date' => false,
+                'description' => 'Physical Education kit for sports and athletics',
+            ]
+        ];
+    
+        try {
+            foreach ($paymentTypes as $type) {
+                // Create payment type
+                $paymentType = PaymentType::create([
+                    'school_id' => $school->id,
+                    ...$type
+                ]);
+
+                // If it's a physical item, create inventory
+                if ($paymentType->requiresInventory()) {
+                    $paymentType->inventory()->create([
+                        'school_id' => $school->id,
+                        'name' => $type['name'],
+                        'quantity' => 30, // Initial stock
+                        'unit_price' => 10000,
+                        'selling_price' => $type['amount'],
+                        'is_active' => true,
+                        'reorder_level' => 10, // Default reorder point
+                        'description' => $type['description'],
+                    ]);
+                }
+            }
+
+            Log::info('Default payment types created successfully', [
+                'school_id' => $school->id,
+                'types_count' => count($paymentTypes)
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to create default payment types', [
+                'school_id' => $school->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
+    }
+
+    // In SchoolSetupService.php
+
+    protected function setupDefaultPaymentPlans(School $school): void
+    {
+        // First get the tuition payment types to reference
+        $tuitionTypes = [
+            'nursery' => PaymentType::where('school_id', $school->id)
+                ->where('class_level', 'nursery')
+                ->where('is_tuition', true)
+                ->first()?->id,
+            'primary' => PaymentType::where('school_id', $school->id)
+                ->where('class_level', 'primary')
+                ->where('is_tuition', true)
+                ->first()?->id,
+            'secondary' => PaymentType::where('school_id', $school->id)
+                ->where('class_level', 'secondary')
+                ->where('is_tuition', true)
+                ->first()?->id,
+        ];
+
+        // Define default payment plans matching model structure
+        $paymentPlans = [
+            // Nursery Level Plan
+            [
+                'school_id' => $school->id,
+                'payment_type_id' => $tuitionTypes['nursery'],
+                'name' => 'Nursery School Fees',
+                'class_level' => 'nursery',
+                'term_amount' => 25000.00,
+                'session_amount' => 75000.00,
+            ],
+
+            // Primary Level Plan
+            [
+                'school_id' => $school->id,
+                'payment_type_id' => $tuitionTypes['primary'],
+                'name' => 'Primary School Fees',
+                'class_level' => 'primary',
+                'term_amount' => 30000.00,
+                'session_amount' => 90000.00,
+            ],
+
+            // Secondary Level Plan
+            [
+                'school_id' => $school->id,
+                'payment_type_id' => $tuitionTypes['secondary'],
+                'name' => 'Secondary School Fees',
+                'class_level' => 'secondary',
+                'term_amount' => 40000.00,
+                'session_amount' => 120000.00,
+            ],
+        ];
+
+        try {
+            // Create each payment plan
+            foreach ($paymentPlans as $plan) {
+                // Skip if payment type doesn't exist
+                if (!$plan['payment_type_id']) {
+                    Log::warning('Payment type not found for plan: ' . $plan['name'], [
+                        'school_id' => $school->id,
+                        'class_level' => $plan['class_level']
+                    ]);
+                    continue;
+                }
+
+                PaymentPlan::create($plan);
+            }
+
+            Log::info('Default payment plans created successfully', [
+                'school_id' => $school->id,
+                'plans_count' => count($paymentPlans)
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to create default payment plans', [
+                'school_id' => $school->id,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    protected function createSettings(School $school): void
+    {
+        SchoolSettings::create([
+            'school_id' => $school->id,
+            'admission_settings' => [
+                'format_type' => 'school_session', // Changed from 'basic' to 'school_session'
+                'custom_format' => null,
+                'prefix' => strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $school->name), 0, 3)),
+                'length' => 4,
+                'separator' => '/',
+                'school_initials' => null,
+                'initials_method' => 'first_letters',
+                'session_format' => 'full_session', // Changed from 'short' to 'full_session'
+                'number_start' => 1,
+                'reset_sequence_yearly' => false,
+                'reset_sequence_by_session' => true // Changed from false to true to reset numbers each session
+            ],
+            // ...existing code...
+        ]);
     }
 }

@@ -17,8 +17,10 @@ use App\Models\ClassRoom;
 use Filament\Tables\Table;
 use App\Models\Designation;
 use Filament\Support\RawJs;
+use Filament\Actions\Action;
 use App\Settings\AppSettings;
 use Filament\Facades\Filament;
+use App\Services\FeatureService;
 use Filament\Resources\Resource;
 use App\Helpers\EmployeeIdFormats;
 use Illuminate\Support\Collection;
@@ -54,33 +56,21 @@ class StaffResource extends Resource
                             ->schema([
                                 Forms\Components\FileUpload::make('profile_picture')
                                     ->label('Profile Photo')
+                                    ->disk('public')
+                                    ->directory("{$school->slug}/staff_profile_photos")
                                     ->image()
                                     ->imageEditor()
                                     ->imageEditorAspectRatios(['1:1'])
-                                    ->directory('staff-photos')
                                     ->columnSpanFull(),
 
                                 Forms\Components\Group::make([
                                     Forms\Components\TextInput::make('employee_id')
                                         ->label('Employee ID')
                                         ->default(function () {
-                                            // Get the current tenant
                                             $tenant = Filament::getTenant();
-
-                                            // Get the tenant's settings
                                             $settings = $tenant->getSettingsAttribute();
-
-                                            // Get current designation_id if exists
-                                            $designationId = request()->get('designation_id');
-
-                                            // Create generator instance with tenant settings
                                             $generator = new EmployeeIdGenerator($settings);
-
-                                            // Generate ID with proper format
-                                            return $generator->generate([
-                                                'id_format' => $settings->employee_id_format_type,
-                                                'designation_id' => $designationId,
-                                            ]);
+                                            return $generator->generateNextId();
                                         })
                                         ->disabled()
                                         ->dehydrated()
@@ -325,19 +315,19 @@ class StaffResource extends Resource
                                                         'custom' => 'Set Custom Password',
                                                     ])
                                                     ->default('phone')
-                                                    ->live()
-                                                    ->required(),
+                                                    ->live(),
+                                                   
 
                                                 Forms\Components\TextInput::make('custom_password')
                                                     ->password()
                                                     ->confirmed()
-                                                    ->visible(fn(Forms\Get $get) => $get('default_password_type') === 'custom')
-                                                    ->required(fn(Forms\Get $get) => $get('default_password_type') === 'custom'),
+                                                    ->visible(fn(Forms\Get $get) => $get('default_password_type') === 'custom'),
+                                                    
 
                                                 Forms\Components\TextInput::make('custom_password_confirmation')
                                                     ->password()
-                                                    ->visible(fn(Forms\Get $get) => $get('default_password_type') === 'custom')
-                                                    ->required(fn(Forms\Get $get) => $get('default_password_type') === 'custom'),
+                                                    ->visible(fn(Forms\Get $get) => $get('default_password_type') === 'custom'),
+                                                   
                                             ]),
 
                                         Forms\Components\Toggle::make('force_password_change')
@@ -497,119 +487,48 @@ class StaffResource extends Resource
                         ->icon('heroicon-o-identification')
                         ->visible(fn(Staff $record): bool => empty($record->employee_id))
                         ->modalHeading('Generate Employee ID')
-                        ->form(function (Staff $record) {
-                            // Check if there are any existing employee IDs
-                            $hasExistingFormat = Staff::where('school_id', Filament::getTenant()->id)
-                                ->whereNotNull('employee_id')
-                                ->exists();
+                        ->form([
+                            Forms\Components\Select::make('prefix_type')
+                                ->label('School Name Format')
+                                ->options([
+                                    'consonants' => 'Consonants (KHL)',
+                                    'first_letters' => 'First Letters (KIA)',
+                                ])
+                                ->default('consonants')
+                                ->required(),
+                            
+                            Forms\Components\DatePicker::make('start_year')
+                                ->label('Start Year')
+                                ->format('Y')
+                                ->maxDate(now())
+                                ->default(now())
+                                ->required(),
 
-                            if ($hasExistingFormat) {
-                                return [
-                                    Forms\Components\Placeholder::make('format_info')
-                                        ->content('Employee ID will be generated using the existing format.'),
-                                ];
-                            }
-
-                            return [
-                                Forms\Components\Select::make('format_type')
-                                    ->label('ID Format Type')
-                                    ->options([
-                                        'basic' => 'Basic (EMP001)',
-                                        'with_year' => 'With Year (EMP23001)',
-                                        'department' => 'With Department (ADM23001)',
-                                        'custom' => 'Custom Format'
-                                    ])
-                                    ->required()
-                                    ->live()
-                                    ->default('basic'),
-
-                                Forms\Components\TextInput::make('custom_format')
-                                    ->label('Custom Format')
-                                    ->placeholder('EMP/{YY}/{NUM}')
-                                    ->helperText('Available tokens: {PREFIX}, {YY}, {NUM}, {DEPT}')
-                                    ->visible(fn(Get $get) => $get('format_type') === 'custom')
-                                    ->required(fn(Get $get) => $get('format_type') === 'custom'),
-
-                                Forms\Components\Select::make('prefix_type')
-                                    ->label('Prefix Type')
-                                    ->options([
-                                        'default' => 'Default (EMP)',
-                                        'school' => 'School Name',
-                                        'custom' => 'Custom'
-                                    ])
-                                    ->default('default')
-                                    ->live()
-                                    ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                        if ($state === 'school') {
-                                            $schoolName = Filament::getTenant()->name;
-                                            $prefix = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $schoolName), 0, 3));
-                                            $set('prefix', $prefix);
-                                        } elseif ($state === 'default') {
-                                            $set('prefix', 'EMP');
-                                        }
-                                    }),
-
-                                Forms\Components\TextInput::make('prefix')
-                                    ->label('Default Prefix')
-                                    ->default('EMP')
-                                    ->required(),
-
-                                Forms\Components\Select::make('year_format')
-                                    ->label('Year Format')
-                                    ->options([
-                                        'none' => 'No Year',
-                                        'short' => 'Short Year (23)',
-                                        'full' => 'Full Year (2023)'
-                                    ])
-                                    ->default('short')
-                                    ->visible(fn (Get $get) => in_array(
-                                        $get('format_type'),
-                                        ['with_year', 'with_department']
-                                    )),
-
-                                Forms\Components\TextInput::make('number_length')
-                                    ->label('Sequential Number Length')
-                                    ->numeric()
-                                    ->default(3)
-                                    ->required()
-                                    ->minValue(1)
-                                    ->maxValue(6),
-
-                                Forms\Components\TextInput::make('separator')
-                                    ->label('Separator Character')
-                                    ->maxLength(1)
-                                    ->default('-'),
-
-                                Forms\Components\KeyValue::make('department_prefixes')
-                                    ->label('Department Prefixes')
-                                    ->keyLabel('Department')
-                                    ->valueLabel('Prefix')
-                                    ->reorderable()
-                                    ->visible(fn(Get $get) => $get('format_type') === 'department'),
-                            ];
-                        })
+                            Forms\Components\Select::make('year_format')
+                                ->label('Year Format')
+                                ->options([
+                                    'short' => 'Short Year (23)',
+                                    'full' => 'Full Year (2023)'
+                                ])
+                                ->default('short')
+                        ])
                         ->action(function (Staff $record, array $data): void {
                             $tenant = Filament::getTenant();
                             $settings = $tenant->settings;
+                            
+                            $year = match ($data['year_format'] ?? 'short') {
+                                'full' => date('Y', strtotime($data['start_year'])),
+                                default => substr(date('Y', strtotime($data['start_year'])), -2),
+                            };
 
-                            // Check if we should use existing format
-                            $hasExistingFormat = Staff::where('school_id', $tenant->id)
-                                ->whereNotNull('employee_id')
-                                ->exists();
-
-                            if (!$hasExistingFormat) {
-                                // Update settings with new format preferences
-                                $settings->employee_settings = $data;
-                                $settings->save();
-                            }
-
-                            // Generate employee ID
                             $generator = new EmployeeIdGenerator($settings);
-                            $employeeId = $generator->generate([
-                                'designation_id' => $record->designation_id,
+                            $employeeId = $generator->generateWithOptions([
+                                'year' => $year,
+                                'year_format' => $data['year_format'] ?? 'short',
+                                'prefix_type' => $data['prefix_type'],
+                                'use_consonants' => $data['prefix_type'] === 'consonants',
                             ]);
 
-                            // Update staff record
                             $record->update(['employee_id' => $employeeId]);
 
                             Notification::make()
@@ -664,6 +583,39 @@ class StaffResource extends Resource
                                 ->default(true),
                         ])
                         ->action(function (Staff $record, array $data): void {
+                            $school = Filament::getTenant();
+                            $featureService = app(FeatureService::class);
+                            $result = $featureService->checkStaffUserLimit($school, $school->currentSubscription->plan);
+                            
+                            if (!$result->allowed) {
+                                // Flash notification for immediate feedback
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Staff User Account Limit Reached')
+                                    ->body($result->message)
+                                    ->persistent()
+                                    ->send();
+
+                                // Database notification for super admin
+                                $superAdmin = $school->getSuperAdmin();
+                                if ($superAdmin) {
+                                    Notification::make()
+                                        ->title('Staff User Account Limit Reached')
+                                        ->body($result->message)
+                                        ->danger()
+                                        ->icon('heroicon-o-x-circle')
+                                        ->persistent()
+                                        ->actions([
+                                            \Filament\Notifications\Actions\Action::make('upgrade')
+                                                ->button()
+                                                ->url(route('filament.sms.pages.pricing-page', ['tenant' => $school->slug]))
+                                                ->label('Upgrade Plan'),
+                                        ])
+                                        ->sendToDatabase($superAdmin);
+                                }
+                                return;
+                            }
+
                             // Generate password based on selected type
                             $password = match ($data['default_password_type']) {
                                 'email' => $record->email,
@@ -721,6 +673,7 @@ class StaffResource extends Resource
                                 ->title('User Account Created')
                                 ->body("User account has been created for {$record->full_name}")
                                 ->send();
+
                         }),
 
                     // Add new action for managing user account status
@@ -850,6 +803,55 @@ class StaffResource extends Resource
 
                     Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make(),
+                    // Add this new action for regenerating IDs
+                    Tables\Actions\Action::make('regenerateIds')
+                        ->icon('heroicon-o-arrow-path')
+                        ->requiresConfirmation()
+                        ->modalHeading('Regenerate Employee IDs')
+                        ->modalDescription('This will regenerate IDs for all staff members. Are you sure?')
+                        ->form([
+                            Forms\Components\DatePicker::make('custom_year')
+                                ->label('Year to Use')
+                                ->format('Y')
+                                ->default(now())
+                                ->required(),
+                            Forms\Components\Select::make('year_format')
+                                ->label('Year Format')
+                                ->options([
+                                    'short' => 'Short Year (23)',
+                                    'full' => 'Full Year (2023)'
+                                ])
+                                ->default('short')
+                                ->required(),
+                        ])
+                        ->action(function (Staff $record, array $data): void {
+                            $tenant = Filament::getTenant();
+                            $settings = $tenant->settings;
+                            
+                            // Update settings with form data
+                            $employeeSettings = $settings->employee_settings;
+                            $employeeSettings['custom_year'] = $data['custom_year'];
+                            $employeeSettings['year_format'] = $data['year_format'];
+                            
+                            // Update settings in database
+                            $settings->update([
+                                'employee_settings' => $employeeSettings
+                            ]);
+                            
+                            // Create generator with updated settings
+                            $generator = new EmployeeIdGenerator($settings);
+                            
+                            // Regenerate IDs
+                            $generator->regenerateAllIds([
+                                'custom_year' => $data['custom_year'],
+                                'year_format' => $data['year_format']
+                            ]);
+
+                            Notification::make()
+                                ->success()
+                                ->title('Employee IDs Regenerated')
+                                ->send();
+                        })
                 ]),
             ])
             ->bulkActions([
@@ -1021,4 +1023,6 @@ class StaffResource extends Resource
     {
         return __('Staff Member');
     }
+
+
 }

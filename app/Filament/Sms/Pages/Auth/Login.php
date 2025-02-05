@@ -1,12 +1,13 @@
 <?php
 
-namespace App\Filament\Pages\Auth;
+namespace App\Filament\Sms\Pages\Auth;
 
 use App\Models\User;
 use Filament\Forms\Form;
 use Filament\Facades\Filament;
 use Illuminate\Support\HtmlString;
 use Spatie\Permission\Models\Role;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Blade;
 use Filament\Forms\Components\Checkbox;
 use Illuminate\Support\Facades\Session;
@@ -19,13 +20,12 @@ use Illuminate\Validation\ValidationException;
 use Filament\Http\Responses\Auth\Contracts\LoginResponse;
 use Filament\Notifications\Livewire\DatabaseNotifications;
 use DanHarrin\LivewireRateLimiting\Exceptions\TooManyRequestsException;
-use Illuminate\Container\Attributes\Log;
 
 class Login extends BaseLogin
 {
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
-    protected static string $view = 'filament.pages.auth.login';
+    protected static string $view = 'filament.sms.pages.auth.login';
 
 
     public function authenticate(): ?LoginResponse
@@ -63,21 +63,28 @@ class Login extends BaseLogin
 
         session()->regenerate();
 
+
+
         // Send login notification
         $this->sendLoginNotification($user);
         Log::info('User logged in');
+        // Update last login timestamp
+        $user->update([
+            'last_login_at' => now(),
+        ]);
         return app(LoginResponse::class);
     }
 
     protected function sendLoginNotification(User $user): void
     {
-        $tenant = Filament::getTenant();
+        $tenant = $user->schools->first();
+
         Log::info($tenant);
         DatabaseNotifications::pollingInterval('15s');
 
         $notification = Notification::make()
             ->title('User Logged In')
-            ->body("{$user->staff?->full_name} has logged in to {$tenant->name}")
+            ->body("{$user->staff?->full_name} has logged in to the system.")
             ->icon('heroicon-o-user')
             ->success();
         Log::info($notification);

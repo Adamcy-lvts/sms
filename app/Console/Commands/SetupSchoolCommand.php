@@ -20,6 +20,8 @@ class SetupSchoolCommand extends Command
         'statuses',
         'users',
         'plans',         // Add this line
+        'features',      // Add this line
+        'feature_plan',  // Add this line
         'schools',
         'academic_sessions',
         'terms',
@@ -42,6 +44,7 @@ class SetupSchoolCommand extends Command
         'report_templates',      // Add this line
         'attendance_records',    // Add this line
         'attendance_summaries',  // Add this line
+        'payment_plans',         // Add this
         'payment_methods',       // Add this
         'payment_types',         // payment-related
         'payments',              // Add these
@@ -64,6 +67,8 @@ class SetupSchoolCommand extends Command
         'ShieldSeeder',
         'UserTableSeeder',
         'PlansTableSeeder',    // Add this line
+        'FeaturesTableSeeder', // Add this line
+        'PlanFeatureSeeder',   // Add this line 
         'SchoolTableSeeder',
         'SessionAndTermSeeder',
         'StateTableSeeder',
@@ -78,6 +83,7 @@ class SetupSchoolCommand extends Command
         'AttendanceSeeder',      // Add this line
         'PaymentMethodTableSeeder',   // Add this
         'PaymentTypeSeeder',     // Add this
+        'PaymentPlanSeeder',     // Add this
         'PaymentSeeder',           // Add this
         'ActivityTypeSeeder',          // Add this
         'BehavioralTraitSeeder',   // Add these

@@ -13,12 +13,12 @@ class ListAttendances extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
-            Actions\Action::make('takeAttendance')
-            ->label('Take Attendance')
-            ->icon('heroicon-m-clipboard-document-check')
-            ->url(fn(): string => static::getUrl(['attendance']))
-            ->color('primary'),
+            // Actions\CreateAction::make(),
+            // Actions\Action::make('takeAttendance')
+            // ->label('Take Attendance')
+            // ->icon('heroicon-m-clipboard-document-check')
+            // ->url(fn(): string => static::getUrl(['attendance']))
+            // ->color('primary'),
         ];
     }
 

@@ -48,8 +48,8 @@ class PricingPage extends Page
     protected function loadPlans()
     {
         $this->pricingPlans = $this->isAnnual 
-            ? Plan::annually()->active()->get()
-            : Plan::monthly()->active()->get();
+            ? Plan::with('features')->annually()->active()->get()
+            : Plan::with('features')->monthly()->active()->get();
     }
 
     public function toggleBilling(): void

@@ -16,7 +16,7 @@ return new class extends Migration
             $table->id();
             $table->string('name')->nullable();
             $table->string('slug')->nullable();
-            $table->foreignId('school_id')->nullable()->constrained('schools')->nullOnDelete();
+            $table->foreignId('school_id')->nullable();
             $table->longText('content');
             $table->string('category')->nullable();
             $table->text('description')->nullable();
@@ -25,6 +25,7 @@ return new class extends Migration
             $table->json('settings')->nullable();
             $table->integer('version')->default(1);
             $table->foreignId('last_edited_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->softDeletes();
             $table->timestamps();
 
             $table->unique(['name', 'school_id']);

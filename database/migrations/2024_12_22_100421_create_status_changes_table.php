@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('status_changes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->cascadeOnDelete();
+            $table->foreignId('school_id');
             $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
             $table->morphs('statusable'); // This allows the table to track status changes for any model
             $table->foreignId('from_status_id')->nullable()->constrained('statuses');
@@ -19,6 +19,7 @@ return new class extends Migration
             $table->json('metadata')->nullable(); // For any additional data
             $table->foreignId('changed_by')->constrained('users');
             $table->timestamp('changed_at');
+            $table->softDeletes();
             $table->timestamps();
         });
     }

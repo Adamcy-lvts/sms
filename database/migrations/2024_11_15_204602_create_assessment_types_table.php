@@ -13,13 +13,14 @@ return new class extends Migration
     {
         Schema::create('assessment_types', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->string('name');
             $table->integer('max_score');
             $table->integer('weight');  // Percentage weight in final grade
             $table->string('code')->nullable(); // Short code for the assessment type
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->softDeletes();
             $table->timestamps();
 
             // Ensure unique names per school

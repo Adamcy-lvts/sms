@@ -13,12 +13,13 @@ return new class extends Migration
     {
         Schema::create('terms', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->foreignId('academic_session_id')->constrained('academic_sessions')->onDelete('cascade');
             $table->string('name'); // e.g., "First Term"
             $table->date('start_date');
             $table->date('end_date');
             $table->boolean('is_current')->default(0);
+            $table->softDeletes();
             $table->timestamps();
         });
     }

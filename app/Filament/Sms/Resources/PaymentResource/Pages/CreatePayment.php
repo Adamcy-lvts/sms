@@ -7,9 +7,12 @@ use Filament\Actions;
 use App\Models\Status;
 use App\Models\Payment;
 use App\Models\Student;
+use App\Models\ClassRoom;
+use App\Models\PaymentPlan;
 use App\Models\PaymentType;
 use Filament\Facades\Filament;
 use App\Models\AcademicSession;
+use App\Models\StudentPaymentPlan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Model;
 use Filament\Notifications\Notification;
@@ -26,6 +29,34 @@ class CreatePayment extends CreateRecord
     {
         $tenant = Filament::getTenant();
         $data = $this->data;
+
+
+        // Validate payment plan amounts if this is a tuition payment
+        if (in_array($data['payment_category'], ['tuition', 'combined'])) {
+            $classRoom = ClassRoom::find($data['class_room_id']);
+            $classLevel = $classRoom->getLevel();
+            $paymentPlanType = $data['payment_plan_type'] ?? 'session';
+
+            // Validate tuition payment amounts
+            foreach ($data['payment_items'] as $item) {
+                $paymentType = PaymentType::find($item['payment_type_id']);
+                if ($paymentType && $paymentType->is_tuition) {
+                    $expectedAmount = $paymentType->getAmountForClass($classLevel, $paymentPlanType);
+
+                    if ($expectedAmount !== floatval($item['item_amount'])) {
+                        Notification::make()
+                            ->danger()
+                            ->title('Invalid Payment Amount')
+                            ->body("Amount for {$paymentType->name} does not match the payment plan amount.")
+                            ->persistent()
+                            ->send();
+
+                        $this->halt();
+                    }
+                }
+            }
+        }
+
         $studentId = $data['student_id'];
         $academicSessionId = $data['academic_session_id'];
         $termId = $data['term_id'];
@@ -178,13 +209,45 @@ class CreatePayment extends CreateRecord
     {
         $tenant = Filament::getTenant();
 
-        // dd([
-        //     'all_data' => $data,
-        //     'payment_items' => $data['payment_items'] ?? 'no items',
-        //     'first_item' => $data['payment_items'][0] ?? 'no first item',
-        // ]);
-
         return DB::transaction(function () use ($data, $tenant) {
+
+            // Create payment plan if this is a tuition payment
+            if (in_array($data['payment_category'], ['tuition', 'combined'])) {
+                $tuitionItems = collect($data['payment_items'])
+                    ->filter(function ($item) {
+                        return PaymentType::find($item['payment_type_id'])->is_tuition;
+                    });
+
+                if ($tuitionItems->isNotEmpty()) {
+                    // Get first tuition payment type to determine the plan
+                    $tuitionType = PaymentType::find($tuitionItems->first()['payment_type_id']);
+                    $classRoom = ClassRoom::find($data['class_room_id']);
+                    $classLevel = $classRoom->getLevel();
+
+                    // Find the payment plan
+                    $paymentPlan = PaymentPlan::where([
+                        'payment_type_id' => $tuitionType->id,
+                        'class_level' => $classLevel,
+                    ])->first();
+
+                    if ($paymentPlan) {
+                        // Create or update student payment plan
+                        StudentPaymentPlan::updateOrCreate(
+                            [
+                                'student_id' => $data['student_id'],
+                                'academic_session_id' => $data['academic_session_id'],
+                            ],
+                            [
+                                'school_id' => $tenant->id,
+                                'payment_plan_id' => $paymentPlan->id,
+                                'created_by' => auth()->id(),
+                                'notes' => "Plan selected during payment {$data['reference']}"
+                            ]
+                        );
+                    }
+                }
+            }
+
             $paymentItems = collect($data['payment_items'] ?? []);
             $totalAmount = $paymentItems->sum('item_amount');
             $totalDeposit = $paymentItems->sum('item_deposit');
@@ -218,13 +281,16 @@ class CreatePayment extends CreateRecord
                 'amount' => $totalAmount,
                 'deposit' => $totalDeposit,
                 'balance' => $totalBalance,
+                'is_tuition' => in_array($data['payment_category'], ['tuition', 'combined']),
+                'payment_plan_type' => $data['payment_plan_type'] ?? null,
+                'payment_category' => $data['payment_category'] ?? null,
                 'remark' => $data['remark'],
-                'due_date' => $data['due_date'],
+                'due_date' => $data['due_date'] ?? null,
                 'paid_at' => $data['paid_at'],
                 'created_by' => auth()->id(),
                 'updated_by' => auth()->id(),
             ]);
-// dd($paymentItems);
+
             // Create payment items and handle inventory
             foreach ($paymentItems as $item) {
                 // Load payment type with inventory
@@ -239,6 +305,7 @@ class CreatePayment extends CreateRecord
                     'balance' => floatval($item['item_balance']),
                     'quantity' => $item['has_quantity'] ? $item['quantity'] : null,
                     'unit_price' => $item['has_quantity'] ? $item['unit_price'] : null,
+                    'is_tuition' => $paymentType->is_tuition ?? false,
                 ]);
 
                 // Handle inventory reduction for physical items

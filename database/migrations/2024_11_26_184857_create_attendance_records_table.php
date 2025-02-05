@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('attendance_records', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->foreignId('class_room_id')->constrained()->onDelete('cascade');
             $table->foreignId('student_id')->constrained()->onDelete('cascade');
             $table->foreignId('academic_session_id')->constrained()->onDelete('cascade');
@@ -24,6 +24,7 @@ return new class extends Migration
             $table->text('remarks')->nullable();
             $table->foreignId('recorded_by')->constrained('users');
             $table->foreignId('modified_by')->nullable()->constrained('users');
+            $table->softDeletes();
             $table->timestamps();
             
             // Prevent duplicate entries for same student on same date

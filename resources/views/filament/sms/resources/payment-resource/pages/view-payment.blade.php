@@ -41,7 +41,7 @@
                         <!-- QR Code (Hidden on mobile) -->
                         <div
                             class="hidden sm:flex sm:mb-4 w-20 h-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg items-center justify-center self-end ml-auto">
-            
+
                             {!! $qrCode !!}
                         </div>
 
@@ -140,50 +140,55 @@
             <!-- Payment Details -->
             <!-- Updated Payment Details Section -->
             <div class="p-4 sm:p-6 md:p-8">
-                <!-- Payment Details Grid Headers -->
-                <div class="grid grid-cols-12 gap-2 sm:gap-4 pb-3 border-b border-gray-200 dark:border-gray-700">
-                    <div class="col-span-3 text-left text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
-                        Payment Type
+                <!-- Headers with flex layout for better alignment -->
+                <div
+                    class="grid grid-cols-[2fr,1fr,1fr,0.5fr,1fr,1fr,1fr] gap-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+                    <div class="text-left text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Payment For
                     </div>
-                    <div class="col-span-2 text-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
-                        Payment Method
+                    <div class="text-left text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Plan
                     </div>
-                    <div class="col-span-1 text-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                    <div class="text-left text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                        Method
+                    </div>
+                    <div class="text-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
                         Qty
                     </div>
-                    <div class="col-span-2 text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                    <div class="text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
                         Amount
                     </div>
-                    <div class="col-span-2 text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                    <div class="text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
                         Paid
                     </div>
-                    <div class="col-span-2 text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                    <div class="text-right text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
                         Balance
                     </div>
                 </div>
 
-                <!-- Updated Payment Rows -->
-                <!-- Payment Items -->
+                <!-- Payment Items with matching grid layout -->
                 @foreach ($this->record->paymentItems as $item)
-                    <div class="grid grid-cols-12 gap-2 sm:gap-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                        <div class="col-span-3 text-left text-xs sm:text-sm text-gray-900 dark:text-gray-300">
+                    <div
+                        class="grid grid-cols-[2fr,1fr,1fr,0.5fr,1fr,1fr,1fr] gap-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                        <div class="text-left text-xs sm:text-sm text-gray-900 dark:text-gray-300 truncate">
                             {{ $item->paymentType?->name }}
                         </div>
-                        <div class="col-span-2 text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                        <div class="text-left text-xs sm:text-sm text-gray-900 dark:text-gray-300">
+                            {{ $item->is_tuition ? ucfirst($this->record->payment_plan_type ?? 'N/A') : '-' }}
+                        </div>
+                        <div class="text-left text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                             {{ $this->record->paymentMethod?->name }}
                         </div>
-                        <div class="col-span-1 text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                        <div class="text-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                             {{ $item->paymentType?->category === 'physical_item' ? $item->quantity : '-' }}
                         </div>
-                        <div
-                            class="col-span-2 text-right text-xs sm:text-sm text-gray-900 dark:text-gray-300 font-medium">
+                        <div class="text-right text-xs sm:text-sm text-gray-900 dark:text-gray-300 font-medium">
                             {{ formatNaira($item->amount) }}
                         </div>
-                        <div
-                            class="col-span-2 text-right text-xs sm:text-sm text-green-600 dark:text-green-400 font-medium">
+                        <div class="text-right text-xs sm:text-sm text-green-600 dark:text-green-400 font-medium">
                             {{ formatNaira($item->deposit) }}
                         </div>
-                        <div class="col-span-2 text-right text-xs sm:text-sm">
+                        <div class="text-right text-xs sm:text-sm">
                             <span @class([
                                 'font-medium',
                                 'text-gray-900 dark:text-gray-300' => $item->balance == 0,
@@ -194,7 +199,6 @@
                         </div>
                     </div>
                 @endforeach
-
                 <!-- Updated Summary Section -->
                 <div class="mt-4 sm:mt-6 space-y-2 sm:space-y-3 max-w-[12rem] sm:max-w-sm ml-auto">
                     <div class="pt-2 border-t border-gray-200 dark:border-gray-700">

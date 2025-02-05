@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('template_variables', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->nullable()->constrained();
+            $table->foreignId('school_id')->nullable();
             $table->string('name');
             $table->string('display_name');
             $table->text('description')->nullable();
@@ -23,6 +23,7 @@ return new class extends Migration
             $table->boolean('is_system')->default(false);
             $table->boolean('is_active')->default(true);
             $table->string('mapping')->nullable();
+            $table->softDeletes();
             $table->timestamps();
 
             // Add composite unique index for name and school_id

@@ -19,6 +19,7 @@ use Filament\Notifications\Notification;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Models\Import;
 use Filament\Actions\Imports\Exceptions\RowImportFailedException;
+use App\Services\AdmissionNumberGenerator;
 
 class StudentAdmissionImporter extends Importer
 {
@@ -26,12 +27,34 @@ class StudentAdmissionImporter extends Importer
 
     protected $tenantId;
 
+
     public function __construct(Import $import, array $columnMap, array $options)
     {
         parent::__construct($import, $columnMap, $options);
 
         if (Filament::getTenant()) {
             $this->tenantId = Filament::getTenant()->id;
+        }
+        
+     
+    }
+
+    protected function formatDate(?string $date): ?string
+    {
+        if (!$date) {
+            return null;
+        }
+        Log::info('formatDate called', [
+            'date' => $date
+        ]);
+        try {
+            return Carbon::createFromFormat('n/j/Y', $date)->format('Y-m-d');
+        } catch (\Exception $e) {
+            try {
+                return Carbon::parse($date)->format('Y-m-d');
+            } catch (\Exception $e) {
+                throw new RowImportFailedException("Invalid date format: {$date}");
+            }
         }
     }
 
@@ -73,8 +96,10 @@ class StudentAdmissionImporter extends Importer
                 throw new RowImportFailedException("Admission status 'approved' not found.");
             }
 
-            // Generate admission number if not provided
-            $admissionNumber = $this->data['admission_number'] ?? $this->generateAdmissionNumber();
+            // Use admission number from import data, throw error if not provided
+            if (empty($this->data['admission_number'])) {
+                throw new RowImportFailedException("Admission number is required for importing students.");
+            }
 
             $admissionData = [
                 'school_id' => $this->tenantId,
@@ -85,7 +110,7 @@ class StudentAdmissionImporter extends Importer
                 'first_name' => $this->data['first_name'],
                 'last_name' => $this->data['last_name'],
                 'middle_name' => $this->data['middle_name'] ?? null,
-                'date_of_birth' =>  $this->data['date_of_birth'],
+                'date_of_birth' => $this->formatDate($this->data['date_of_birth']),
                 'gender' => $this->data['gender'] ?? 'Not Specified',
                 'phone_number' => $this->data['phone_number'] ?? null,
                 'email' => $this->data['email'] ?? null,
@@ -103,9 +128,10 @@ class StudentAdmissionImporter extends Importer
                 // School Information
                 'previous_school_name' => $this->data['previous_school_name'] ?? null,
                 'previous_class' => $this->data['previous_class'] ?? null,
-                'admitted_date' => $this->data['admitted_date'] ?? now(),
-                'application_date' => $this->data['application_date'] ?? now(),
-                'admission_number' => $admissionNumber,
+                // \Carbon\Carbon::createFromFormat($this->data['admitted_date'])->format('Y-m-d');
+                'admitted_date' => $this->formatDate($this->data['admitted_date']) ?? now(),
+                'application_date' => $this->formatDate($this->data['application_date']) ?? now(),
+                'admission_number' => $this->data['admission_number'],
                 'status_id' => $status->id,
 
                 // Guardian Information
@@ -237,7 +263,10 @@ class StudentAdmissionImporter extends Importer
                 ->rules(['nullable', 'string']),
 
             ImportColumn::make('admission_number')
-                ->rules(['nullable', 'string']),
+                ->requiredMapping()
+                ->rules(['required', 'string'])
+                ->label('Admission/ID Number')
+                ->guess(['admission_no', 'id_number', 'student_id']),
 
             ImportColumn::make('previous_school_name')
                 ->rules(['nullable', 'string']),
@@ -292,22 +321,29 @@ class StudentAdmissionImporter extends Importer
     protected function studentExists(): bool
     {
         try {
-            Log::info('Checking for existing student with criteria:', [
-                'first_name' => $this->data['first_name'],
-                'last_name' => $this->data['last_name'],
-                'date_of_birth' => $this->data['date_of_birth'],
-                'school_id' => $this->tenantId
-            ]);
-
+            $formattedDob = $this->formatDate($this->data['date_of_birth']);
+            
+            // Build base query
             $query = Student::query()
-                ->where('school_id', $this->tenantId)
-                ->where('first_name', $this->data['first_name'])
-                ->where('last_name', $this->data['last_name'])
-                ->where('date_of_birth', $this->data['date_of_birth']);
+                ->where('school_id', $this->tenantId);
 
-            // Only include phone number in the check if it's provided
+            // Add name and date of birth check
+            $query->where(function($q) use ($formattedDob) {
+                $q->where(function($q) use ($formattedDob) {
+                    $q->where('first_name', $this->data['first_name'])
+                      ->where('last_name', $this->data['last_name'])
+                      ->whereDate('date_of_birth', $formattedDob);
+                });
+            });
+
+            // Add phone number check if provided
             if (!empty($this->data['phone_number'])) {
-                $query->where('phone_number', $this->data['phone_number']);
+                $query->orWhere('phone_number', $this->data['phone_number']);
+            }
+
+            // Add admission number check if provided
+            if (!empty($this->data['admission_number'])) {
+                $query->orWhere('admission_number', $this->data['admission_number']);
             }
 
             $existingStudent = $query->first();
@@ -318,18 +354,21 @@ class StudentAdmissionImporter extends Importer
                     'admission_number' => $existingStudent->admission_number
                 ]);
 
-                // Build a descriptive message about why we think this is a duplicate
+                // Build descriptive message about the duplicate
                 $message = "Student already exists with following matching details:\n";
                 $message .= "- Name: {$this->data['first_name']} {$this->data['last_name']}\n";
-                $message .= "- Date of Birth: {$this->data['date_of_birth']}\n";
+                $message .= "- Date of Birth: {$formattedDob}\n";
 
                 if (!empty($this->data['phone_number'])) {
                     $message .= "- Phone Number: {$this->data['phone_number']}\n";
                 }
+                if (!empty($this->data['admission_number'])) {
+                    $message .= "- Admission Number: {$this->data['admission_number']}\n";
+                }
+
                 $this->sendWarningNotification(
                     "Duplicate Student",
-                    "Student already exists with name: {$this->data['first_name']} {$this->data['last_name']}, " .
-                        "DOB: {$this->data['date_of_birth']}"
+                    "Student already exists with matching details"
                 );
                 throw new RowImportFailedException($message);
             }
@@ -341,7 +380,8 @@ class StudentAdmissionImporter extends Importer
         } catch (\Exception $e) {
             Log::error('Error in studentExists check:', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'formatted_date' => $formattedDob ?? null
             ]);
             throw $e;
         }
@@ -416,7 +456,7 @@ class StudentAdmissionImporter extends Importer
                     'first_name' => $this->data['first_name'],
                     'last_name' => $this->data['last_name'],
                     'middle_name' => $this->data['middle_name'] ?? null,
-                    'date_of_birth' => $this->data['date_of_birth'],
+                    'date_of_birth' => $this->formatDate($this->data['date_of_birth']),
                     'phone_number' => $this->data['phone_number'] ?? null,
                     'profile_picture' => $this->data['profile_picture'] ?? null,
                     'created_by' => auth()->id(),
@@ -462,65 +502,6 @@ class StudentAdmissionImporter extends Importer
             );
             throw new RowImportFailedException($e->getMessage());
         }
-    }
-
-    /**
-     * Helper method to send success notifications
-     */
-    protected function sendSuccessNotification(string $title, string $message): void
-    {
-        Notification::make()
-            ->success()
-            ->title($title)
-            ->body($message)
-            ->send();
-    }
-
-    /**
-     * Helper method to send error notifications
-     */
-    protected function sendErrorNotification(string $title, string $message): void
-    {
-        Notification::make()
-            ->danger()
-            ->title($title)
-            ->body($message)
-            ->duration(10000) // 10 seconds
-            ->send();
-    }
-
-    /**
-     * Helper method to send warning notifications
-     */
-    protected function sendWarningNotification(string $title, string $message): void
-    {
-        Notification::make()
-            ->warning()
-            ->title($title)
-            ->body($message)
-            ->duration(5000) // 5 seconds
-            ->send();
-    }
-
-    /**
-     * Generate a unique admission number
-     */
-    protected function generateAdmissionNumber(): string
-    {
-        $prefix = date('Y');
-        $lastStudent = Student::where('school_id', $this->tenantId)
-            ->where('admission_number', 'LIKE', $prefix . '%')
-            ->orderBy('admission_number', 'desc')
-            ->first();
-
-        if ($lastStudent) {
-            $lastNumber = (int) substr($lastStudent->admission_number, -4);
-            $newNumber = $lastNumber + 1;
-        } else {
-            $newNumber = 1;
-        }
-
-        return $prefix . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
     }
 
     protected function beforeImport(): void

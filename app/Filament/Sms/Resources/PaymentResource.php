@@ -21,6 +21,7 @@ use App\Models\PaymentMethod;
 use Filament\Facades\Filament;
 use App\Models\AcademicSession;
 use Filament\Resources\Resource;
+use App\Models\StudentPaymentPlan;
 use Filament\Actions\ExportAction;
 use Illuminate\Support\Facades\DB;
 use Filament\Forms\Components\Grid;
@@ -74,6 +75,16 @@ class PaymentResource extends Resource
                         Forms\Components\Section::make('Search Student')
                             ->description('Select class room and search for a student')
                             ->schema([
+                                // Forms\Components\Select::make('class_room_id')
+                                //     ->label('Class Room')
+                                //     ->options(fn() => ClassRoom::where('school_id', Filament::getTenant()?->id ?? 0)
+                                //         ->orderBy('name')
+                                //         ->pluck('name', 'id'))
+                                //     ->required()
+                                //     ->searchable()
+                                //     ->live()
+                                //     ->preload(),
+
                                 Forms\Components\Select::make('class_room_id')
                                     ->label('Class Room')
                                     ->options(fn() => ClassRoom::where('school_id', Filament::getTenant()?->id ?? 0)
@@ -82,7 +93,53 @@ class PaymentResource extends Resource
                                     ->required()
                                     ->searchable()
                                     ->live()
-                                    ->preload(),
+                                    ->preload()
+                                    ->afterStateUpdated(function (Get $get, Set $set) {
+                                        // Clear student when class changes
+                                        // Clear student selection
+                                        $set('student_id', null);
+
+                                        // Clear payment selections and items
+                                        $set('payment_type_ids', []);
+                                        $set('payment_items', []);
+
+                                        // Reset totals
+                                        $set('total_amount', 0);
+                                        $set('total_deposit', 0);
+                                        $set('total_balance', 0);
+
+                                        // If there are payment items, recalculate amounts
+                                        $items = collect($get('payment_items') ?? []);
+                                        if ($items->isNotEmpty()) {
+                                            $classRoom = ClassRoom::find($get('class_room_id'));
+                                            $classLevel = $classRoom?->getLevel();
+                                            $paymentPlanType = $get('payment_plan_type') ?? 'session';
+
+                                            $updatedItems = $items->map(function ($item) use ($classLevel, $paymentPlanType) {
+                                                $paymentType = PaymentType::find($item['payment_type_id']);
+                                                if ($paymentType && $paymentType->is_tuition) {
+                                                    $amount = $paymentType->getAmountForClass($classLevel, $paymentPlanType);
+                                                    return array_merge($item, [
+                                                        'item_amount' => $amount,
+                                                        'item_deposit' => $paymentType->installment_allowed ? $paymentType->min_installment_amount : $amount,
+                                                        'item_balance' => $paymentType->installment_allowed ? ($amount - $paymentType->min_installment_amount) : 0,
+                                                    ]);
+                                                }
+                                                return $item;
+                                            })->toArray();
+
+                                            $set('payment_items', $updatedItems);
+
+                                            // Update totals
+                                            $totalAmount = collect($updatedItems)->sum('item_amount');
+                                            $totalDeposit = collect($updatedItems)->sum('item_deposit');
+                                            $totalBalance = collect($updatedItems)->sum('item_balance');
+
+                                            $set('total_amount', $totalAmount);
+                                            $set('total_deposit', $totalDeposit);
+                                            $set('total_balance', $totalBalance);
+                                        }
+                                    }),
 
                                 Forms\Components\Select::make('student_id')
                                     ->label('Student')
@@ -177,18 +234,13 @@ class PaymentResource extends Resource
                                     ->label('Enable Partial Payment')
                                     ->default(false)
                                     ->live()
-                                    ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                        if (!$state) {
-                                            $items = $get('payment_items');
-                                            foreach ($items as $key => $item) {
-                                                $set("payment_items.{$key}.item_deposit", $item['item_amount']);
-                                                $set("payment_items.{$key}.item_balance", 0);
-                                            }
-                                            $totalAmount = collect($items)->sum('item_amount');
-                                            $set('total_deposit', $totalAmount);
-                                            $set('total_balance', 0);
-                                        }
-                                    }),
+                                    ->visible(function (Get $get) {
+                                        // Only show for payments that allow installments
+                                        $paymentTypeIds = $get('payment_type_ids') ?? [];
+                                        return PaymentType::whereIn('id', $paymentTypeIds)
+                                            ->where('installment_allowed', true)
+                                            ->exists();
+                                    })
                             ])->columns(1),
 
                         // Payment Status Section
@@ -248,63 +300,285 @@ class PaymentResource extends Resource
                         Forms\Components\Section::make('Payment Details')
                             ->description('Select payment types and enter amount details')
                             ->schema([
+
+                                Forms\Components\Radio::make('payment_category')
+                                    ->label('Payment Category')
+                                    ->options([
+                                        'tuition' => 'Tuition/School Fees',
+                                        'other' => 'Other Payments',
+                                        'combined' => 'Tuition/School Fees + Other Payments'
+                                    ])
+                                    ->default('tuition')
+                                    ->inline()
+                                    ->live()
+                                    ->afterStateUpdated(function (Get $get, Set $set) {
+                                        // Clear existing selections when category changes
+                                        $set('payment_type_ids', []);
+                                        $set('payment_items', []);
+                                        // Reset totals
+                                        $set('total_amount', 0);
+                                        $set('total_deposit', 0);
+                                        $set('total_balance', 0);
+                                    }),
+
+                                // Only show for tuition fees
+                                // Forms\Components\Radio::make('payment_plan_type')
+                                //     ->label('Payment Plan')
+                                //     ->options([
+                                //         'session' => 'Full Session Payment',
+                                //         'term' => 'Term by Term Payment'
+                                //     ])
+                                //     ->default('session')
+                                //     ->live()
+                                //     ->visible(function (Get $get) {
+                                //         $category = $get('payment_category');
+                                //         return in_array($category, ['tuition', 'combined']);
+                                //     }),
+
+                                Forms\Components\Radio::make('payment_plan_type')
+                                    ->label('Payment Plan')
+                                    ->options([
+                                        'session' => 'Full Session Payment',
+                                        'term' => 'Term Payment'
+                                    ])
+                                    ->default(function (Get $get) {
+                                        // Check if student has existing plan
+                                        $student = Student::find($get('student_id'));
+                                        if (!$student) return 'session';
+
+                                        return StudentPaymentPlan::where([
+                                            'student_id' => $student->id,
+                                            'academic_session_id' => $get('academic_session_id')
+                                        ])->latest()->first()?->period_type ?? 'session';
+                                    })
+                                    ->live()
+                                    ->visible(fn(Get $get) => in_array($get('payment_category'), ['tuition', 'combined']))
+                                    ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                        // Recalculate amounts when plan type changes
+                                        $items = collect($get('payment_items') ?? []);
+                                        $classRoom = ClassRoom::find($get('class_room_id'));
+                                        $classLevel = $classRoom?->getLevel();
+
+                                        $updatedItems = $items->map(function ($item) use ($state, $classLevel) {
+                                            $paymentType = PaymentType::find($item['payment_type_id']);
+                                            if ($paymentType && $paymentType->is_tuition) {
+                                                $amount = $paymentType->getAmountForClass($classLevel, $state);
+                                                return array_merge($item, [
+                                                    'item_amount' => $amount,
+                                                    'item_deposit' => $paymentType->installment_allowed ? $paymentType->min_installment_amount : $amount,
+                                                    'item_balance' => $paymentType->installment_allowed ? ($amount - $paymentType->min_installment_amount) : 0,
+                                                ]);
+                                            }
+                                            return $item;
+                                        })->toArray();
+
+                                        $set('payment_items', $updatedItems);
+
+                                        // Update totals
+                                        $totalAmount = collect($updatedItems)->sum('item_amount');
+                                        $totalDeposit = collect($updatedItems)->sum('item_deposit');
+                                        $totalBalance = collect($updatedItems)->sum('item_balance');
+
+                                        $set('total_amount', $totalAmount);
+                                        $set('total_deposit', $totalDeposit);
+                                        $set('total_balance', $totalBalance);
+
+                                        // Trigger payment types reload by clearing and re-setting payment_type_ids
+                                        $currentTypes = $get('payment_type_ids');
+                                        if ($currentTypes) {
+                                            $set('payment_type_ids', []);
+                                            $set('payment_type_ids', $currentTypes);
+                                        }
+                                    }),
+
+                                // Forms\Components\Select::make('payment_type_ids')
+                                //     ->label('Payment Types')
+                                //     ->multiple()
+                                //     ->preload()
+                                //     ->options(function (Get $get) {
+                                //         $classRoomId = $get('class_room_id');
+                                //         $category = $get('payment_category');
+
+                                //         if (!$classRoomId) return [];
+
+                                //         $classRoom = ClassRoom::find($classRoomId);
+                                //         $classLevel = $classRoom?->getLevel();
+
+                                //         return PaymentType::query()
+                                //             ->where('school_id', Filament::getTenant()?->id ?? 0)
+                                //             ->where('active', true)
+                                //             ->when($category === 'tuition', function ($query) use ($classLevel) {
+                                //                 // Only tuition fees
+                                //                 $query->where('is_tuition', true)
+                                //                     ->where('class_level', $classLevel);
+                                //             })
+                                //             ->when($category === 'other', function ($query) {
+                                //                 // Only non-tuition fees
+                                //                 $query->where('is_tuition', false);
+                                //             })
+                                //             ->when($category === 'combined', function ($query) use ($classLevel) {
+                                //                 // Both tuition and non-tuition fees
+                                //                 $query->where(function ($q) use ($classLevel) {
+                                //                     $q->where('is_tuition', false)
+                                //                         ->orWhere(function ($q) use ($classLevel) {
+                                //                             $q->where('is_tuition', true)
+                                //                                 ->where('class_level', $classLevel);
+                                //                         });
+                                //                 });
+                                //             })
+                                //             ->get()
+                                //             ->pluck('name', 'id')
+                                //             ->toArray();
+                                //     })
+                                //     ->required()
+                                //     ->live(debounce: 500)
+                                //     ->afterStateUpdated(function (Get $get, Set $set, ?array $state) {
+                                //         $currentItems = collect($get('payment_items') ?? []);
+                                //         $selectedIds = collect($state ?? []);
+                                //         $term = Term::find($get('term_id'));
+
+                                //         // Add new items
+                                //         $newIds = $selectedIds->diff($currentItems->pluck('payment_type_id') ?? collect());
+                                //         $newItems = PaymentType::with('inventory')
+                                //             ->whereIn('id', $newIds)
+                                //             ->get()
+                                //             ->map(function ($type) use ($term, $set) {
+                                //                 $baseItem = [
+                                //                     'payment_type_id' => $type->id,
+                                //                     'item_amount' => $type->amount,
+                                //                     'item_deposit' => $type->installment_allowed ? $type->min_installment_amount : $type->amount,
+                                //                     'item_balance' => $type->installment_allowed ?
+                                //                         ($type->amount - $type->min_installment_amount) : 0,
+                                //                     'installment_allowed' => $type->installment_allowed,
+                                //                     'min_installment_amount' => $type->min_installment_amount
+                                //                 ];
+
+
+                                //                 if ($type->category === 'physical_item') {
+                                //                     $baseItem['quantity'] = 1;
+                                //                     $baseItem['has_quantity'] = true;
+                                //                     $baseItem['max_quantity'] = $type->inventory?->quantity ?? 0;
+                                //                     $baseItem['unit_price'] = $type->amount;
+                                //                 }
+                                //                 // Get and set due date if term exists
+                                //                 // Only set due date for payment types that require it
+                                //                 if ($term && $type->hasDueDate()) {
+                                //                     $set('due_date', $type->getDueDate($term)?->format('Y-m-d H:i:s'));
+                                //                 }
+
+
+                                //                 return $baseItem;
+                                //             })->toArray();
+
+                                //         // Remove deselected items
+                                //         $remainingItems = $currentItems
+                                //             ->filter(fn($item) => $selectedIds->contains($item['payment_type_id']))
+                                //             ->toArray();
+
+                                //         // Merge and update items
+                                //         $allItems = array_merge($remainingItems, $newItems);
+                                //         $set('payment_items', $allItems);
+
+                                //         // Calculate totals
+                                //         $totalAmount = collect($allItems)->sum('item_amount');
+                                //         $totalDeposit = collect($allItems)->sum('item_deposit');
+                                //         $totalBalance = collect($allItems)->sum('item_balance');
+
+                                //         $set('total_amount', $totalAmount);
+                                //         $set('total_deposit', $totalDeposit);
+                                //         $set('total_balance', $totalBalance);
+                                //     })
+                                //     ->visible(fn(Get $get) => filled($get('payment_category'))),
+
                                 Forms\Components\Select::make('payment_type_ids')
                                     ->label('Payment Types')
                                     ->multiple()
                                     ->preload()
-                                    ->options(fn() => PaymentType::where('school_id', Filament::getTenant()?->id ?? 0)
-                                        ->where('active', true)
-                                        ->pluck('name', 'id')
-                                        ->toArray() ?? [])
-                                    ->required()
-                                    ->live(debounce: 500)
-                                    ->afterStateUpdated(function (Get $get, Set $set, ?array $state) {
-                                        $currentItems = collect($get('payment_items') ?? []);
-                                        $selectedIds = collect($state ?? []);
-                                        $term = Term::find($get('term_id'));
+                                    ->options(function (Get $get) {
+                                        $classRoomId = $get('class_room_id');
+                                        $category = $get('payment_category');
+                                        $paymentPlanType = $get('payment_plan_type') ?? 'session';
 
-                                        // Add new items
-                                        $newIds = $selectedIds->diff($currentItems->pluck('payment_type_id') ?? collect());
-                                        $newItems = PaymentType::with('inventory')
-                                            ->whereIn('id', $newIds)
+                                        if (!$classRoomId) return [];
+
+                                        $classRoom = ClassRoom::find($classRoomId);
+                                        $classLevel = $classRoom?->getLevel();
+
+                                        return PaymentType::query()
+                                            ->where('school_id', Filament::getTenant()?->id ?? 0)
+                                            ->where('active', true)
+                                            ->when($category === 'tuition', function ($query) use ($classLevel) {
+                                                $query->where('is_tuition', true)
+                                                    ->whereHas('paymentPlans', function ($q) use ($classLevel) {
+                                                        $q->where('class_level', $classLevel);
+                                                    });
+                                            })
+                                            ->when($category === 'other', function ($query) {
+                                                $query->where('is_tuition', false);
+                                            })
+                                            ->when($category === 'combined', function ($query) use ($classLevel) {
+                                                $query->where(function ($q) use ($classLevel) {
+                                                    $q->where('is_tuition', false)
+                                                        ->orWhere(function ($q) use ($classLevel) {
+                                                            $q->where('is_tuition', true)
+                                                                ->whereHas('paymentPlans', function ($q) use ($classLevel) {
+                                                                    $q->where('class_level', $classLevel);
+                                                                });
+                                                        });
+                                                });
+                                            })
                                             ->get()
-                                            ->map(function ($type) use ($term, $set) {
+                                            ->mapWithKeys(function ($type) use ($classLevel, $paymentPlanType) {
+                                                $amount = $type->is_tuition
+                                                    ? $type->getAmountForClass($classLevel, $paymentPlanType)
+                                                    : $type->amount;
+
+                                                return [$type->id => "{$type->name} - " . formatNaira($amount)];
+                                            })
+                                            ->toArray();
+                                    })
+                                    ->live()
+                                    ->afterStateUpdated(function (Get $get, Set $set, ?array $state) {
+                                        // Always create fresh payment items when payment types change
+                                        $selectedIds = collect($state ?? []);
+                                        $classRoom = ClassRoom::find($get('class_room_id'));
+                                        $classLevel = $classRoom?->getLevel();
+                                        $paymentPlanType = $get('payment_plan_type') ?? 'session';
+
+                                        $newItems = PaymentType::with('inventory')
+                                            ->whereIn('id', $selectedIds)
+                                            ->get()
+                                            ->map(function ($type) use ($classLevel, $paymentPlanType) {
+                                                $amount = $type->is_tuition
+                                                    ? $type->getAmountForClass($classLevel, $paymentPlanType)
+                                                    : $type->amount;
+
                                                 $baseItem = [
                                                     'payment_type_id' => $type->id,
-                                                    'item_amount' => $type->amount,
-                                                    'item_deposit' => $type->amount,
-                                                    'item_balance' => 0,
+                                                    'item_amount' => $amount,
+                                                    'item_deposit' => $type->installment_allowed ? $type->min_installment_amount : $amount,
+                                                    'item_balance' => $type->installment_allowed ? ($amount - $type->min_installment_amount) : 0,
+                                                    'installment_allowed' => $type->installment_allowed,
+                                                    'min_installment_amount' => $type->min_installment_amount
                                                 ];
 
                                                 if ($type->category === 'physical_item') {
                                                     $baseItem['quantity'] = 1;
                                                     $baseItem['has_quantity'] = true;
                                                     $baseItem['max_quantity'] = $type->inventory?->quantity ?? 0;
-                                                    $baseItem['unit_price'] = $type->amount;
+                                                    $baseItem['unit_price'] = $amount;
                                                 }
-                                                // Get and set due date if term exists
-                                                // Only set due date for payment types that require it
-                                                if ($term && $type->hasDueDate()) {
-                                                    $set('due_date', $type->getDueDate($term)?->format('Y-m-d H:i:s'));
-                                                }
-
 
                                                 return $baseItem;
                                             })->toArray();
 
-                                        // Remove deselected items
-                                        $remainingItems = $currentItems
-                                            ->filter(fn($item) => $selectedIds->contains($item['payment_type_id']))
-                                            ->toArray();
+                                        // Set new items and update totals
+                                        $set('payment_items', $newItems);
 
-                                        // Merge and update items
-                                        $allItems = array_merge($remainingItems, $newItems);
-                                        $set('payment_items', $allItems);
-
-                                        // Calculate totals
-                                        $totalAmount = collect($allItems)->sum('item_amount');
-                                        $totalDeposit = collect($allItems)->sum('item_deposit');
-                                        $totalBalance = collect($allItems)->sum('item_balance');
+                                        // Calculate and update totals
+                                        $totalAmount = collect($newItems)->sum('item_amount');
+                                        $totalDeposit = collect($newItems)->sum('item_deposit');
+                                        $totalBalance = collect($newItems)->sum('item_balance');
 
                                         $set('total_amount', $totalAmount);
                                         $set('total_deposit', $totalDeposit);
@@ -313,6 +587,59 @@ class PaymentResource extends Resource
 
                                 Forms\Components\Repeater::make('payment_items')
                                     ->schema([
+                                        // Forms\Components\Select::make('payment_type_id')
+                                        //     ->label('Payment type')
+                                        //     ->options(fn() => PaymentType::where('school_id', Filament::getTenant()?->id ?? 0)
+                                        //         ->where('active', true)
+                                        //         ->pluck('name', 'id')
+                                        //         ->toArray() ?? [])
+                                        //     ->required()
+                                        //     ->preload()
+                                        //     ->searchable()
+                                        //     ->live()
+                                        //     ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                        //         if ($state) {
+                                        //             $paymentType = PaymentType::with('inventory')->find($state);
+                                        //             if ($paymentType) {
+                                        //                 // Set base amounts
+                                        //                 $set('item_amount', $paymentType->amount);
+                                        //                 $set('item_deposit', $paymentType->amount);
+                                        //                 $set('item_balance', 0);
+
+                                        //                 if ($paymentType->category === 'physical_item') {
+                                        //                     $set('has_quantity', true);
+                                        //                     $set('quantity', 1);
+                                        //                     $set('max_quantity', $paymentType->inventory?->quantity ?? 0);
+                                        //                     $set('unit_price', $paymentType->amount);
+                                        //                 } else {
+                                        //                     $set('has_quantity', false);
+                                        //                     $set('quantity', null);
+                                        //                     $set('max_quantity', null);
+                                        //                     $set('unit_price', null);
+                                        //                 }
+
+                                        //                 // Calculate totals
+                                        //                 $items = collect($get('../../payment_items'))->map(function ($item) use ($state, $paymentType) {
+                                        //                     if ($item['payment_type_id'] === $state) {
+                                        //                         $item['item_amount'] = $paymentType->amount;
+                                        //                         $item['item_deposit'] = $paymentType->amount;
+                                        //                         $item['item_balance'] = 0;
+                                        //                     }
+                                        //                     return $item;
+                                        //                 });
+
+                                        //                 // Update totals
+                                        //                 $totalAmount = $items->sum('item_amount');
+                                        //                 $totalDeposit = $items->sum('item_deposit');
+                                        //                 $totalBalance = $items->sum('item_balance');
+
+                                        //                 $set('../../total_amount', $totalAmount);
+                                        //                 $set('../../total_deposit', $totalDeposit);
+                                        //                 $set('../../total_balance', $totalBalance);
+                                        //             }
+                                        //         }
+                                        //     }),
+
                                         Forms\Components\Select::make('payment_type_id')
                                             ->label('Payment type')
                                             ->options(fn() => PaymentType::where('school_id', Filament::getTenant()?->id ?? 0)
@@ -327,16 +654,27 @@ class PaymentResource extends Resource
                                                 if ($state) {
                                                     $paymentType = PaymentType::with('inventory')->find($state);
                                                     if ($paymentType) {
+                                                        // Get amount based on payment type
+                                                        $amount = $paymentType->amount; // Default to regular amount
+
+                                                        // If it's a tuition fee, get amount from payment plan
+                                                        if ($paymentType->is_tuition) {
+                                                            $classRoom = ClassRoom::find($get('../../class_room_id'));
+                                                            $classLevel = $classRoom?->getLevel();
+                                                            $paymentPlanType = $get('../../payment_plan_type') ?? 'session';
+                                                            $amount = $paymentType->getAmountForClass($classLevel, $paymentPlanType);
+                                                        }
+
                                                         // Set base amounts
-                                                        $set('item_amount', $paymentType->amount);
-                                                        $set('item_deposit', $paymentType->amount);
-                                                        $set('item_balance', 0);
+                                                        $set('item_amount', $amount);
+                                                        $set('item_deposit', $paymentType->installment_allowed ? $paymentType->min_installment_amount : $amount);
+                                                        $set('item_balance', $paymentType->installment_allowed ? ($amount - $paymentType->min_installment_amount) : 0);
 
                                                         if ($paymentType->category === 'physical_item') {
                                                             $set('has_quantity', true);
                                                             $set('quantity', 1);
                                                             $set('max_quantity', $paymentType->inventory?->quantity ?? 0);
-                                                            $set('unit_price', $paymentType->amount);
+                                                            $set('unit_price', $amount);
                                                         } else {
                                                             $set('has_quantity', false);
                                                             $set('quantity', null);
@@ -345,11 +683,11 @@ class PaymentResource extends Resource
                                                         }
 
                                                         // Calculate totals
-                                                        $items = collect($get('../../payment_items'))->map(function ($item) use ($state, $paymentType) {
+                                                        $items = collect($get('../../payment_items'))->map(function ($item) use ($state, $amount, $paymentType) {
                                                             if ($item['payment_type_id'] === $state) {
-                                                                $item['item_amount'] = $paymentType->amount;
-                                                                $item['item_deposit'] = $paymentType->amount;
-                                                                $item['item_balance'] = 0;
+                                                                $item['item_amount'] = $amount;
+                                                                $item['item_deposit'] = $paymentType->installment_allowed ? $paymentType->min_installment_amount : $amount;
+                                                                $item['item_balance'] = $paymentType->installment_allowed ? ($amount - $paymentType->min_installment_amount) : 0;
                                                             }
                                                             return $item;
                                                         });
@@ -447,10 +785,24 @@ class PaymentResource extends Resource
                                             ->required()
                                             ->live()
                                             ->afterStateUpdated(function ($state, Get $get, Set $set) {
+                                                $paymentTypeId = $get('payment_type_id');
+                                                $paymentType = PaymentType::find($paymentTypeId);
                                                 $amount = floatval($get('item_amount'));
                                                 $deposit = floatval($state ?? 0);
 
-                                                if ($deposit > $amount) {
+                                                // Check minimum installment amount
+                                                if ($paymentType && $paymentType->installment_allowed) {
+                                                    if ($deposit < $paymentType->min_installment_amount) {
+                                                        Notification::make()
+                                                            ->warning()
+                                                            ->title('Invalid Installment Amount')
+                                                            ->body("Minimum installment amount is ₦" . number_format($paymentType->min_installment_amount, 2))
+                                                            ->send();
+                                                        $set('item_deposit', $paymentType->min_installment_amount);
+                                                        $deposit = $paymentType->min_installment_amount;
+                                                    }
+                                                } else if ($deposit < $amount) {
+                                                    // For non-installment payments, force full payment
                                                     $deposit = $amount;
                                                     $set('item_deposit', $amount);
                                                 }
@@ -764,51 +1116,140 @@ class PaymentResource extends Resource
                     ->preload(),
 
                 // Class Filters Group
-                Tables\Filters\Filter::make('class_filters')
+                Tables\Filters\Filter::make('class_room')
                     ->form([
-                        Forms\Components\Select::make('student_class')
+                        Forms\Components\Select::make('class_room_id')
+                            ->label('Class Room')
                             ->multiple()
-                            ->label('Student Class')
                             ->options(fn() => ClassRoom::where('school_id', Filament::getTenant()->id)
                                 ->orderBy('name')
-                                ->pluck('name', 'id')),
-
-                        Forms\Components\Select::make('payment_class')
-                            ->multiple()
-                            ->label('Payment Class')
-                            ->options(fn() => ClassRoom::where('school_id', Filament::getTenant()->id)
-                                ->orderBy('name')
-                                ->pluck('name', 'id')),
+                                ->pluck('name', 'id'))
                     ])
                     ->query(function (Builder $query, array $state): Builder {
-                        return $query
-                            ->when(
-                                !empty($state['student_class']),
-                                fn(Builder $query) => $query->whereHas('student', function ($query) use ($state) {
-                                    $query->whereIn('class_room_id', $state['student_class']);
-                                })
-                            )
-                            ->when(
-                                !empty($state['payment_class']),
-                                fn(Builder $query) => $query->whereIn('payments.class_room_id', $state['payment_class'])
-                            );
+                        return $query->when(
+                            !empty($state['class_room_id']),
+                            fn(Builder $query) => $query->whereIn('class_room_id', $state['class_room_id'])
+                        );
                     })
                     ->indicateUsing(function (array $state): array {
                         $indicators = [];
 
-                        if (!empty($state['student_class'])) {
-                            $classes = ClassRoom::whereIn('id', $state['student_class'])->pluck('name');
-                            $indicators[] = 'Student Class: ' . $classes->join(', ');
-                        }
-
-                        if (!empty($state['payment_class'])) {
-                            $classes = ClassRoom::whereIn('id', $state['payment_class'])->pluck('name');
-                            $indicators[] = 'Payment Class: ' . $classes->join(', ');
+                        if (!empty($state['class_room_id'])) {
+                            $classes = ClassRoom::whereIn('id', $state['class_room_id'])->pluck('name');
+                            $indicators[] = 'Class Room: ' . $classes->join(', ');
                         }
 
                         return $indicators;
                     }),
 
+
+                // Payment Plan Filter
+                Tables\Filters\SelectFilter::make('payment_plan_type')
+                    ->label('Payment Plan')
+                    ->options([
+                        'session' => 'Full Session Payment',
+                        'term' => 'Term Payment'
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query->when(
+                            $data['value'],
+                            fn(Builder $query, $value): Builder => $query->where('payment_plan_type', $value)
+                        );
+                    }),
+                    
+                Tables\Filters\Filter::make('payment_tracking')
+                    ->form([
+                        Forms\Components\Select::make('payment_status')
+                            ->label('Tuition Payment Status')
+                            ->multiple()
+                            ->options([
+                                'no_payment' => 'No Payment Made',
+                                'full_session_paid' => 'Full Session Paid',
+                                'current_term_paid' => 'Current Term Paid',
+                                'partial_payment' => 'Partial Payment',
+                                'defaulters' => 'All Defaulters'
+                            ])
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query->when($data['payment_status'] ?? null, function ($query) use ($data) {
+                            $currentSession = config('app.current_session');
+                            $currentTerm = config('app.current_term');
+
+                            $query->where(function ($q) use ($data, $currentSession, $currentTerm) {
+                                foreach ($data['payment_status'] as $status) {
+                                    switch ($status) {
+                                        case 'no_payment':
+                                            $q->orWhere(function ($subQ) use ($currentSession) {
+                                                $subQ->where('is_tuition', true)
+                                                    ->where('academic_session_id', $currentSession->id)
+                                                    ->whereHas(
+                                                        'status',
+                                                        fn($sq) =>
+                                                        $sq->where('name', 'pending')
+                                                    );
+                                            });
+                                            break;
+
+                                        case 'full_session_paid':
+                                            $q->orWhere(function ($subQ) use ($currentSession) {
+                                                $subQ->where('is_tuition', true)
+                                                    ->where('academic_session_id', $currentSession->id)
+                                                    ->where('payment_plan_type', 'session')
+                                                    ->whereColumn('deposit', '>=', 'amount')
+                                                    ->whereHas(
+                                                        'status',
+                                                        fn($sq) =>
+                                                        $sq->where('name', 'paid')
+                                                    );
+                                            });
+                                            break;
+
+                                        case 'current_term_paid':
+                                            $q->orWhere(function ($subQ) use ($currentTerm) {
+                                                $subQ->where('is_tuition', true)
+                                                    ->where('term_id', $currentTerm->id)
+                                                    ->where('payment_plan_type', 'term')
+                                                    ->whereColumn('deposit', '>=', 'amount')
+                                                    ->whereHas(
+                                                        'status',
+                                                        fn($sq) =>
+                                                        $sq->where('name', 'paid')
+                                                    );
+                                            });
+                                            break;
+
+                                        case 'partial_payment':
+                                            $q->orWhere(function ($subQ) use ($currentSession) {
+                                                $subQ->where('is_tuition', true)
+                                                    ->where('academic_session_id', $currentSession->id)
+                                                    ->whereColumn('deposit', '<', 'amount')
+                                                    ->whereHas(
+                                                        'status',
+                                                        fn($sq) =>
+                                                        $sq->where('name', 'partial')
+                                                    );
+                                            });
+                                            break;
+
+                                        case 'defaulters':
+                                            $q->orWhere(function ($subQ) use ($currentSession) {
+                                                $subQ->where('is_tuition', true)
+                                                    ->where('academic_session_id', $currentSession->id)
+                                                    ->where(function ($sq) {
+                                                        $sq->whereColumn('deposit', '<', 'amount')
+                                                            ->orWhereHas(
+                                                                'status',
+                                                                fn($status) =>
+                                                                $status->whereIn('name', ['pending', 'partial'])
+                                                            );
+                                                    });
+                                            });
+                                            break;
+                                    }
+                                }
+                            });
+                        });
+                    }),
                 Tables\Filters\Filter::make('payment_type')
                     ->form([
                         Forms\Components\Select::make('payment_types')
@@ -990,6 +1431,7 @@ class PaymentResource extends Resource
                             );
                     }),
             ])
+            ->filtersFormMaxHeight('800px')
             // ], layout: FiltersLayout::AboveContent)
             ->actions([
                 Tables\Actions\ActionGroup::make([

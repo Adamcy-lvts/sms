@@ -12,28 +12,24 @@
             </p>
 
             <!-- Billing Toggle -->
-            <div class="flex items-center justify-center gap-3 mb-8">
-                <span
-                    class="text-sm font-medium {{ !$isAnnual ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400' }}">
-                    Monthly Billing
-                </span>
-                <button type="button" wire:click="toggleBilling"
-                    class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-2 {{ $isAnnual ? 'bg-primary-600' : 'bg-gray-200' }}">
-                    <span class="sr-only">Toggle billing period</span>
-                    <span
-                        class="pointer-events-none relative inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {{ $isAnnual ? 'translate-x-5' : 'translate-x-0' }}">
+            <div class="flex items-center justify-center mb-8">
+                <div class="flex items-center justify-center gap-3 relative min-w-[300px]">
+                    <span class="text-sm font-medium w-28 text-right {{ !$isAnnual ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400' }}">
+                        Monthly 
                     </span>
-                </button>
-                <span
-                    class="text-sm font-medium {{ $isAnnual ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400' }}">
-                    Annual Billing
-                    @if ($isAnnual)
-                        <span
-                            class="ml-1.5 inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800 dark:bg-primary-800 dark:bg-opacity-25 dark:text-primary-200">
-                            Save up to 30%
+                    <button type="button" wire:click="toggleBilling"
+                        class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 {{ $isAnnual ? 'bg-emerald-600' : 'bg-gray-200' }}">
+                        <span class="sr-only">Toggle billing period</span>
+                        <span class="pointer-events-none relative inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {{ $isAnnual ? 'translate-x-5' : 'translate-x-0' }}">
                         </span>
-                    @endif
-                </span>
+                    </button>
+                    <div class="w-28 flex items-center">
+                        <span class="text-sm font-medium {{ $isAnnual ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400' }}">
+                            Yearly 
+                           
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -107,15 +103,39 @@
                     <!-- Features List -->
                     <div class="bg-gray-50 dark:bg-gray-700 p-6">
                         <h3 class="text-lg font-semibold mb-3 dark:text-white">Features:</h3>
+
+                        @php
+                            $planTierLevel = match($plan->name) {
+                                'Basic' => 1,
+                                'Standard' => 2,
+                                'Premium' => 3,
+                                default => 0
+                            };
+                            
+                            $tierFeatures = $plan->features->filter(function($feature) use ($planTierLevel) {
+                                return \App\Models\Feature::getTierLevel($feature->slug) === $planTierLevel;
+                            });
+                            
+                            $inheritanceLabel = match($planTierLevel) {
+                                2 => 'All Basic features +',
+                                3 => 'All Standard features +',
+                                default => ''
+                            };
+                        @endphp
+
+                        @if ($inheritanceLabel)
+                            <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">{{ $inheritanceLabel }}</p>
+                        @endif
+
                         <ul class="space-y-2">
-                            @forelse ($plan->features as $feature)
+                            @forelse ($tierFeatures as $feature)
                                 <li class="flex items-center text-sm dark:text-gray-300">
                                     <svg class="h-5 w-5 text-emerald-500 mr-2" fill="none" viewBox="0 0 24 24"
                                         stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M5 13l4 4L19 7" />
                                     </svg>
-                                    <span>{{ $feature }}</span>
+                                    <span>{{ $feature->name }}</span>
                                 </li>
                             @empty
                                 <li class="text-gray-500 dark:text-gray-400">No features listed for this plan.</li>
@@ -132,7 +152,7 @@
                                     @endif
                                     @if ($plan->max_staff)
                                         <li class="text-sm text-gray-600 dark:text-gray-300">Up to
-                                            {{ number_format($plan->max_staff) }} staff</li>
+                                            {{ number_format($plan->max_staff) }} staff Login Accounts</li>
                                     @endif
                                     @if ($plan->max_classes)
                                         <li class="text-sm text-gray-600 dark:text-gray-300">Up to

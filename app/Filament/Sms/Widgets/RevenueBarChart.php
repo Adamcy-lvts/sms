@@ -18,7 +18,7 @@ class RevenueBarChart extends ChartWidget
     use HasWidgetShield;
     
     protected static ?string $heading = 'Revenue Analysis';
-    protected static ?int $sort = 1;
+    protected static ?int $sort = 2;
     // protected int | string | array $columnSpan = 'full';
     // protected static ?string $maxHeight = '300px';
     // Initialize filter with current term
@@ -377,5 +377,10 @@ class RevenueBarChart extends ChartWidget
             },
         }
     JS);
+    }
+
+    public static function canView(): bool
+    {
+        return auth()->user()->hasRole(['super_admin','admin', 'accountant', 'bursar', 'financial_manager']);
     }
 }

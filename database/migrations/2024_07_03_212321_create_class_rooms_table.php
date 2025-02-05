@@ -15,8 +15,10 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('slug');
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->string('level')->nullable(); // nursery, primary, secondary etc
+            $table->foreignId('school_id');
             $table->integer('capacity')->default(0);
+            $table->softDeletes();
             $table->timestamps();
 
             $table->unique(['name', 'school_id']);

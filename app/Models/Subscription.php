@@ -7,6 +7,7 @@ use App\Models\School;
 use App\Models\SubsPayment;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Subscription extends Model
 {
@@ -28,10 +29,12 @@ class Subscription extends Model
         'features' // assuming you want to be able to set features directly
     ];
 
-    // Relationship with Plan
-    public function plan()
+    /**
+     * Get the plan associated with the subscription.
+     */
+    public function plan(): BelongsTo
     {
-        return $this->belongsTo(Plan::class, 'plan_id');
+        return $this->belongsTo(Plan::class);
     }
 
     // Relationship with School
@@ -156,5 +159,19 @@ class Subscription extends Model
         return $this->is_on_trial
             && $this->status === 'active'
             && $this->trial_ends_at->isNextDays($days);
+    }
+
+    public function checkLimit(string $limitField, int $currentCount): bool
+    {
+        if (!$this->plan->hasLimit($limitField)) {
+            return true;
+        }
+
+        return $currentCount < $this->plan->$limitField;
+    }
+
+    public function getRemainingLimit(string $limitField, int $currentCount): int
+    {
+        return $this->plan->getRemainingLimit($limitField, $currentCount);
     }
 }

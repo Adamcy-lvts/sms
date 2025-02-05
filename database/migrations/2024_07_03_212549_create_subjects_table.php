@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('name_ar')->nullable();
             $table->string('slug');
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->integer('position')->default(0)->nullable();
             $table->string('color')->default('#000000')->nullable();
             $table->string('icon')->default('fa-book');
@@ -25,6 +25,7 @@ return new class extends Migration
             $table->boolean('is_optional')->default(false);
             $table->boolean('is_active')->default(true);
             $table->boolean('is_archived')->default(false);
+            $table->softDeletes();
 
             $table->unique(['name', 'school_id']);
             $table->unique(['slug', 'school_id']);

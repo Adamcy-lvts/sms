@@ -9,6 +9,7 @@ use App\Models\Draft;
 use App\Models\Status;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\Teacher;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Forms\Form;
@@ -360,26 +361,80 @@ class BulkGradeStudents extends Page
                             Grid::make(3)->schema([
                                 Select::make('class_room_id')
                                     ->label('Class')
-                                    ->options(fn() => ClassRoom::where('school_id', Filament::getTenant()->id)
-                                        ->pluck('name', 'id'))
+                                    ->options(function () {
+                                        $query = ClassRoom::query()
+                                            ->where('school_id', Filament::getTenant()->id);
+                                        
+                                        // If user is a teacher, only show assigned classes
+                                        if (auth()->user()->hasRole('teacher')) {
+                                            $teacher = Teacher::where('staff_id', auth()->user()->staff->id)->first();
+                                            if ($teacher) {
+                                                $query->whereHas('teachers', function ($q) use ($teacher) {
+                                                    $q->where('teachers.id', $teacher->id);
+                                                });
+                                            }
+                                        }
+                                        
+                                        return $query->pluck('name', 'id');
+                                    })
                                     ->required()
                                     ->live()
-                                    ->afterStateUpdated(fn(Set $set) => $set('student_id', null)),
+                                    ->afterStateUpdated(fn(Set $set) => [
+                                        $set('student_id', null),
+                                        $set('subject_id', null)
+                                    ]),
 
                                 Select::make('student_id')
                                     ->label('Student')
-                                    ->options(fn(Get $get) => $this->getStudentOptions($get('class_room_id')))
+                                    ->options(function (Get $get) {
+                                        if (!$get('class_room_id')) {
+                                            return [];
+                                        }
+                                        
+                                        return Student::query()
+                                            ->where('class_room_id', $get('class_room_id'))
+                                            ->get()
+                                            ->mapWithKeys(fn($student) => [
+                                                $student->id => $student->full_name
+                                            ]);
+                                    })
                                     ->searchable()
                                     ->required()
-                                    ->live(),
+                                    ->live()
+                                    ->visible(fn (Get $get): bool => filled($get('class_room_id'))),
 
                                 Select::make('subject_id')
                                     ->label('Subject')
-                                    ->options(fn() => Subject::where('school_id', Filament::getTenant()->id)
-                                        ->where('is_active', true)
-                                        ->pluck('name', 'id'))
+                                    ->options(function (Get $get) {
+                                        if (!$get('class_room_id')) {
+                                            return [];
+                                        }
+
+                                        $query = Subject::query()
+                                            ->where('is_active', true);
+
+                                        if (auth()->user()->hasRole('teacher')) {
+                                            $teacher = Teacher::where('staff_id', auth()->user()->staff->id)->first();
+                                            if ($teacher) {
+                                                // Check if teacher teaches in this class
+                                                $teachesInClass = $teacher->hasClassRoom(ClassRoom::find($get('class_room_id')));
+                                                
+                                                if ($teachesInClass) {
+                                                    // Only show subjects assigned to the teacher
+                                                    $query->whereHas('teachers', function ($q) use ($teacher) {
+                                                        $q->where('subject_teacher.teacher_id', $teacher->id);
+                                                    });
+                                                } else {
+                                                    return []; // Return empty if teacher doesn't teach in this class
+                                                }
+                                            }
+                                        }
+
+                                        return $query->pluck('name', 'id');
+                                    })
                                     ->required()
-                                    ->live(),
+                                    ->live()
+                                    ->visible(fn (Get $get): bool => filled($get('class_room_id'))),
                             ]),
 
                             // Assessment Scores Repeater

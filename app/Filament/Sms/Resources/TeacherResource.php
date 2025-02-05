@@ -68,7 +68,7 @@ class TeacherResource extends Resource
                 Tables\Columns\ImageColumn::make('staff.profile_picture_url')->label('Profile Picture')->circular(),
                 Tables\Columns\TextColumn::make('staff.full_name')->label('Staff Name'),
                 Tables\Columns\TextColumn::make('staff.phone_number')->label('Phone Number'),
-                Tables\Columns\TextColumn::make('classRoom.name')->label('Class Taken')->default('No class assign'),
+                Tables\Columns\TextColumn::make('classRooms.name')->label('Class Taken')->default('No class assign'),
                 Tables\Columns\TextColumn::make('Subjects.name')->label('Subjects')->default('No subject assign'),
             ])
             ->filters([

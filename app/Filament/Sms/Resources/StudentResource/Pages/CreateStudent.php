@@ -3,12 +3,15 @@
 namespace App\Filament\Sms\Resources\StudentResource\Pages;
 
 use Filament\Actions;
+
 use App\Models\Student;
 use App\Models\Admission;
 use Filament\Facades\Filament;
 use App\Models\AcademicSession;
+use App\Services\FeatureService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\FeatureCheckResult;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Filament\Notifications\Notification;
@@ -21,6 +24,8 @@ class CreateStudent extends CreateRecord
     protected static string $resource = StudentResource::class;
 
     public ?Admission $admission = null;
+
+    protected ?FeatureCheckResult $limitCheckResult = null;
 
     public function mount(): void
     {
@@ -81,6 +86,25 @@ class CreateStudent extends CreateRecord
         ]);
     }
 
+    protected function beforeCreate(): void
+    {
+        $school = Filament::getTenant();
+        $featureService = app(FeatureService::class);
+
+        // Pre-creation limit check
+        $preCheckResult = $featureService->checkResourceLimit($school, 'students');
+        if (!$preCheckResult->allowed) {
+            Notification::make()
+                ->title('Student Limit Reached')
+                ->body($preCheckResult->message)
+                ->danger()
+                ->persistent()
+                ->send();
+            
+            $this->halt();
+        }
+    }
+
     protected function handleRecordCreation(array $data): Model
     {
         $school = Filament::getTenant();
@@ -88,39 +112,41 @@ class CreateStudent extends CreateRecord
         DB::beginTransaction();
 
         try {
-             // Ensure we have an admission number
-             if (empty($data['admission_number'])) {
+            if (empty($data['admission_number'])) {
                 $generator = new AdmissionNumberGenerator();
                 $data['admission_number'] = $generator->generate();
             }
 
-
-            if ($school->hasFeature('Admission Management')) {
-                $record = $this->createSimpleStudentRecord($data, $school);
-            } else {
-                $record = $this->createFullStudentRecord($data, $school);
-            }
+            $record = $school->hasFeature('Admission Management') 
+                ? $this->createSimpleStudentRecord($data, $school)
+                : $this->createFullStudentRecord($data, $school);
 
             DB::commit();
-
-            Notification::make()
-                ->title('Success')
-                ->body('Student record created successfully.')
-                ->success()
-                ->send();
-
             return $record;
+
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error("Error creating student record: " . $e->getMessage());
-            
-            Notification::make()
-                ->title('Error')
-                ->body('Failed to create student record. Please try again.')
-                ->danger()
-                ->send();
-
             throw $e;
+        }
+    }
+
+    protected function afterCreate(): void
+    {
+        $school = Filament::getTenant();
+        $featureService = app(FeatureService::class);
+
+        // Post-creation limit check
+        $postCheckResult = $featureService->checkResourceLimit($school, 'students');
+        $this->limitCheckResult = $postCheckResult;
+
+        if ($postCheckResult->status === 'warning') {
+            Notification::make()
+                ->title('Student Limit Warning')
+                ->body($postCheckResult->message)
+                ->warning()
+                ->persistent()
+                ->send();
         }
     }
 
@@ -239,5 +265,16 @@ class CreateStudent extends CreateRecord
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    protected function getCreatedNotificationTitle(): ?string
+    {
+        // Use the stored limit check result
+        if ($this->limitCheckResult && $this->limitCheckResult->remaining <= 5 && $this->limitCheckResult->remaining > 0) {
+            return "Student created successfully ({$this->limitCheckResult->remaining} slot" . 
+                   ($this->limitCheckResult->remaining === 1 ? '' : 's') . " remaining)";
+        }
+
+        return "Student created successfully";
     }
 }

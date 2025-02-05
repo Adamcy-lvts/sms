@@ -19,6 +19,15 @@ class PaymentItem extends Model
         'balance',
         'quantity',
         'unit_price',
+        'is_tuition',
+    ];
+
+    protected $casts = [
+        'amount' => 'decimal:2',
+        'deposit' => 'decimal:2',
+        'balance' => 'decimal:2',
+        'unit_price' => 'decimal:2',
+        'is_tuition' => 'boolean',
     ];
 
     public function payment()

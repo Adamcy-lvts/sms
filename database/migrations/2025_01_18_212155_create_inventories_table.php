@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('inventories', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('school_id');
             $table->foreignId('payment_type_id')->nullable()->constrained()->nullOnDelete();
             $table->string('name');
             $table->string('code')->nullable();

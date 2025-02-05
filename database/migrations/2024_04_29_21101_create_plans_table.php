@@ -23,17 +23,15 @@ return new class extends Migration
             $table->integer('duration')->default(30); // Duration in days
 
             // Features and Configuration
-            $table->json('features')->nullable(); // Stores array of features
+           
             $table->string('plan_code')->nullable(); // Paystack plan code
             $table->integer('yearly_discount')->default(0); // Percentage discount for yearly plans
 
-            // Plan Limits
-            $table->integer('max_students')->nullable(); // Maximum allowed students
-            $table->integer('max_staff')->nullable(); // Maximum allowed staff members
-            $table->integer('max_classes')->nullable(); // Maximum allowed classes
-
             // Plan Status and Display
             $table->string('status')->default('active'); // active, inactive, archived
+            $table->integer('max_students')->nullable();
+            $table->integer('max_staff')->nullable();
+            $table->integer('max_classes')->nullable();
             $table->string('badge_color')->nullable(); // For UI customization
             $table->string('cto')->nullable()->default('Purchase'); // Call to action text
 

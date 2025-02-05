@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('school_calendar_events', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('school_id');
             $table->string('title');
             $table->text('description')->nullable();
             $table->date('start_date');
@@ -24,6 +24,7 @@ return new class extends Migration
             $table->boolean('excludes_attendance')->default(false);
             $table->string('color')->nullable();
             $table->json('excluded_dates')->nullable(); // For recurring events exceptions
+            $table->softDeletes();
             $table->timestamps();
         });
     }

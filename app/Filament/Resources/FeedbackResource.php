@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Resources\FeebackResource\RelationManagers\TrackingRelationManager;
 use Filament\Forms;
 use Filament\Tables;
 use App\Models\School;
@@ -10,7 +11,9 @@ use App\Models\Feedback;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
+use Filament\Forms\Components\Grid;
 use Filament\Tables\Filters\Filter;
+use Filament\Forms\Components\Group;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Section;
@@ -38,74 +41,94 @@ class FeedbackResource extends Resource
     {
         return $form
             ->schema([
-                // Basic Information
-                Section::make('Feedback Campaign')
-                    ->description('Configure your feedback campaign settings')
-                    ->schema([
-                        TextInput::make('title')
-                            ->required()
-                            ->maxLength(255),
-
-                        Textarea::make('description')
-                            ->required(),
-
-                        DateTimePicker::make('start_date')
-                            ->required(),
-
-                        DateTimePicker::make('end_date')
-                            ->after('start_date'),
-
-                        TextInput::make('frequency_days')
-                            ->numeric()
-                            ->required()
-                            ->helperText('How many days between showing feedback prompt'),
-
-                        Toggle::make('is_active')
-                            ->default(true),
-                    ]),
-
-                // School Targeting
-                Section::make('Target Schools')
-                    ->schema([
-                        Select::make('target_schools')
-                            ->multiple()
-                            ->options(School::pluck('name', 'id'))
-                            ->searchable()
-                            ->helperText('Leave empty to target all schools'),
-                    ]),
-
-                // Questions Builder
-                Section::make('Feedback Questions')
-                    ->schema([
-                        Repeater::make('questions')
+                // Main Grid Layout with 2/3 : 1/3 split
+                Grid::make([
+                    'default' => 1,
+                    'lg' => 3,
+                ])->schema([
+                    // Left Column (2/3 width) - Main Content
+                    Group::make([
+                        // Campaign Details Section
+                        Section::make('Feedback Campaign')
+                            ->description('Configure your feedback campaign settings')
+                            ->icon('heroicon-o-megaphone')
                             ->schema([
-                                TextInput::make('question')
-                                    ->required(),
+                                // Campaign basics in a 2-column grid
+                                Grid::make(2)->schema([
+                                    TextInput::make('title')
+                                        ->required()
+                                        ->maxLength(255)
+                                        ->columnSpan('full'),
 
-                                Select::make('type')
-                                    ->options([
-                                        'rating' => 'Star Rating',
-                                        'text' => 'Text Response',
-                                        'choice' => 'Multiple Choice',
-                                    ])
-                                    ->required(),
+                                    Textarea::make('description')
+                                        ->required()
+                                        ->columnSpan('full'),
 
-                                Repeater::make('options')
+                                    // Group date pickers together
+                                    DateTimePicker::make('start_date')
+                                        ->required(),
+
+                                    DateTimePicker::make('end_date')
+                                        ->after('start_date'),
+                                ]),
+
+                                // Frequency and status in another grid
+                                Grid::make(2)->schema([
+                                    TextInput::make('frequency_days')
+                                        ->numeric()
+                                        ->required()
+                                        ->helperText('How many days between showing feedback prompt'),
+
+                                    Toggle::make('is_active')
+                                        ->default(true)
+                                        ->inline(false),
+                                ]),
+                            ]),
+
+                        // Questions Section
+                        Section::make('Feedback Questions')
+                            ->description('Design your questionnaire')
+                            ->icon('heroicon-o-question-mark-circle')
+                            ->schema([
+                                Repeater::make('questions')
                                     ->schema([
-                                        TextInput::make('option')
+                                        TextInput::make('question')
+                                            ->required(),
+
+                                        Select::make('type')
+                                            ->options([
+                                                'rating' => 'Star Rating',
+                                                'text' => 'Text Response',
+                                                'choice' => 'Multiple Choice',
+                                            ])
+                                            ->required(),
+
+                                        Repeater::make('options')
+                                            ->schema([
+                                                TextInput::make('option')
+                                            ])
+                                            ->visible(fn(Get $get) => $get('type') === 'choice'),
                                     ])
-                                    ->visible(
-                                        fn(Get $get) =>
-                                        $get('type') === 'choice'
-                                    ),
-                            ])
-                            ->itemLabel(
-                                fn(array $state): ?string =>
-                                $state['question'] ?? null
-                            )
-                            ->collapsible()
-                            ->defaultItems(1),
-                    ]),
+                                    ->itemLabel(fn(array $state): ?string => $state['question'] ?? null)
+                                    ->collapsible()
+                                    ->defaultItems(1),
+                            ]),
+                    ])->columnSpan(2),
+
+                    // Right Column (1/3 width) - Target Schools
+                    Group::make([
+                        Section::make('Target Schools')
+                            ->description('Select schools to receive feedback')
+                            ->icon('heroicon-o-building-office-2')
+                            ->schema([
+                                Select::make('target_schools')
+                                    ->multiple()
+                                    ->options(School::pluck('name', 'id'))
+                                    ->searchable()
+                                    ->helperText('Leave empty to target all schools'),
+                            ]),
+                    ])->columnSpan(1),
+                ]),
             ]);
     }
 
@@ -154,6 +177,7 @@ class FeedbackResource extends Resource
     public static function getRelations(): array
     {
         return [
+            TrackingRelationManager::class,
             ResponsesRelationManager::class,
         ];
     }

@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('students', function (Blueprint $table) {
             $table->id();
             $table->string('identification_number')->nullable();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->foreignId('class_room_id')->constrained('class_rooms')->nullable();
             $table->foreignId('user_id')->nullable()->constrained(); // Changed to make nullable first
             $table->foreignId('admission_id')->constrained('admissions')->nullable(); 
@@ -28,6 +28,7 @@ return new class extends Migration
             $table->date('date_of_birth');
             $table->string('phone_number')->nullable();
             $table->string('profile_picture')->nullable();
+            $table->softDeletes();
             $table->timestamps();
         });
     }

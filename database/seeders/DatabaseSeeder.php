@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Designation;
 use App\Models\User;
 use App\Models\Payment;
+use App\Models\PaymentPlan;
 use App\Models\ReportTemplate;
 use App\Models\Staff;
 use App\Models\Template;
@@ -55,10 +56,13 @@ class DatabaseSeeder extends Seeder
             $this->call([
                 BankTableSeeder::class,          // Banks
                 PaymentMethodTableSeeder::class, // Payment methods
+                PaymentPlanSeeder::class,        // Payment plans
                 PaymentTypeSeeder::class,        // Payment types
-                PaymentTypeSeeder::class,   // Payment type configurations
+          
                 ExpenseCategoryItemSeeder::class,
                 PlansTableSeeder::class,         // Subscription plans
+                FeaturesTableSeeder::class,      // Features
+                PlanFeatureSeeder::class,        // Plan features
             ]);
 
             // Staff and admissions
@@ -77,6 +81,11 @@ class DatabaseSeeder extends Seeder
             // Financial transactions
             $this->call([
                 PaymentSeeder::class,            // Student payments
+            ]);
+
+            // Legal documents
+            $this->call([
+                LegalDocumentSeeder::class,
             ]);
         });
     }

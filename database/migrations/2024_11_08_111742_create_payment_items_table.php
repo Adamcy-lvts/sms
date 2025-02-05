@@ -20,6 +20,7 @@ return new class extends Migration
             $table->decimal('amount', 10, 2);
             $table->decimal('deposit', 10, 2)->nullable();
             $table->decimal('balance', 10, 2)->nullable();
+            $table->boolean('is_tuition')->default(false);
             $table->timestamps();
     
             $table->index(['payment_id', 'payment_type_id']);

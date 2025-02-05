@@ -13,13 +13,14 @@ return new class extends Migration
     {
         Schema::create('drafts', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('school_id');
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->string('type');
             $table->json('content');
             $table->json('metadata')->nullable();
             $table->timestamp('last_modified');
             $table->boolean('is_auto_save')->default(false);
+            $table->softDeletes();
             $table->timestamps();
     
             // Add indexes

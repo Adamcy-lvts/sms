@@ -43,4 +43,9 @@ class Teacher extends Model
     {
         return $this->belongsToMany(ClassRoom::class);
     }
+
+    public function hasClassRoom(ClassRoom $classRoom): bool
+    {
+        return $this->classRooms()->where('class_rooms.id', $classRoom->id)->exists();
+    }
 }

@@ -19,8 +19,15 @@ class PricingComponent extends Component
     // Constructor to initialize caches
     public function boot()
     {
-        $this->monthlyPlansCache = Plan::monthly()->active()->get();
-        $this->annualPlansCache = Plan::annually()->active()->get();
+        $this->monthlyPlansCache = Plan::with('features')
+            ->monthly()
+            ->active()
+            ->get();
+            
+        $this->annualPlansCache = Plan::with('features')
+            ->annually()
+            ->active()
+            ->get();
     }
 
     // Computed property for plans

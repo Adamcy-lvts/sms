@@ -93,6 +93,7 @@ class User extends Authenticatable implements HasName, FilamentUser, HasTenants,
         'email',
         'status_id',
         'password',
+        'last_login_at',
     ];
 
     /**
@@ -115,6 +116,7 @@ class User extends Authenticatable implements HasName, FilamentUser, HasTenants,
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'last_login_at' => 'datetime',
         ];
     }
 

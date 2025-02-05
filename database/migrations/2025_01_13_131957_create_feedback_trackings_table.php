@@ -14,8 +14,9 @@ return new class extends Migration
         Schema::create('feedback_trackings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('feedback_id')->constrained()->onDelete('cascade');
-            $table->foreignId('school_id')->constrained();
+            $table->foreignId('school_id');
             $table->timestamp('last_shown_at');
+            $table->softDeletes();
             $table->timestamps();
         });
     }

@@ -105,4 +105,68 @@ class StudentPolicy
     {
         return $user->can('reorder_student');
     }
+
+    /**
+     * Determine whether the user can promote students.
+     */
+    public function promote(User $user): bool
+    {
+        return $user->can('promote_student');
+    }
+
+    /**
+     * Determine whether the user can change student status.
+     */
+    public function changeStatus(User $user): bool
+    {
+        return $user->can('change_status_student');
+    }
+
+    /**
+     * Determine whether the user can record payments.
+     */
+    public function recordPayment(User $user): bool
+    {
+        return $user->can('record_payment_student');
+    }
+
+    /**
+     * Determine whether the user can perform bulk promotions.
+     */
+    public function bulkPromote(User $user): bool
+    {
+        return $user->can('bulk_promote_student');
+    }
+
+    /**
+     * Determine whether the user can perform bulk status changes.
+     */
+    public function bulkStatusChange(User $user): bool
+    {
+        return $user->can('bulk_status_change_student');
+    }
+
+    /**
+     * Determine whether the user can perform bulk payments.
+     */
+    public function bulkPayment(User $user): bool
+    {
+        return $user->can('bulk_payment_student');
+    }
+
+    /**
+     * Determine whether the user can import students.
+     */
+    public function import(User $user): bool
+    {
+        return $user->can('import_student');
+    }
+
+    /**
+     * Determine whether the user can view student profile.
+     */
+    public function profile(User $user): bool // Changed from student_profile to just profile
+    {
+        return $user->can('profile_student');
+    }
 }

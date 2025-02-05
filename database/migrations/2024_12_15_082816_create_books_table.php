@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('books', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('school_id');
             $table->foreignId('subject_id')->constrained()->cascadeOnDelete();
             $table->foreignId('class_room_id')->constrained()->cascadeOnDelete();
             $table->string('title');
@@ -24,6 +24,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->boolean('is_required')->default(true);
             $table->boolean('is_active')->default(true);
+            $table->softDeletes();
             $table->timestamps();
         });
     }

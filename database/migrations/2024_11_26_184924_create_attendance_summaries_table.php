@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('attendance_summaries', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->foreignId('student_id')->constrained()->onDelete('cascade');
             $table->foreignId('class_room_id')->constrained()->onDelete('cascade');
             $table->foreignId('academic_session_id')->constrained()->onDelete('cascade');
@@ -24,6 +24,7 @@ return new class extends Migration
             $table->integer('late_count');
             $table->integer('excused_count');
             $table->decimal('attendance_percentage', 5, 2);
+            $table->softDeletes();
             $table->timestamps();
 
             // One summary per student per term

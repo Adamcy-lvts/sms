@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('expenses', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained();
+            $table->foreignId('school_id');
             $table->foreignId('academic_session_id')->constrained();
             $table->foreignId('term_id')->constrained();
             $table->foreignId('expense_category_id')->constrained();
@@ -28,6 +28,7 @@ return new class extends Migration
             $table->foreignId('approved_by')->nullable()->constrained('users');
             $table->string('receipt_number')->nullable();
             $table->string('status')->default('pending'); // pending, approved, paid
+            $table->softDeletes();
             $table->timestamps();
         });
     }

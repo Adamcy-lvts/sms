@@ -4,11 +4,14 @@ namespace App\Filament\Sms\Resources\StaffResource\Pages;
 
 use App\Models\User;
 use App\Models\Staff;
+use App\Models\School;
 use App\Models\Status;
 use App\Models\Teacher;
 use Filament\Facades\Filament;
+use App\Services\FeatureService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\FeatureCheckResult;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Services\EmployeeIdGenerator;
@@ -32,6 +35,9 @@ class CreateStaff extends CreateRecord
     {
         return DB::transaction(function () use ($data) {
             try {
+                $school = Filament::getTenant();
+                $featureService = app(FeatureService::class);
+
                 // Generate Employee ID if needed
                 if (empty($data['employee_id'])) {
                     try {
@@ -125,10 +131,23 @@ class CreateStaff extends CreateRecord
 
                 // Handle user account creation
                 if ($data['create_user_account'] ?? false) {
-                    try {
+                    // Check staff user account limit before creating user
+                    $userResult = $featureService->checkResourceLimit($school, 'staff_users');
+                    
+                    if (!$userResult->allowed) {
+                        $this->sendStaffUserLimitReachedNotification($school);
+                        
+                        // Still create staff record but without user account
+                        Notification::make()
+                            ->warning()
+                            ->title('Staff Created Without User Account')
+                            ->body('Staff record created but user account could not be created due to plan limits.')
+                            ->persistent()
+                            ->send();
+                    } else {
+                        // Create user account if within limits
                         $password = $this->generatePassword($data);
                         $user = $this->createUserAccount($staff, $data, $password);
-
                         $staff->user_id = $user->id;
                         $staff->save();
 
@@ -144,15 +163,13 @@ class CreateStaff extends CreateRecord
                                     ->send();
                             }
                         }
-                    } catch (\Exception $e) {
-                        DB::rollBack();
-                        Notification::make()
-                            ->danger()
-                            ->title('Error Creating User Account')
-                            ->body('Failed to create user account: ' . $e->getMessage())
-                            ->send();
-                        throw $e;
                     }
+                }
+
+                // After successful staff creation, check remaining slots
+                $postCreationResult = $featureService->checkResourceLimit($school, 'staff');
+                if ($postCreationResult->status === 'warning') {
+                    $this->sendStaffLimitWarningNotification($school, $postCreationResult);
                 }
 
                 // If we get here, everything succeeded
@@ -189,6 +206,51 @@ class CreateStaff extends CreateRecord
                 throw $e;
             }
         });
+    }
+
+    protected function sendStaffLimitWarningNotification(School $school, FeatureCheckResult $result): void
+    {
+        $superAdmin = $school->getSuperAdmin();
+        
+        if (!$superAdmin) {
+            return;
+        }
+
+        Notification::make()
+            ->title('Staff Limit Warning')
+            ->body("You have {$result->remaining} staff slot(s) remaining in your current plan.")
+            ->warning()
+            ->icon('heroicon-o-exclamation-triangle')
+            ->actions([
+                \Filament\Notifications\Actions\Action::make('view_plans')
+                    ->button()
+                    ->url(route('filament.sms.pages.pricing-page', ['tenant' => $school->slug]))
+                    ->label('View Plans'),
+            ])
+            ->sendToDatabase($superAdmin);
+    }
+
+    protected function sendStaffUserLimitReachedNotification(School $school): void
+    {
+        $superAdmin = $school->getSuperAdmin();
+        
+        if (!$superAdmin) {
+            return;
+        }
+
+        Notification::make()
+            ->title('Staff User Account Limit Reached')
+            ->body('You have reached the maximum number of staff user accounts allowed in your current plan. Please upgrade to create more user accounts.')
+            ->danger()
+            ->icon('heroicon-o-x-circle')
+            ->persistent()
+            ->actions([
+                \Filament\Notifications\Actions\Action::make('upgrade')
+                    ->button()
+                    ->url(route('filament.sms.pages.pricing-page', ['tenant' => $school->slug]))
+                    ->label('Upgrade Plan'),
+            ])
+            ->sendToDatabase($superAdmin);
     }
 
     /**
@@ -303,7 +365,7 @@ class CreateStaff extends CreateRecord
 
     protected function beforeCreate(): void
     {
-        // Validate that the employee ID is unique
+        // Check employee ID uniqueness
         $employeeId = $this->data['employee_id'];
         if (Staff::where('employee_id', $employeeId)->exists()) {
             Notification::make()
@@ -314,5 +376,19 @@ class CreateStaff extends CreateRecord
 
             $this->halt();
         }
+    }
+
+    protected function getCreatedNotificationTitle(): ?string
+    {
+        $school = Filament::getTenant();
+        $result = app(FeatureService::class)->checkResourceLimit($school, 'staff');
+
+        // Only show remaining slots if we're close to the limit
+        if ($result->remaining <= 5 && $result->remaining > 0) {
+            return "Staff created successfully ({$result->remaining} staff slot" . 
+                   ($result->remaining === 1 ? '' : 's') . " remaining)";
+        }
+
+        return "Staff created successfully";
     }
 }

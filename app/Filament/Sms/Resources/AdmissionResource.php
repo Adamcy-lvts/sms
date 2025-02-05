@@ -20,6 +20,7 @@ use Filament\Tables\Table;
 use Illuminate\Support\Str;
 use Filament\Facades\Filament;
 use App\Models\AcademicSession;
+use App\Services\FeatureService;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Illuminate\Support\Collection;
@@ -49,6 +50,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
+use App\Services\AdmissionNumberGenerator;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ImageEntry;
@@ -77,6 +79,9 @@ class AdmissionResource extends Resource
     public static function form(Form $form): Form
     {
         $school = Filament::getTenant();
+        $settings = $school->settings;
+        $isManual = $settings->admission_settings['manual_numbering'] ?? false;
+        
         return $form
             ->schema([
 
@@ -88,15 +93,45 @@ class AdmissionResource extends Resource
                             Fieldset::make('Personal Information')
                                 ->schema([
                                     Forms\Components\TextInput::make('admission_number')
+                                        ->label('Admission Number')
                                         ->maxLength(255)
                                         ->unique(ignorable: fn($record) => $record)
-                                        ->disabled()
-                                        ->prefixIcon('heroicon-m-information-circle')
-                                        ->helperText('This is a preview of the admission number that will be assigned when approved')
-                                        ->dehydrated(
-                                            fn(Get $get): bool =>
-                                            $get('status_id') && Status::find($get('status_id'))?->name === 'approved'
-                                        ),
+                                        ->disabled(!$isManual)
+                                        ->required($isManual)
+                                        ->dehydrated(fn(Get $get): bool => 
+                                            $isManual || ($get('status_id') && Status::find($get('status_id'))?->name === 'approved')
+                                        )
+                                        ->helperText(function() use ($school, $isManual, $settings) {
+                                            if (!$isManual) {
+                                                return 'This is a preview of the admission number that will be assigned when approved';
+                                            }
+                    
+                                            if ($settings->admission_settings['show_last_number'] ?? true) {
+                                                $lastNumber = Admission::where('school_id', $school->id)
+                                                    ->whereNotNull('admission_number')
+                                                    ->orderByDesc('admission_number')
+                                                    ->first()?->admission_number;
+                                                    
+                                                return $lastNumber ? "Last used number: {$lastNumber}" : "No previous admission numbers";
+                                            }
+                    
+                                            return 'Enter admission number manually';
+                                        })
+                                        ->afterStateUpdated(function (string $state, Forms\Set $set) use ($school) {
+                                            // Validate manual input if needed
+                                            if (Admission::where('school_id', $school->id)
+                                                ->where('admission_number', $state)
+                                                ->exists()
+                                            ) {
+                                                Notification::make()
+                                                    ->warning()
+                                                    ->title('Duplicate Number')
+                                                    ->body("Admission number {$state} is already in use.")
+                                                    ->persistent()
+                                                    ->send();
+                                                $set('admission_number', '');
+                                            }
+                                        }),
 
                                     Forms\Components\Select::make('academic_session_id')
                                         ->label('Academic Session')
@@ -137,8 +172,8 @@ class AdmissionResource extends Resource
 
                                     Forms\Components\TextInput::make('email')
                                         ->email()
-                                        ->maxLength(255)
-                                        ->unique(ignorable: fn($record) => $record),
+                                        ->maxLength(255),
+                                        // ->unique(ignoreRecord: true),
 
                                     Forms\Components\Select::make('state_id')
                                         ->options(State::all()->pluck('name', 'id')->toArray())
@@ -492,13 +527,25 @@ class AdmissionResource extends Resource
                         ->requiresConfirmation()
                         ->modalDescription('This will generate a new admission number for this applicant.')
                         ->action(function (Admission $record) {
-                            $admissionNumber = (new \App\Services\AdmissionNumberGenerator())->generate();
+                            // Check if admission number already exists
+                            if (!empty($record->admission_number)) {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Admission Number Exists')
+                                    ->body("This record already has admission number: {$record->admission_number}")
+                                    ->send();
+                                return;
+                            }
+
+                            // Generate new number
+                            $generator = new AdmissionNumberGenerator();
+                            $admissionNumber = $generator->generate();
                             $record->update(['admission_number' => $admissionNumber]);
 
                             Notification::make()
                                 ->success()
                                 ->title('Admission Number Generated')
-                                ->body("Generated admission number: {$admissionNumber}")
+                                ->body("Generated number: {$admissionNumber}")
                                 ->send();
                         }),
 
@@ -555,6 +602,31 @@ class AdmissionResource extends Resource
                         ->modalWidth('lg')  // Add this
                         ->modalAlignment('center')  // Add this
                         ->action(function (Admission $record, array $data): void {
+                            // Check student limit before proceeding
+                            $school = Filament::getTenant();
+                            $featureService = app(FeatureService::class);
+                            $result = $featureService->checkResourceLimit($school, 'students');
+                            
+                            if (!$result->allowed) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Student Limit Reached')
+                                    ->body($result->message)
+                                    ->persistent()
+                                    ->send();
+                                
+                                return;
+                            }
+
+                            if ($result->status === 'warning') {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Student Limit Warning')
+                                    ->body($result->message)
+                                    ->persistent()
+                                    ->send();
+                            }
+
                             DB::beginTransaction();
 
                             try {
@@ -748,6 +820,25 @@ class AdmissionResource extends Resource
                                     ->send();
                             }
                         }),
+
+                    // Add this at the start of your actions
+                    // Tables\Actions\Action::make('regenerateAdmissionNumber')
+                    //     ->icon('heroicon-o-identification')
+                    //     ->color('gray')
+                    //     ->tooltip('Generate New Admission Number')
+                    //     ->requiresConfirmation()
+                    //     ->modalDescription('This will generate a new admission number using current settings.')
+                    //     ->action(function (Admission $record) {
+                    //         $generator = new AdmissionNumberGenerator();
+                    //         $newNumber = $generator->generate();
+                    //         $record->update(['admission_number' => $newNumber]);
+
+                    //         Notification::make()
+                    //             ->success()
+                    //             ->title('Admission Number Updated')
+                    //             ->body("Generated new number: {$newNumber}")
+                    //             ->send();
+                    //     }),
                 ]),
 
 
@@ -800,6 +891,28 @@ class AdmissionResource extends Resource
                                 ->success()
                                 ->title('Admission Numbers Generated')
                                 ->body("Generated {$count} admission number(s)")
+                                ->send();
+                        }),
+
+                    // Add this to your bulk actions
+                    Tables\Actions\BulkAction::make('regenerateSelectedNumbers')
+                        ->icon('heroicon-o-arrow-path')
+                        ->requiresConfirmation()
+                        ->modalDescription('This will regenerate admission numbers for all selected records using current settings.')
+                        ->action(function (Collection $records): void {
+                            $generator = new AdmissionNumberGenerator();
+                            $count = 0;
+
+                            foreach ($records as $record) {
+                                $newNumber = $generator->generate();
+                                $record->update(['admission_number' => $newNumber]);
+                                $count++;
+                            }
+
+                            Notification::make()
+                                ->success()
+                                ->title('Admission Numbers Updated')
+                                ->body("Updated {$count} admission numbers")
                                 ->send();
                         }),
                 ]),

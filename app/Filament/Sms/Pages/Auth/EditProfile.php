@@ -18,6 +18,7 @@ use Illuminate\Validation\Rules\Password;
 use Filament\Support\Facades\FilamentView;
 use Filament\Pages\Auth\EditProfile as BaseEditProfile;
 use function Filament\Support\is_app_url;
+use Illuminate\Support\Facades\Storage;
 
 class EditProfile extends BaseEditProfile
 {
@@ -140,13 +141,19 @@ class EditProfile extends BaseEditProfile
 
     protected function mutateFormDataBeforeSave($data): array
     {
-        // Remove signature from user data as it belongs to staff
+        // Get the signature value from form data
         $signature = $data['signature'] ?? null;
         unset($data['signature']);
 
-        // Update staff signature separately
-        if ($signature !== null && auth()->user()->staff) {
-            auth()->user()->staff->update(['signature' => $signature]);
+        // Update staff signature if user has a staff record
+        if ($staff = auth()->user()->staff) {
+            // If signature is null/empty and there was a previous signature, delete the old file
+            if (empty($signature) && $staff->signature) {
+                Storage::disk('public')->delete($staff->signature);
+            }
+            
+            // Update the staff record with new signature value (can be null)
+            $staff->update(['signature' => $signature]);
         }
 
         return $data;
@@ -195,6 +202,7 @@ class EditProfile extends BaseEditProfile
         $this->data['passwordConfirmation'] = null;
 
         $this->getSavedNotification()?->send();
+
 
         if ($redirectUrl = $this->getRedirectUrl()) {
             $this->redirect($redirectUrl, navigate: FilamentView::hasSpaMode() && is_app_url($redirectUrl));

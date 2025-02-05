@@ -7,14 +7,16 @@ use Filament\Panel;
 use Filament\Widgets;
 use App\Models\School;
 use Filament\PanelProvider;
-use Filament\Facades\Filament;
+use Filament\Pages\Dashboard;
 
+use Filament\Facades\Filament;
 use App\Livewire\ReportProgress;
 use Filament\Navigation\MenuItem;
 use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Blade;
+use App\Filament\Sms\Pages\Auth\Login;
 use App\Filament\Sms\Pages\PaymentForm;
 use App\Filament\Sms\Pages\PricingPage;
 use App\Filament\Sms\Pages\Auth\Register;
@@ -26,7 +28,9 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Support\Facades\FilamentView;
 use App\Filament\Sms\Pages\Tenancy\Billing;
 use App\Filament\Sms\Pages\Auth\EditProfile;
+use App\Filament\Sms\Pages\TeacherDashboard;
 use App\Filament\Sms\Billing\BillingProvider;
+use App\Filament\Sms\Widgets\AccountantStats;
 use App\Filament\Sms\Widgets\RevenueBarChart;
 use Illuminate\Session\Middleware\StartSession;
 use App\Filament\Sms\Widgets\FilamentInfoWidget;
@@ -51,7 +55,7 @@ class SmsPanelProvider extends PanelProvider
         return $panel
             ->id('sms')
             ->path('sms')
-            ->login()
+            ->login(Login::class)
             // ->brandName(function () {
             //     $tenant = Filament::getTenant();
             //     return $tenant ? "{$tenant->name}" : 'School SMS';
@@ -60,7 +64,7 @@ class SmsPanelProvider extends PanelProvider
                 $tenant = Filament::getTenant();
                 return $tenant && $tenant->logo
                     ? asset('storage/' . $tenant->logo)  // Assuming logo is stored in storage
-                    : asset('img/default.jpg');  // Fallback logo
+                    : asset('img/devcentric_logo_1.png');  // Fallback logo
             })
             ->brandLogoHeight('3rem')
             ->tenant(School::class, slugAttribute: 'slug')
@@ -118,7 +122,7 @@ class SmsPanelProvider extends PanelProvider
             ->discoverResources(in: app_path('Filament/Sms/Resources'), for: 'App\\Filament\\Sms\\Resources')
             ->discoverPages(in: app_path('Filament/Sms/Pages'), for: 'App\\Filament\\Sms\\Pages')
             ->pages([
-                Pages\Dashboard::class,
+                Dashboard::class,
                 PaymentForm::class,
                 // ReportProgress::class,
                 // Pages\PreviewReportTemplate::class,
@@ -132,6 +136,7 @@ class SmsPanelProvider extends PanelProvider
                 RevenueBarChart::class,
                 RevenueByTypeChart::class,
                 SchoolStatsOverview::class,
+                AccountantStats::class,
             ])
             ->middleware([
                 EncryptCookies::class,
@@ -164,9 +169,8 @@ class SmsPanelProvider extends PanelProvider
                 fn(): string => Blade::render('@livewire(\'system-announcement-banner\')')
             )
             ->renderHook(
-                // Using PanelsRenderHook for better type safety and IDE support
                 PanelsRenderHook::BODY_END,
-                fn(): string => Blade::render('@include("filament.sms.components.footer")')
+                fn(): string => Blade::render('@livewire(\'footer\')')
             )
             // ->renderHook(
             //     PanelsRenderHook::BODY_END,

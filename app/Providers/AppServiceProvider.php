@@ -21,6 +21,10 @@ use Filament\Support\Facades\FilamentView;
 use App\Observers\AttendanceRecordObserver;
 use Filament\Support\Facades\FilamentColor;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use App\Models\Staff;
+use App\Observers\StaffObserver;
+use App\Models\School;
+use App\Observers\SchoolObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -41,11 +45,10 @@ class AppServiceProvider extends ServiceProvider
             ->setPermissionClass(Permission::class)
             ->setRoleClass(Role::class);
 
-       
-
-
         StudentGrade::observe(StudentGradeObserver::class);
         Student::observe(StudentObserver::class);
         AttendanceRecord::observe(AttendanceRecordObserver::class);
+        Staff::observe(StaffObserver::class);
+        School::observe(SchoolObserver::class);
     }
 }

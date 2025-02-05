@@ -13,13 +13,10 @@ return new class extends Migration
     {
         Schema::create('qualifications', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade'); // Add this line
+            $table->foreignId('school_id'); // Add this line
             $table->foreignId('staff_id')->constrained()->onDelete('cascade');
             $table->json('qualifications')->nullable();
-            // $table->string('name');
-            // $table->string('institution');
-            // $table->year('year_obtained');
-            // $table->string('document_path')->nullable();
+            $table->softDeletes();
             $table->timestamps();
         });
     }

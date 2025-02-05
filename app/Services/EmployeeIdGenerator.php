@@ -5,7 +5,10 @@ namespace App\Services;
 use App\Models\Staff;
 use App\Models\Designation;
 use App\Settings\AppSettings;
+use App\Models\SchoolSettings;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -37,7 +40,26 @@ class EmployeeIdGenerator
     {
         $this->tenant = Filament::getTenant();
         $this->staff = app(Staff::class);
-        $this->settings = $settings ?? $this->tenant->getSettingsAttribute();
+
+        // Handle settings initialization more safely
+        if ($settings) {
+            $this->settings = $settings;
+        } elseif ($this->tenant) {
+            $this->settings = $this->tenant->getSettingsAttribute();
+        } else {
+            // Provide default settings when no tenant is available
+            $this->settings = new SchoolSettings([
+                'employee_settings' => [
+                    'format_type' => 'school_initials',
+                    'prefix_type' => 'school',
+                    'year_format' => 'short',
+                    'number_length' => 3,
+                    'separator' => '/',
+                    'session_format' => 'short',
+                    'reset_sequence_yearly' => true
+                ]
+            ]);
+        }
     }
 
     // In EmployeeIdGenerator.php and AdmissionNumberGenerator.php
@@ -45,7 +67,7 @@ class EmployeeIdGenerator
     protected function getSettings()
     {
         if (!$this->tenant) {
-            return null;
+            return $this->settings;
         }
 
         return Cache::tags(["school:{$this->tenant->slug}"])
@@ -95,7 +117,7 @@ class EmployeeIdGenerator
         $separator = $settings['separator'] ?? '';
         $numLength = $settings['number_length'] ?? 3;
         $yearFormat = $settings['year_format'] ?? 'short';
-        
+
         // Get year based on format
         $year = match ($yearFormat) {
             'full' => date('Y'),
@@ -145,12 +167,15 @@ class EmployeeIdGenerator
     protected function getPrefix(array $settings): string
     {
         $prefixType = $settings['prefix_type'] ?? 'default';
-        
+
         return match ($prefixType) {
             'school' => strtoupper(substr(
-                preg_replace('/[^a-zA-Z]/', '', 
-                $this->tenant->name), 
-                0, 
+                preg_replace(
+                    '/[^a-zA-Z]/',
+                    '',
+                    $this->tenant->name
+                ),
+                0,
                 3
             )),
             'custom' => $settings['prefix'] ?? 'EMP',
@@ -218,19 +243,12 @@ class EmployeeIdGenerator
             return str_pad('1', $length, '0', STR_PAD_LEFT);
         }
 
-        // Create pattern to extract the numeric part based on format type
-        $formatType = $this->settings->employee_settings['format_type'] ?? 'basic';
-        $prefix = preg_quote($this->settings->employee_settings['prefix'] ?? 'EMP', '/');
-        $separator = preg_quote($this->settings->employee_settings['separator'] ?? '', '/');
+        // Get year for pattern matching
+        $year = date('Y');
+        $shortYear = date('y');
 
-        // Build regex pattern based on format type with properly escaped characters
-        $pattern = match ($formatType) {
-            'basic' => "/^{$prefix}{$separator}(\d+)$/",
-            'with_year' => "/^{$prefix}{$separator}\d{2}(\d{" . $length . "})$/",
-            'with_department' => "/^[A-Z]{3}{$separator}\d{2}(\d{" . $length . "})$/",
-            'custom' => $this->buildCustomSearchPattern($format, $length),
-            default => "/^{$prefix}{$separator}(\d+)$/"
-        };
+        // Build regex pattern to extract just the sequence number
+        $pattern = '/\d{' . $length . '}$/'; // Match exactly $length digits at the end
 
         // Get last employee ID
         $lastStaff = $this->staff
@@ -243,9 +261,9 @@ class EmployeeIdGenerator
         }
 
         try {
-            // Extract number from last ID with error handling
+            // Extract number from last ID
             if (preg_match($pattern, $lastStaff->employee_id, $matches)) {
-                $lastNumber = (int) ($matches[1] ?? 0);
+                $lastNumber = (int) $matches[0];
                 $nextNumber = $lastNumber + 1;
             } else {
                 // If pattern doesn't match, start from 1
@@ -265,10 +283,10 @@ class EmployeeIdGenerator
     protected function buildCustomSearchPattern(string $format, int $length): string
     {
         try {
-            // Replace all tokens with their regex equivalents
+            // Replace all tokens with their regex equivalents, making year optional
             $pattern = preg_quote($format, '/');
             $prefix = preg_quote($this->settings->employee_settings['prefix'] ?? 'EMP', '/');
-            
+
             $pattern = str_replace(
                 [
                     preg_quote('{PREFIX}', '/'),
@@ -291,7 +309,7 @@ class EmployeeIdGenerator
                 $pattern
             );
 
-            return "/^$pattern$/";
+            return "/\d{$length}$/"; // Match only the sequence number at the end
         } catch (\Exception $e) {
             // Return a safe fallback pattern if there's an error
             return "/(\d+)$/";
@@ -301,6 +319,11 @@ class EmployeeIdGenerator
     public function generate(array $data = []): string
     {
         try {
+            // For admin staff during school setup, use special format
+            if ($data['is_admin'] ?? false) {
+                return $this->generateAdminId();
+            }
+
             // Get the format based on settings or provided data
             $format = $this->getFormat($data);
 
@@ -310,10 +333,36 @@ class EmployeeIdGenerator
             // Ensure ID is unique
             return $this->ensureUnique($generatedId);
         } catch (\Exception $e) {
-            // Fallback to basic format if something goes wrong
-            $basicFormat = '{PREFIX}{YY}{NUM:' . $this->settings->employee_id_number_length . '}';
-            return $this->parseFormat($basicFormat, $data);
+            Log::error('Employee ID generation error', [
+                'error' => $e->getMessage(),
+                'school_id' => $this->tenant->id ?? null
+            ]);
+            return $this->generateFallbackId();
         }
+    }
+
+    protected function generateAdminId(): string
+    {
+        // Get school initials
+        $schoolInitials = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $this->tenant->name), 0, 3));
+
+        // Get year
+        $year = date('y');
+
+        // Admin number is always 001
+        $adminNumber = '001';
+
+        // Format: KPS/23/001
+        return "{$schoolInitials}/{$year}/{$adminNumber}";
+    }
+
+    protected function generateFallbackId(): string
+    {
+        $schoolInitials = $this->tenant ?
+            strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $this->tenant->name), 0, 3)) :
+            'EMP';
+
+        return $schoolInitials . '/' . date('y') . '/' . str_pad('1', 3, '0', STR_PAD_LEFT);
     }
 
     protected function ensureUnique(string $id): string
@@ -358,5 +407,412 @@ class EmployeeIdGenerator
         }
 
         return '/^' . $pattern . '$/';
+    }
+
+    public function generateWithOptions(array $options = []): string
+    {
+        try {
+            $parts = [];
+
+            if ($options['include_prefix'] ?? true) {
+                $parts[] = $this->generateSchoolInitials(
+                    ($options['prefix_type'] ?? 'consonants') === 'consonants'
+                );
+            }
+
+            if ($options['include_year'] ?? true) {
+                $parts[] = match ($options['year_format'] ?? 'short') {
+                    'full' => date('Y'),
+                    default => date('y')
+                };
+            }
+
+            // Use provided sequence number or get next available
+            $sequence = $options['sequence'] ?? $this->getNextAvailableSequence($options);
+            $parts[] = str_pad((string)$sequence, $options['number_length'] ?? 3, '0', STR_PAD_LEFT);
+
+            $separator = ($options['include_separator'] ?? true) ? ($options['separator'] ?? '/') : '';
+
+            return implode($separator, $parts);
+        } catch (\Exception $e) {
+            Log::error('Employee ID generation error', [
+                'error' => $e->getMessage(),
+                'school_id' => $this->tenant->id ?? null
+            ]);
+            return $this->generateFallbackId();
+        }
+    }
+
+    protected function getNextAvailableSequence(array $options = []): int
+    {
+        // Get the current prefix that will be used
+        $prefix = '';
+        if ($options['include_prefix'] ?? true) {
+            $prefix = $this->generateSchoolInitials(
+                ($options['prefix_type'] ?? 'consonants') === 'consonants'
+            );
+        }
+
+        // Get the year part if included
+        $yearPart = '';
+        if ($options['include_year'] ?? true) {
+            $yearToUse = !empty($options['custom_year']) ?
+                date('Y', strtotime($options['custom_year'])) :
+                date('Y');
+
+            $yearPart = $options['year_format'] === 'full' ?
+                $yearToUse :
+                substr($yearToUse, -2);
+        }
+
+        // Build the search pattern based on current format
+        $separator = ($options['include_separator'] ?? true) ? ($options['separator'] ?? '/') : '';
+
+        // Escape special characters in prefix and separator for regex
+        $prefixPattern = preg_quote($prefix, '/');
+        $separatorPattern = preg_quote($separator, '/');
+        $yearPattern = preg_quote($yearPart, '/');
+
+        // Build the pattern to match IDs with the same prefix and year
+        $pattern = '/';
+        if ($prefix) {
+            $pattern .= $prefixPattern . $separatorPattern;
+        }
+        if ($yearPart) {
+            $pattern .= $yearPattern . $separatorPattern;
+        }
+        $pattern .= '(\d+)$/';
+
+        // Get last ID matching this pattern
+        $lastStaff = $this->staff
+            ->where('school_id', $this->tenant->id)
+            ->where(function ($query) use ($pattern) {
+                $query->whereRaw("employee_id REGEXP ?", [$pattern]);
+            })
+            ->orderByRaw("CAST(REGEXP_REPLACE(employee_id, '^.*[^0-9]', '') AS UNSIGNED) DESC")
+            ->first();
+
+        if (!$lastStaff) {
+            return 1;
+        }
+
+        // Extract the sequence number
+        if (preg_match($pattern, $lastStaff->employee_id, $matches)) {
+            return ((int) $matches[1]) + 1;
+        }
+
+        return 1;
+    }
+
+    public function regenerateAllIds(array $options = []): void
+    {
+        $staff = Staff::where('school_id', $this->tenant->id)
+            ->orderBy('hire_date')
+            ->get();
+
+        DB::transaction(function () use ($staff) {
+            $sequence = 1;
+            $settings = $this->settings->employee_settings;
+
+            foreach ($staff as $employee) {
+                // Get year based on settings
+                $yearToUse = !empty($settings['custom_year'])
+                    ? substr($settings['custom_year'], 0, 4)  // Extract just the year part
+                    : date('Y');
+
+                if ($settings['year_format'] === 'short') {
+                    $yearToUse = substr($yearToUse, -2);
+                }
+
+                $parts = [];
+
+                // Add prefix if enabled
+                if ($settings['include_prefix'] ?? true) {
+                    $parts[] = $this->generateSchoolInitials(
+                        ($settings['prefix_type'] ?? 'consonants') === 'consonants'
+                    );
+                }
+
+                // Add year if enabled
+                if ($settings['include_year'] ?? true) {
+                    $parts[] = $yearToUse;
+                }
+
+                // Add sequence number
+                $parts[] = str_pad((string)$sequence++, $settings['number_length'] ?? 3, '0', STR_PAD_LEFT);
+
+                // Join with separator if enabled
+                $separator = ($settings['include_separator'] ?? true) ? ($settings['separator'] ?? '/') : '';
+
+                $newId = implode($separator, $parts);
+
+                $employee->update(['employee_id' => $newId]);
+            }
+        });
+    }
+
+    protected function generateWithCustomYear(string $year, array $options = []): string
+    {
+        $schoolInitials = $this->generateSchoolInitials($options['use_consonants'] ?? true);
+        $sequence = $options['sequence'] ?? $this->getNextAvailableSequence(['custom_year' => $year]);
+        $settings = $this->settings->employee_settings;
+
+        $parts = [];
+
+        // Add prefix if enabled
+        if ($settings['include_prefix'] ?? true) {
+            $parts[] = $schoolInitials;
+        }
+
+        // Add year if enabled
+        if ($settings['include_year'] ?? true) {
+            $parts[] = $year;
+        }
+
+        // Add sequence number
+        $parts[] = str_pad((string)$sequence, 3, '0', STR_PAD_LEFT);
+
+        // Join with separator if enabled
+        $separator = ($settings['include_separator'] ?? true) ? ($settings['separator'] ?? '/') : '';
+
+        return implode($separator, $parts);
+    }
+
+    public function previewFormat(array $options = []): string
+    {
+        $prefix = match ($options['prefix_type'] ?? 'consonants') {
+            'consonants' => $this->generateSchoolInitials(true),
+            'first_letters' => $this->generateSchoolInitials(false),
+            default => $options['prefix'] ?? 'EMP'
+        };
+
+        $parts = [];
+
+        if ($options['include_prefix'] ?? true) {
+            $parts[] = $prefix;
+        }
+
+        if ($options['include_year'] ?? true) {
+            // Use custom year if provided, otherwise current year
+            $yearToUse = !empty($options['custom_year']) ?
+                date('Y', strtotime($options['custom_year'])) :
+                date('Y');
+
+            $parts[] = match ($options['year_format'] ?? 'short') {
+                'full' => $yearToUse,
+                default => substr($yearToUse, -2)
+            };
+        }
+
+        $parts[] = str_pad('1', $options['number_length'] ?? 3, '0', STR_PAD_LEFT);
+
+        $separator = ($options['include_separator'] ?? true) ? ($options['separator'] ?? '/') : '';
+
+        return implode($separator, $parts);
+    }
+
+    public function generateSchoolInitials(bool $useConsonants = true): string
+    {
+        $name = $this->tenant->name;
+
+        if ($useConsonants) {
+            // Get consonants from school name
+            preg_match_all('/[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]/', $name, $matches);
+            $consonants = $matches[0];
+            $initials = array_slice($consonants, 0, 3);
+            return strtoupper(implode('', $initials));
+        } else {
+            // Get first letter of each word
+            $words = explode(' ', $name);
+            $initials = array_map(fn($word) => substr($word, 0, 1), $words);
+            return strtoupper(implode('', array_slice($initials, 0, 3)));
+        }
+    }
+
+    public function getInitialSequence(array $options = []): int
+    {
+        // Get the current format components
+        $prefix = '';
+        if ($options['include_prefix'] ?? true) {
+            $prefix = $this->generateSchoolInitials(
+                ($options['prefix_type'] ?? 'consonants') === 'consonants'
+            );
+        }
+
+        // Get year if included
+        $yearPart = '';
+        if ($options['include_year'] ?? true) {
+            $yearToUse = !empty($options['custom_year']) ?
+                date('Y', strtotime($options['custom_year'])) :
+                date('Y');
+
+            $yearPart = $options['year_format'] === 'full' ?
+                $yearToUse :
+                substr($yearToUse, -2);
+        }
+
+        // Build the pattern to match existing IDs
+        $separator = ($options['include_separator'] ?? true) ? ($options['separator'] ?? '/') : '';
+
+        $prefixPattern = preg_quote($prefix, '/');
+        $separatorPattern = preg_quote($separator, '/');
+        $yearPattern = preg_quote($yearPart, '/');
+
+        $pattern = '/';
+        if ($prefix) {
+            $pattern .= $prefixPattern . $separatorPattern;
+        }
+        if ($yearPart) {
+            $pattern .= $yearPattern . $separatorPattern;
+        }
+        $pattern .= '(\d+)$/';
+
+        // Find last matching ID
+        $lastStaff = $this->staff
+            ->where('school_id', $this->tenant->id)
+            ->where(function ($query) use ($pattern) {
+                $query->whereRaw("employee_id REGEXP ?", [$pattern]);
+            })
+            ->orderByRaw("CAST(REGEXP_REPLACE(employee_id, '^.*[^0-9]', '') AS UNSIGNED) DESC")
+            ->first();
+
+        if (!$lastStaff) {
+            return 1;
+        }
+
+        if (preg_match($pattern, $lastStaff->employee_id, $matches)) {
+            return ((int) $matches[1]) + 1;
+        }
+
+        return 1;
+    }
+
+    // public function generateNextId(): string
+    // {
+    //     $settings = $this->settings->employee_settings;
+    //     $parts = [];
+
+    //     // 1. Get prefix based on settings
+    //     if ($settings['include_prefix'] ?? true) {
+    //         $prefix = $this->generateSchoolInitials(
+    //             ($settings['prefix_type'] ?? 'consonants') === 'consonants'
+    //         );
+    //         $parts[] = $prefix;
+    //     }
+
+    //     // 2. Handle year part with proper formatting
+    //     if ($settings['include_year'] ?? true) {
+    //         // First check if there's a custom year specified
+    //         $yearToUse = !empty($settings['custom_year']) 
+    //         ? substr($settings['custom_year'], 0, 4)  // Extract just the year part
+    //         : date('Y');
+
+    //         // Apply year format based on settings
+    //         $yearPart = match ($settings['year_format'] ?? 'short') {
+    //             'full' => $yearToUse,                    // Will output like "2023"
+    //             'short' => substr($yearToUse, -2),       // Will output like "23"
+    //             default => substr($yearToUse, -2)        // Default to short format
+    //         };
+
+    //         $parts[] = $yearPart;
+    //     }
+
+    //     // 3. Get the next sequence number
+    //     $numLength = $settings['number_length'] ?? 3;
+    //     $lastStaff = $this->staff
+    //         ->where('school_id', $this->tenant->id)
+    //         ->orderBy('employee_id', 'desc')
+    //         ->first();
+
+    //     $nextNumber = 1;
+    //     if ($lastStaff) {
+    //         // Extract just the numeric sequence at the end
+    //         if (preg_match('/\d{' . $numLength . '}$/', $lastStaff->employee_id, $matches)) {
+    //             $nextNumber = intval($matches[0]) + 1;
+    //         }
+    //     }
+
+    //     // Format the sequence number with proper padding
+    //     $parts[] = str_pad((string)$nextNumber, $numLength, '0', STR_PAD_LEFT);
+
+    //     // 4. Join all parts with the configured separator
+    //     $separator = ($settings['include_separator'] ?? true) ? ($settings['separator'] ?? '/') : '';
+
+    //     return implode($separator, $parts);
+    // }
+
+    public function generateNextId(array $options = []): string
+    {
+        $settings = $this->settings->employee_settings;
+        $schoolName = Filament::getTenant()->name;
+
+        // Determine year to use
+        $year = $this->determineYear($settings);
+        $yearFormat = $settings['year_format'] ?? 'short';
+        $formattedYear = $yearFormat === 'short' ? substr($year, -2) : $year;
+
+        // Generate prefix based on settings
+        $prefix = $settings['prefix'] ?? $this->generateSchoolInitials($settings['prefix_type'] === 'consonants');
+
+        // Build the pattern base for checking existing IDs
+        $patternBase = '';
+        if ($settings['include_prefix']) {
+            $patternBase .= $prefix;
+            if ($settings['include_separator']) {
+                $patternBase .= $settings['separator'];
+            }
+        }
+        if ($settings['include_year']) {
+            $patternBase .= $formattedYear;
+            if ($settings['include_separator']) {
+                $patternBase .= $settings['separator'];
+            }
+        }
+
+        // Find the highest number for this pattern
+        $pattern = $patternBase . '%';
+        $existingNumbers = Staff::where('employee_id', 'LIKE', $pattern)
+            ->get()
+            ->map(function ($staff) use ($patternBase) {
+                $id = $staff->employee_id;
+                $number = substr($id, strlen($patternBase));
+                return (int) $number;
+            });
+
+        $nextNumber = $existingNumbers->isEmpty() ? 1 : ($existingNumbers->max() + 1);
+
+        // Format the sequential number
+        $numberLength = $settings['number_length'] ?? 3;
+        $formattedNumber = str_pad($nextNumber, $numberLength, '0', STR_PAD_LEFT);
+
+        // Build the final ID
+        $parts = [];
+        if ($settings['include_prefix']) {
+            $parts[] = $prefix;
+        }
+        if ($settings['include_year']) {
+            $parts[] = $formattedYear;
+        }
+        $parts[] = $formattedNumber;
+
+        return implode($settings['include_separator'] ? $settings['separator'] : '', $parts);
+    }
+
+    protected function determineYear(array $settings): string
+    {
+        // If custom_year is set, extract just the year part without using date()
+        if (!empty($settings['custom_year'])) {
+            // Extract first 4 digits which should be the year
+            if (preg_match('/^\d{4}/', $settings['custom_year'], $matches)) {
+                return $matches[0];
+            }
+            // Fallback: take first 4 characters if they're all digits
+            $year = substr($settings['custom_year'], 0, 4);
+            if (ctype_digit($year)) {
+                return $year;
+            }
+        }
+        // Fallback to current year if no valid custom year
+        return (string) now()->year;
     }
 }

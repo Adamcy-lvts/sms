@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('student_movements', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained('schools')->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->foreignId('student_id')->constrained('students')->onDelete('cascade');
             $table->foreignId('from_class_id')->constrained('class_rooms')->onDelete('cascade');
             $table->foreignId('to_class_id')->nullable()->constrained('class_rooms')->onDelete('cascade');
@@ -33,6 +33,7 @@ return new class extends Migration
             $table->boolean('requires_new_admission')->default(false); // For transfers/new sessions
             $table->string('status')->default('pending'); // pending, completed, cancelled
             $table->foreignId('processed_by')->nullable()->constrained('users');
+            $table->softDeletes();
             $table->timestamps();
         });
     }

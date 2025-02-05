@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('report_cards', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('school_id');
             $table->foreignId('student_id')->constrained()->cascadeOnDelete();
             $table->foreignId('class_room_id')->constrained()->cascadeOnDelete();
             $table->foreignId('academic_session_id')->constrained()->cascadeOnDelete();
@@ -38,6 +38,7 @@ return new class extends Migration
             $table->timestamp('published_at')->nullable();
             $table->foreignId('created_by')->constrained('users');
             $table->foreignId('published_by')->nullable()->constrained('users');
+            $table->softDeletes();
             $table->timestamps();
         });
     }

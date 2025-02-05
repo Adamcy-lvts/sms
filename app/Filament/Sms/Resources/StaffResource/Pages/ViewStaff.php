@@ -24,7 +24,7 @@ class ViewStaff extends ViewRecord implements HasTable
     protected static string $resource = StaffResource::class;
 
     protected static string $view = 'filament.sms.resources.staff-resource.staff-profile';
-    
+
     public $staff;
     public $qualifications;
 
@@ -70,7 +70,7 @@ class ViewStaff extends ViewRecord implements HasTable
 
                             TextEntry::make('hire_date')->label('Employment Date'),
                             TextEntry::make('status.name')->label('Employment Status')->badge()
-                                ->color(fn (string $state): string => match ($state) {
+                                ->color(fn(string $state): string => match ($state) {
                                     'active' => 'success',
                                     'inactive' => 'danger',
                                     'resigned' => 'warning',
@@ -78,7 +78,7 @@ class ViewStaff extends ViewRecord implements HasTable
                                     'terminated' => 'danger',
                                     'deceased' => 'gray',
                                 }),
-                            TextEntry::make('salary')->label('Salary')->formatStateUsing(fn ($state) => formatNaira($state)),
+                            TextEntry::make('salary')->label('Salary')->formatStateUsing(fn($state) => formatNaira($state)),
                             TextEntry::make('bank.name')->label('Bank Name'),
                             TextEntry::make('account_number')->label('Account Number'),
 
@@ -92,17 +92,17 @@ class ViewStaff extends ViewRecord implements HasTable
 
     public function qualificationsInfolist(Infolist $infolist): Infolist
     {
-        return $infolist
-            ->state($this->qualifications->qualifications[0])
-            ->schema([
+        // Check if qualifications exist and have at least one entry
+        $qualificationsData = optional($this->qualifications)->qualifications ?? [];
 
-                // KeyValueEntry::make('qualifications')->keyLabel('Qualifications'),
+        return $infolist
+            ->state($qualificationsData[0] ?? []) // Fallback to empty array
+            ->schema([
                 Section::make([
                     TextEntry::make('name')->label('Qualification'),
                     TextEntry::make('institution')->label('Institution'),
                     TextEntry::make('year_obtained')->label('Year Obtained'),
                 ])->columns(2),
-
             ]);
     }
 
@@ -111,9 +111,9 @@ class ViewStaff extends ViewRecord implements HasTable
         return $table
             ->query(SalaryPayment::where('staff_id', $this->staff->id))
             ->columns([
-              
-                TextColumn::make('amount')->formatStateUsing(fn ($state) => formatNaira($state)),
-               
+
+                TextColumn::make('amount')->formatStateUsing(fn($state) => formatNaira($state)),
+
                 // TextColumn::make('status')->label('Payment Status')
                 //     ->badge()
                 //     ->color(fn (string $state): string => match ($state) {

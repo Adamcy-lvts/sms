@@ -45,4 +45,16 @@ class FeedbackResponse extends Model
     {
         return $query->where('school_id', $schoolId);
     }
+
+    // public function tracking()
+    // {
+    //     return $this->hasOneThrough(
+    //         FeedbackTracking::class,
+    //         Feedback::class,
+    //         'id', // Foreign key on feedback table
+    //         'feedback_id', // Foreign key on feedback_tracking table
+    //         'feedback_id', // Local key on feedback_responses table
+    //         'id' // Local key on feedback table
+    //     );
+    // }
 }

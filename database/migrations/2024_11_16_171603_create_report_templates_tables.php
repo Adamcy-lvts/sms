@@ -11,7 +11,7 @@ return new class extends Migration
         // Main template table
         Schema::create('report_templates', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->onDelete('cascade');
+            $table->foreignId('school_id');
             $table->string('name');
             $table->string('slug');
             $table->string('description')->nullable();
@@ -25,6 +25,7 @@ return new class extends Migration
             $table->json('style_config')->nullable(); // Colors, fonts, borders etc
             $table->boolean('is_default')->default(false);
             $table->boolean('is_active')->default(true);
+            $table->softDeletes();
             $table->timestamps();
 
             // Ensure unique template names per school

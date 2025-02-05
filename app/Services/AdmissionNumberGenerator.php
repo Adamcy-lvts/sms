@@ -2,14 +2,15 @@
 
 namespace App\Services;
 
+use App\Models\Status;
 use App\Models\Admission;
 use Illuminate\Support\Str;
 use Filament\Facades\Filament;
 use App\Models\AcademicSession;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use App\Helpers\AdmissionNumberFormats;
-use App\Models\Status;
 
 class AdmissionNumberGenerator
 {
@@ -55,68 +56,150 @@ class AdmissionNumberGenerator
         }
 
         try {
-            // Get base components
-            $prefix = $this->settings->admission_settings['prefix'];
-            $schoolInitials = $this->getSchoolInitials();
-            $year = date('y');
-            $session = $this->getSessionCode();
-            $sequentialNumber = $this->getNextSequentialNumber();
+            $settings = $this->settings->admission_settings ?? [];
 
-            // Build replacements array
-            $replacements = [
-                '{PREFIX}' => $prefix ?? $schoolInitials,
-                '{SCHOOL}' => $schoolInitials,
-                '{YY}' => $year,
-                '{YYYY}' => date('Y'),
-                '{SESSION}' => $session,
-                '{NUM}' => $sequentialNumber,
-                '{SEP:1}' => $this->separator,
-                '{SEP:2}' => $this->separator,
-                '{SEP:3}' => $this->separator,
+            // Build the options array exactly like we do for preview
+            $options = [
+                'format_type' => $settings['format_type'] ?? 'basic',
+                'custom_format' => $settings['custom_format'] ?? null,
+                'school_prefix' => $settings['school_prefix'] ?? null,
+                'separator' => $settings['separator'] ?? '-',
+                'length' => $settings['length'] ?? 4,
+                'include_session' => $settings['include_session'] ?? true,
+                'custom_session' => $settings['custom_session'] ?? null,
+                'session_format' => $settings['session_format'] ?? 'short_session',
+                'initials_method' => $settings['initials_method'] ?? 'first_letters',
             ];
 
-            // Replace all tokens in the format
-            $admissionNumber = str_replace(
-                array_keys($replacements),
-                array_values($replacements),
-                $this->format
+            $parts = [];
+
+            // Only add prefix if include_prefix is true
+            if ($settings['include_prefix'] ?? true) {
+                $prefix = match ($settings['initials_method']) {
+                    'consonants' => $this->generateSchoolInitials(true),
+                    'first_letters' => $this->generateSchoolInitials(false),
+                    default => $settings['school_prefix'] ?? 'ADM'
+                };
+                $parts[] = $prefix;
+            }
+
+            // Add session using same logic as preview
+            if ($options['include_session']) {
+                $sessionName = $this->getSessionForGenerate($options);
+                $parts[] = $this->formatSessionString($sessionName, $options['session_format']);
+            }
+
+            // Add sequential number
+            $parts[] = str_pad(
+                (string) $this->getNextSequentialNumber(),
+                $options['length'],
+                '0',
+                STR_PAD_LEFT
             );
 
-            // Clean up separators and ensure uniqueness
-            $admissionNumber = $this->cleanupSeparators($admissionNumber);
-            return $this->ensureUnique($admissionNumber);
+            // Use separator only if enabled
+            $separator = ($settings['include_separator'] ?? true) ? ($settings['separator'] ?? '/') : '';
+            $number = implode($separator, $parts);
+            return $this->ensureUnique($number);
         } catch (\Exception $e) {
             Log::error('Admission number generation failed', [
                 'error' => $e->getMessage(),
                 'school_id' => $this->tenant->id ?? 0,
             ]);
-            return '';
+            return $this->generateFallbackNumber();
         }
     }
 
-    public function previewFormat(string $format): string
+    public function previewFormat(array $options = []): string
     {
         try {
-            $replacements = [
-                '{PREFIX}' => $this->settings->admission_settings['prefix'] ?? 'ADM',
-                '{SCHOOL}' => $this->getSchoolInitials(),
-                '{YY}' => date('y'),
-                '{YYYY}' => date('Y'),
-                '{SESSION}' => $this->getSessionCode(),
-                '{NUM}' => str_pad('1', $this->settings->admission_settings['length'] ?? 4, '0', STR_PAD_LEFT),
-                '{SEP:1}' => $this->separator,
-                '{SEP:2}' => $this->separator,
-                '{SEP:3}' => $this->separator,
-            ];
+            $parts = [];
+            
+            // Only add prefix if include_prefix is true
+            if ($options['include_prefix'] ?? true) {
+                $useConsonants = $options['initials_method'] === 'consonants';
+                $prefix = $options['school_prefix'] ?? $this->generateSchoolInitials($useConsonants);
+                $parts[] = $prefix;
+            }
 
-            return str_replace(
-                array_keys($replacements),
-                array_values($replacements),
-                $format
-            );
+            // Add session if enabled
+            if ($options['include_session'] ?? true) {
+                $sessionName = $this->getSessionForPreview($options);
+                $parts[] = $this->formatSessionString($sessionName, $options['session_format'] ?? 'short_session');
+            }
+
+            // Add sequential number
+            $parts[] = str_pad('1', $options['length'] ?? 4, '0', STR_PAD_LEFT);
+
+            // Only use separator if include_separator is true
+            $separator = ($options['include_separator'] ?? true) ? ($options['separator'] ?? '/') : '';
+            
+            return implode($separator, $parts);
         } catch (\Exception $e) {
-            return 'Invalid format';
+            return 'Preview not available';
         }
+    }
+
+    protected function getSessionForGenerate(array $options): string
+    {
+        // First try custom session from settings
+        if (!empty($options['custom_session'])) {
+            return $options['custom_session'];
+        }
+
+        // Then try to get current session from database
+        $currentSession = $this->getCurrentSession();
+        if ($currentSession) {
+            return $currentSession->name;
+        }
+
+        // Then try config
+        if ($configSession = config('app.current_session')) {
+            return $configSession->name;
+        }
+
+        // Fallback to current year
+        $year = date('Y');
+        return "{$year}/" . ($year + 1);
+    }
+
+    protected function getSessionForPreview(array $options): string
+    {
+        // First try custom session from options
+        if (!empty($options['custom_session'])) {
+            return $options['custom_session'];
+        }
+
+        // Then try to get current session from database
+        $currentSession = AcademicSession::where('school_id', $this->tenant->id)
+            ->where('is_current', true)
+            ->first();
+        
+        if ($currentSession) {
+            return $currentSession->name;
+        }
+
+        // Then try config
+        if ($configSession = config('app.current_session')) {
+            return $configSession->name;
+        }
+
+        // Fallback to current year
+        $year = date('Y');
+        return "{$year}/" . ($year + 1);
+    }
+
+    protected function getPreviewSession(string $format, string $session = '2023/2024'): string
+    {
+        $years = array_map('trim', explode('/', $session));
+        
+        return match ($format) {
+            'short' => substr($years[0], -2),
+            'short_session' => substr($years[0], -2) . substr($years[1], -2),
+            'full_year' => $years[0],
+            'full_session' => $session,
+            default => substr($years[0], -2) . substr($years[1], -2)
+        };
     }
 
     protected function getFormatTemplate(): string
@@ -175,12 +258,10 @@ class AdmissionNumberGenerator
             }
 
             $settings = $this->settings->admission_settings ?? [];
-
-            $initials = $settings['school_initials']
-                ?? $this->generateInitials(
-                    $this->tenant->name ?? 'SCHOOL',
-                    $settings['initials_method'] ?? 'first_letters'
-                );
+            
+            // Use the same generateSchoolInitials method as EmployeeIdGenerator
+            $useConsonants = $settings['initials_method'] === 'consonants';
+            $initials = $this->generateSchoolInitials($useConsonants);
 
             $this->cache['school_initials'] = strtoupper($initials);
             return $this->cache['school_initials'];
@@ -190,63 +271,51 @@ class AdmissionNumberGenerator
         }
     }
 
-    protected function generateInitials(string $name, string $method): string
+    public function generateSchoolInitials(bool $useConsonants = true): string
     {
-        return match ($method) {
-            'first_letters' => $this->getFirstLettersInitials($name),
-            'significant_words' => $this->getSignificantWordsInitials($name),
-            'consonants' => $this->getFirstConsonants($name),
-            default => $this->getFirstLettersInitials($name)
-        };
-    }
+        $name = $this->tenant->name;
 
-    protected function getFirstLettersInitials(string $name): string
-    {
-        $words = array_filter(explode(' ', $name));
-        if (count($words) === 1) {
-            return substr($words[0], 0, 3);
+        if ($useConsonants) {
+            // Get consonants from school name
+            preg_match_all('/[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]/', $name, $matches);
+            $consonants = $matches[0];
+            $initials = array_slice($consonants, 0, 3);
+            return strtoupper(implode('', $initials));
+        } else {
+            // Get first letter of each word
+            $words = explode(' ', $name);
+            $initials = array_map(fn($word) => substr($word, 0, 1), $words);
+            return strtoupper(implode('', array_slice($initials, 0, 3)));
         }
-        $initials = array_slice(array_map(fn($word) => substr($word, 0, 1), $words), 0, 3);
-        return implode('', $initials);
-    }
-
-    protected function getSignificantWordsInitials(string $name): string
-    {
-        $skipWords = ['the', 'of', 'and', 'in', 'at', 'by', 'for'];
-        $words = array_filter(
-            explode(' ', strtolower($name)),
-            fn($word) => !in_array($word, $skipWords)
-        );
-        $initials = array_map(fn($word) => substr($word, 0, 1), $words);
-        return implode('', array_slice($initials, 0, 3));
-    }
-
-    protected function getFirstConsonants(string $name): string
-    {
-        $words = array_filter(explode(' ', $name));
-        $consonants = '';
-
-        foreach ($words as $word) {
-            if (preg_match('/[bcdfghjklmnpqrstvwxyz]/i', $word, $matches)) {
-                $consonants .= $matches[0];
-            } else {
-                $consonants .= substr($word, 0, 1);
-            }
-            if (strlen($consonants) >= 3) break;
-        }
-
-        return substr(str_pad($consonants, 3, 'X'), 0, 3);
     }
 
     protected function getSessionCode(): string
     {
+        $settings = $this->settings->admission_settings;
+        
+        // Check if session should be included
+        if (!($settings['include_session'] ?? true)) {
+            return '';
+        }
+
+        // Use custom session if set
+        if (!empty($settings['custom_session'])) {
+            return $this->formatSessionString(
+                $settings['custom_session'],
+                $settings['session_format'] ?? 'short_session'
+            );
+        }
+
+        // Fallback to current session
         $session = $this->getCurrentSession();
         if (!$session) {
             return date('y');
         }
 
-        $format = $this->settings->admission_settings['session_format'] ?? 'short_session';
-        return $this->formatSessionString($session->name, $format);
+        return $this->formatSessionString(
+            $session->name,
+            $settings['session_format'] ?? 'short_session'
+        );
     }
 
     protected function formatSessionString(string $sessionName, string $format): string
@@ -313,43 +382,93 @@ class AdmissionNumberGenerator
         $length = $settings['length'] ?? 3;
 
         if (!$this->tenant) {
+            Log::info('No tenant found, returning default sequence');
             return str_pad('1', $length, '0', STR_PAD_LEFT);
         }
 
-        $query = $this->admission->where('school_id', $this->tenant->id);
+        try {
+            $query = $this->admission->where('school_id', $this->tenant->id);
 
-        if ($settings['reset_sequence_yearly'] ?? false) {
-            $query->whereYear('created_at', date('Y'));
-        }
+            // Log initial query state
+            Log::info('Initial query for school', [
+                'school_id' => $this->tenant->id,
+                'reset_by_session' => $settings['reset_sequence_by_session'] ?? true
+            ]);
 
-        if ($settings['reset_sequence_by_session'] ?? false) {
-            $currentSession = $this->getCurrentSession();
-            if ($currentSession) {
-                $query->where('academic_session_id', $currentSession->id);
+            // Apply session-based filtering only if reset_sequence_by_session is true
+            if ($settings['reset_sequence_by_session'] ?? true) {
+                $currentSession = null;
+                $sessionValue = null;
+
+                if (!empty($settings['custom_session'])) {
+                    $currentSession = $settings['custom_session'];
+                    Log::info('Using custom session', ['session' => $currentSession]);
+                } else {
+                    $currentSession = $this->getCurrentSession()?->name;
+                    Log::info('Using current session', ['session' => $currentSession]);
+                }
+
+                if ($currentSession) {
+                    // Format the session according to settings
+                    $formattedSession = $this->formatSessionString(
+                        $currentSession,
+                        $settings['session_format'] ?? 'short_session'
+                    );
+
+                    Log::info('Formatted session for filtering', [
+                        'original' => $currentSession,
+                        'formatted' => $formattedSession,
+                        'format' => $settings['session_format']
+                    ]);
+
+                    // Build pattern to match formatted session in admission numbers
+                    $pattern = $formattedSession;
+                    if ($settings['include_prefix'] ?? true) {
+                        $prefix = $settings['school_prefix'] ?? $this->generateSchoolInitials($settings['initials_method'] === 'consonants');
+                        $separator = ($settings['include_separator'] ?? true) ? ($settings['separator'] ?? '/') : '';
+                        $pattern = $prefix . $separator . $formattedSession;
+                    }
+
+                    Log::info('Filtering by session pattern', ['pattern' => $pattern]);
+                    
+                    // Use LIKE query to match the formatted session pattern
+                    $query->where('admission_number', 'LIKE', "%{$pattern}%");
+                }
             }
-        }
-        // $lastAdmission = $query->orderByDesc('admission_number')->first();
-        // Only count approved admissions for number generation
-        $approvedStatus = Status::where('type', 'admission')
-            ->where('name', 'approved')
-            ->first();
 
-        $lastAdmission = $query->where('status_id', $approvedStatus?->id)
-            ->orderByDesc('admission_number')
-            ->first();
+            // Get the highest sequence number from matching records
+            $lastNumber = $query->get()
+                ->map(function($admission) use ($length) {
+                    if (preg_match('/(\d{' . $length . '})$/', $admission->admission_number, $matches)) {
+                        return (int)$matches[1];
+                    }
+                    return 0;
+                })
+                ->max();
 
-        $startNumber = $settings['number_start'] ?? 1;
+            Log::info('Found highest sequence number', [
+                'last_sequence' => $lastNumber ?? 'none',
+                'query_sql' => $query->toSql(),
+                'query_bindings' => $query->getBindings()
+            ]);
 
-        if (!$lastAdmission) {
-            return str_pad($startNumber, $length, '0', STR_PAD_LEFT);
-        }
+            $startNumber = $settings['number_start'] ?? 1;
+            $nextNumber = $lastNumber ? ($lastNumber + 1) : $startNumber;
 
-        if (preg_match('/(\d+)$/', $lastAdmission->admission_number ?? '', $matches)) {
-            $nextNumber = intval($matches[1]) + 1;
+            Log::info('Generating next sequence', [
+                'next_sequence' => $nextNumber,
+                'length' => $length
+            ]);
+
             return str_pad($nextNumber, $length, '0', STR_PAD_LEFT);
-        }
 
-        return str_pad($startNumber, $length, '0', STR_PAD_LEFT);
+        } catch (\Exception $e) {
+            Log::error('Error generating sequence number', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return str_pad($settings['number_start'] ?? 1, $length, '0', STR_PAD_LEFT);
+        }
     }
 
     protected function cleanupSeparators(string $number): string
@@ -403,5 +522,49 @@ class AdmissionNumberGenerator
         $year = date('y');
         $random = str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
         return "{$prefix}{$this->separator}{$year}{$this->separator}{$random}";
+    }
+
+    public function regenerateAllIds(array $options = []): void
+    {
+        $admissions = Admission::where('school_id', $this->tenant->id)
+            ->orderBy('application_date')
+            ->get();
+
+        DB::transaction(function () use ($admissions, $options) {
+            $sequence = 1;
+            $settings = $this->settings->admission_settings;
+
+            foreach ($admissions as $admission) {
+                $parts = [];
+
+                // Add prefix if enabled
+                if ($settings['include_prefix'] ?? true) {
+                    $prefix = $this->generateSchoolInitials(
+                        ($settings['initials_method'] ?? 'first_letters') === 'consonants'
+                    );
+                    $parts[] = $prefix;
+                }
+
+                // Add session if enabled
+                if ($settings['include_session'] ?? true) {
+                    $sessionName = $admission->academicSession?->name ?? $this->getSessionForGenerate($options);
+                    $parts[] = $this->formatSessionString($sessionName, $settings['session_format'] ?? 'short_session');
+                }
+
+                // Add sequence number
+                $parts[] = str_pad(
+                    (string) $sequence++,
+                    $settings['length'] ?? 4,
+                    '0',
+                    STR_PAD_LEFT
+                );
+
+                // Join with separator if enabled
+                $separator = ($settings['include_separator'] ?? true) ? ($settings['separator'] ?? '/') : '';
+                $newNumber = implode($separator, $parts);
+
+                $admission->update(['admission_number' => $newNumber]);
+            }
+        });
     }
 }
